@@ -36,7 +36,7 @@ struct MenuContentView: View {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(sections) { section in
                             Text(header(for: section))
-                                .font(.caption).fontWeight(.semibold)
+                                .font(.system(size: 12)).fontWeight(.semibold)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
                                 .padding(.top, 10).padding(.bottom, 2)
@@ -102,15 +102,15 @@ private struct MeetingRow: View {
                     .fill(Color(hex: event.calendarColorHex) ?? .accentColor)
                     .frame(width: 3, height: 16)
                 Text(timeText)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: event.isAllDay ? 0 : 58, alignment: .leading)
+                    .frame(minWidth: event.isAllDay ? 0 : 62, alignment: .leading)
                 Text(event.title)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .lineLimit(1)
                 if joinURL != nil {
                     Spacer(minLength: 4)
-                    Image(systemName: "video.fill").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Image(systemName: "video.fill").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 5)
@@ -143,10 +143,10 @@ struct MenuRowButton: View {
     var body: some View {
         Button(action: action) {
             HStack {
-                Text(title).font(.system(size: 13))
+                Text(title).font(.system(size: 14))
                 Spacer()
                 if let shortcut {
-                    Text("⌘\(shortcut)").font(.system(size: 12)).foregroundStyle(.tertiary)
+                    Text("⌘\(shortcut)").font(.system(size: 13)).foregroundStyle(.tertiary)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 5)

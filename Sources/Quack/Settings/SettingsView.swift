@@ -43,6 +43,7 @@ struct SettingsRootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 540, height: 640)
+        .font(.system(size: 14))   // bump the base text a little across the window
         .tint(.accentColor)
         .onAppear { launchAtLogin = LaunchAtLogin.isEnabled; env.permissions.refreshAll() }
     }
@@ -71,7 +72,7 @@ struct SettingsRootView: View {
                 Button { tab = item } label: {
                     VStack(spacing: 4) {
                         Image(systemName: item.icon).font(.system(size: 17))
-                        Text(item.title).font(.caption)
+                        Text(item.title).font(.system(size: 12))
                     }
                     .frame(width: 78, height: 50)
                     .foregroundStyle(tab == item ? Color.accentColor : Color.primary)
@@ -120,7 +121,7 @@ private struct CalendarSyncTip: View {
             Text("Edits made in another app (Google, Notion, etc.) appear after macOS syncs them. If they're slow, shorten **Calendar app → Settings → Accounts → Refresh Calendars**.")
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .font(.caption)
+        .font(.system(size: 12))
         .foregroundStyle(.secondary)
     }
 }
@@ -138,7 +139,7 @@ private struct CalendarSection: View {
         Section {
             Toggle("Show meeting countdown in the menu bar", isOn: s.binding(\.menuBarCountdownEnabled))
             Text("When off, the menu bar shows just the duck.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 12)).foregroundStyle(.secondary)
         }
 
         Section {
@@ -153,7 +154,7 @@ private struct CalendarSection: View {
                 Section {
                     HStack {
                         Text("Calendar access is needed to read your events.")
-                            .font(.caption).foregroundStyle(.orange)
+                            .font(.system(size: 12)).foregroundStyle(.orange)
                         Spacer()
                         Button("Grant") { env.requestCalendarAccess() }
                     }
@@ -182,14 +183,14 @@ private struct CalendarSection: View {
                 }
 
                 if accounts.isEmpty {
-                    Section { Text("No calendars found.").font(.caption).foregroundStyle(.secondary) }
+                    Section { Text("No calendars found.").font(.system(size: 12)).foregroundStyle(.secondary) }
                 }
 
                 Section {
                     Button("Add or remove accounts…") { env.openInternetAccounts() }
                     Button("Refresh calendars") { accounts = env.availableAccounts() }
                     Text("Accounts are added in System Settings → Internet Accounts.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -292,14 +293,14 @@ private struct KeyboardShortcutsSection: View {
                     }
                 }
                 if modifierString.isEmpty {
-                    Text("Pick at least one modifier.").font(.caption).foregroundStyle(.orange)
+                    Text("Pick at least one modifier.").font(.system(size: 12)).foregroundStyle(.orange)
                 } else {
                     Text("\(modifierString) + arrows:  ↑ maximize / monitor above · ↓ small / monitor below · ← left half / monitor left · → right half / monitor right. Press again to move to the adjacent monitor.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
-                        Text("Requires Accessibility permission.").font(.caption).foregroundStyle(.orange)
+                        Text("Requires Accessibility permission.").font(.system(size: 12)).foregroundStyle(.orange)
                         Button("Grant") { env.permissions.requestAccessibilityAccess() }
                     }
                 }
@@ -329,7 +330,7 @@ private struct KeyboardShortcutsSection: View {
 
 private struct RemindersSection: View {
     @EnvironmentObject var env: AppEnvironment
-    private let commonLeads = [20, 10, 5, 2]
+    private let commonLeads = [20, 10, 5, 1]
 
     var body: some View {
         let s = env.settingsStore
@@ -339,12 +340,13 @@ private struct RemindersSection: View {
                 if s.settings.remindersEnabled {
                     if !s.settings.calendarEnabled {
                         Text("Requires Calendar to be enabled.")
-                            .font(.caption).foregroundStyle(.orange)
+                            .font(.system(size: 12)).foregroundStyle(.orange)
                     }
                     ForEach(commonLeads, id: \.self) { lead in
-                        Toggle("\(lead) minutes before", isOn: leadBinding(lead))
+                        Toggle("\(lead) \(lead == 1 ? "minute" : "minutes") before", isOn: leadBinding(lead))
                             .padding(.leading, 14)
                     }
+                    Button("Preview toast") { env.previewToast() }
                 }
             }
 
@@ -394,16 +396,16 @@ private struct BrightnessSection: View {
         Section("External-display brightness") {
             Toggle("Control external brightness with F1 / F2 keys", isOn: s.binding(\.brightnessEnabled))
             Text("When the cursor is on an external display, the brightness keys adjust that monitor over DDC instead of the built-in screen.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 12)).foregroundStyle(.secondary)
 
             if !env.brightnessController.isSupportedPlatform {
                 Text("Brightness control is unavailable on this Mac.")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.system(size: 12)).foregroundStyle(.orange)
             } else if s.settings.brightnessEnabled {
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
                         Text("F1 / F2 routing needs Accessibility permission (the slider still works without it).")
-                            .font(.caption).foregroundStyle(.orange)
+                            .font(.system(size: 12)).foregroundStyle(.orange)
                         Button("Grant") { env.permissions.requestAccessibilityAccess() }
                     }
                 }
@@ -412,7 +414,7 @@ private struct BrightnessSection: View {
                 Toggle("Dim the inactive display", isOn: s.binding(\.dimInactiveDisplay))
                 if env.brightnessController.displays.isEmpty {
                     Text("No external displays detected.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 ForEach(env.brightnessController.displays) { display in
                     DisplayRow(display: display)
@@ -433,7 +435,7 @@ private struct DisplayRow: View {
                 Text(display.name)
                 Spacer()
                 Text(display.supportsDDC ? "DDC supported" : "DDC not supported")
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(display.supportsDDC ? .green : .secondary)
             }
             if display.supportsDDC {
@@ -461,12 +463,12 @@ private struct WindowSwipeSection: View {
             Toggle("Manage windows with a two-finger swipe on the title bar",
                    isOn: s.binding(\.windowSwipeEnabled))
             Text("Point at a window's title bar, then swipe two fingers: up to fill the screen, down to minimize. To move a window to another monitor, use the ⌘⌥ + arrow shortcuts.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 12)).foregroundStyle(.secondary)
             if s.settings.windowSwipeEnabled {
                 Toggle("Swipe left or right to snap to half-screen",
                        isOn: s.binding(\.windowSnapEnabled))
                 Text("A left or right swipe aligns the window to that half of the current screen.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
                 HStack {
                     Text("Sensitivity")
                     Slider(value: s.binding(\.swipeSensitivity), in: 0...1)
@@ -474,7 +476,7 @@ private struct WindowSwipeSection: View {
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
                         Text("Requires Accessibility permission.")
-                            .font(.caption).foregroundStyle(.orange)
+                            .font(.system(size: 12)).foregroundStyle(.orange)
                         Button("Grant") { env.permissions.requestAccessibilityAccess() }
                     }
                 }
@@ -493,17 +495,17 @@ private struct DockGesturesSection: View {
         Section("Dock gestures") {
             Toggle("Pinch a Dock icon to quit the app", isOn: s.binding(\.dockPinchQuitEnabled))
             Text("Point at an app's icon in the Dock and pinch two fingers together on the trackpad to quit it. Apps with unsaved work still get to ask before closing.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 12)).foregroundStyle(.secondary)
             if s.settings.dockPinchQuitEnabled {
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
                         Text("Requires Accessibility permission.")
-                            .font(.caption).foregroundStyle(.orange)
+                            .font(.system(size: 12)).foregroundStyle(.orange)
                         Button("Grant") { env.permissions.requestAccessibilityAccess() }
                     }
                 } else if !env.diagnostics.dockPinchActive {
                     Text("Trackpad not detected — this needs a Magic Trackpad or built-in trackpad.")
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(.system(size: 12)).foregroundStyle(.orange)
                 }
             }
         }
@@ -533,11 +535,11 @@ private struct PermissionsSection: View {
     private func statusLabel(_ status: PermissionStatus) -> some View {
         switch status {
         case .granted:
-            Text("Granted").foregroundStyle(.green).font(.caption)
+            Text("Granted").foregroundStyle(.green).font(.system(size: 12))
         case .denied:
-            Text("Denied").foregroundStyle(.red).font(.caption)
+            Text("Denied").foregroundStyle(.red).font(.system(size: 12))
         case .notRequested:
-            Text("Not requested").foregroundStyle(.secondary).font(.caption)
+            Text("Not requested").foregroundStyle(.secondary).font(.system(size: 12))
         }
     }
 }
@@ -560,16 +562,16 @@ private struct StatusSection: View {
                 Text("External displays")
                 Spacer()
                 Text("\(d.externalDisplayCount) screen(s), \(d.ddcServiceCount) DDC")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             HStack(alignment: .top) {
                 Text("Next meeting")
                 Spacer()
-                Text(nextMeetingDescription).font(.caption).foregroundStyle(.secondary)
+                Text(nextMeetingDescription).font(.system(size: 12)).foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
             }
             Text("\"Active\" means the feature is receiving input. If it says \"needs Accessibility\", grant it above — it switches to listening within a second, no relaunch.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 12)).foregroundStyle(.secondary)
         }
     }
 
@@ -591,7 +593,7 @@ private struct StatusSection: View {
             Image(systemName: on ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(on ? .green : .secondary)
             Text(on ? onText : offText)
-                .font(.caption).foregroundStyle(on ? .green : .secondary)
+                .font(.system(size: 12)).foregroundStyle(on ? .green : .secondary)
         }
     }
 }
