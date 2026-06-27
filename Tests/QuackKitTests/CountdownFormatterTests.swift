@@ -18,12 +18,22 @@ import Foundation
         #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Standup", startOffset: 300), now: base) == "Standup · in 5m")
     }
 
-    @Test func overAnHour() {
-        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Review", startOffset: 8100), now: base) == "Review · in 2h 15m")
+    @Test func underTwoHoursShowsMinutes() {
+        // 1h 20m stays in minute format.
+        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Sync", startOffset: 4800), now: base) == "Sync · in 1h 20m")
     }
 
-    @Test func exactHours() {
-        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Review", startOffset: 7200), now: base) == "Review · in 2h")
+    @Test func twoToEightHoursShowDecimalHours() {
+        // 2h exactly -> "2hr"; 3h30m -> "3.5hr"; 2h15m rounds to 2.5hr.
+        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Review", startOffset: 7200), now: base) == "Review · in 2hr")
+        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Review", startOffset: 12600), now: base) == "Review · in 3.5hr")
+        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Review", startOffset: 8100), now: base) == "Review · in 2.5hr")
+    }
+
+    @Test func beyondEightHoursIsHidden() {
+        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Far", startOffset: 9 * 3600), now: base) == nil)
+        // 8h exactly still shows.
+        #expect(CountdownFormatter.menuBarTitle(for: ev(title: "Edge", startOffset: 8 * 3600), now: base) == "Edge · in 8hr")
     }
 
     @Test func inProgress() {

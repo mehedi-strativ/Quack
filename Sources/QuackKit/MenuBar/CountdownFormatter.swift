@@ -5,12 +5,15 @@ public enum CountdownFormatter {
 
     public static let maxTitleLength = 14
 
-    /// The menu-bar title string. Returns `nil` when there is no meeting (the
-    /// caller then shows a neutral glyph).
+    /// Meetings further away than this are not shown in the menu bar.
+    public static let menuBarHorizon: TimeInterval = 8 * 3600
+
+    /// The menu-bar title string. Returns `nil` when there is no meeting, or the
+    /// next one starts more than 8 hours out (the caller then shows just the duck).
     ///
-    /// - in progress: `"<title> · now"`
-    /// - < 60 min:     `"<title> · in 5m"`
-    /// - >= 60 min:    `"<title> · in 2h"` / `"in 2h 15m"`
+    /// - in progress:  `"<title> · now"`
+    /// - < 2 hours:    `"<title> · in 5m"` / `"<title> · in 1h 20m"`
+    /// - 2–8 hours:    `"<title> · in 3.5hr"` (rounded to the half hour)
     public static func menuBarTitle(for meeting: MeetingEvent?, now: Date) -> String? {
         guard let meeting else { return nil }
         let title = truncate(meeting.title)
@@ -19,7 +22,25 @@ public enum CountdownFormatter {
         }
         let remaining = meeting.start.timeIntervalSince(now)
         guard remaining > 0 else { return "\(title) · now" }
-        return "\(title) · in \(relative(remaining))"
+        guard remaining <= menuBarHorizon else { return nil }   // > 8h: don't show
+        return "\(title) · in \(menuBarRelative(remaining))"
+    }
+
+    /// Menu-bar countdown text: minute precision under 2 hours, then half-hour
+    /// decimal hours ("3.5hr", "4hr") from 2 up to 8 hours.
+    public static func menuBarRelative(_ seconds: TimeInterval) -> String {
+        if seconds < 2 * 3600 {
+            let minutes = max(1, Int(seconds / 60))
+            if minutes < 60 { return "\(minutes)m" }
+            let hours = minutes / 60
+            let remMinutes = minutes % 60
+            return remMinutes == 0 ? "\(hours)h" : "\(hours)h \(remMinutes)m"
+        }
+        // Round to the nearest half hour and show as a decimal.
+        let halfHours = (seconds / 1800).rounded()
+        let hours = halfHours / 2
+        if hours == hours.rounded() { return "\(Int(hours))hr" }
+        return String(format: "%.1fhr", hours)
     }
 
     /// A short relative-duration string at minute granularity (never seconds):
