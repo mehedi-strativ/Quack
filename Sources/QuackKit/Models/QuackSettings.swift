@@ -18,6 +18,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var windowShortcutModifiers: Int
     /// Pinch two fingers in on an app's Dock icon to quit that app.
     public var dockPinchQuitEnabled: Bool
+    /// Show CPU temperature (with a flame icon) in the menu bar.
+    public var cpuTemperatureEnabled: Bool
+    /// Show the temperature in Fahrenheit instead of Celsius.
+    public var temperatureFahrenheit: Bool
 
     // MARK: Reminders
     /// Lead times (minutes before start) at which to fire a reminder.
@@ -53,6 +57,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowShortcutsEnabled: Bool = true,
         windowShortcutModifiers: Int = 0b0011,   // ⌘ + ⌥
         dockPinchQuitEnabled: Bool = false,
+        cpuTemperatureEnabled: Bool = false,
+        temperatureFahrenheit: Bool = false,
         reminderLeadMinutes: [Int] = [10, 5],
         notificationSound: String = "quack",
         useEventKit: Bool = true,
@@ -73,6 +79,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.windowShortcutsEnabled = windowShortcutsEnabled
         self.windowShortcutModifiers = windowShortcutModifiers
         self.dockPinchQuitEnabled = dockPinchQuitEnabled
+        self.cpuTemperatureEnabled = cpuTemperatureEnabled
+        self.temperatureFahrenheit = temperatureFahrenheit
         self.reminderLeadMinutes = reminderLeadMinutes
         self.notificationSound = notificationSound
         self.useEventKit = useEventKit
@@ -106,6 +114,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowShortcutsEnabled = v(.windowShortcutsEnabled, d.windowShortcutsEnabled)
         windowShortcutModifiers = v(.windowShortcutModifiers, d.windowShortcutModifiers)
         dockPinchQuitEnabled = v(.dockPinchQuitEnabled, d.dockPinchQuitEnabled)
+        cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
+        temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)
         reminderLeadMinutes = v(.reminderLeadMinutes, d.reminderLeadMinutes)
         notificationSound = v(.notificationSound, d.notificationSound)
         useEventKit = v(.useEventKit, d.useEventKit)

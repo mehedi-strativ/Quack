@@ -31,11 +31,19 @@ let package = Package(
                 .linkedFramework("CoreFoundation"),
             ]
         ),
+        // C shim for CPU temperature via the SMC over IOKit.
+        .target(
+            name: "CSMC",
+            linkerSettings: [
+                .linkedFramework("IOKit"),
+                .linkedFramework("CoreFoundation"),
+            ]
+        ),
         // The app target: SwiftUI + AppKit + system frameworks. Wires QuackKit
         // logic to live services (EventKit, UserNotifications, IOKit DDC, AX).
         .executableTarget(
             name: "Quack",
-            dependencies: ["QuackKit", "CDDC", "CMultitouch"],
+            dependencies: ["QuackKit", "CDDC", "CMultitouch", "CSMC"],
             linkerSettings: [
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("AppKit"),

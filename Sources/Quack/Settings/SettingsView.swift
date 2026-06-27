@@ -30,7 +30,6 @@ enum SettingsTab: String, CaseIterable {
 /// launch-at-login), a tab strip, and the selected pane.
 struct SettingsRootView: View {
     @EnvironmentObject var env: AppEnvironment
-    @State private var tab: SettingsTab = .calendar
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
 
     var body: some View {
@@ -39,7 +38,7 @@ struct SettingsRootView: View {
             Divider()
             tabStrip
             Divider()
-            SettingsPane(tab: tab)
+            SettingsPane(tab: env.settingsTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 540, height: 640)
@@ -69,14 +68,14 @@ struct SettingsRootView: View {
     private var tabStrip: some View {
         HStack(spacing: 6) {
             ForEach(SettingsTab.allCases, id: \.self) { item in
-                Button { tab = item } label: {
+                Button { env.settingsTab = item } label: {
                     VStack(spacing: 4) {
                         Image(systemName: item.icon).font(.system(size: 17))
                         Text(item.title).font(.system(size: 12))
                     }
                     .frame(width: 78, height: 50)
-                    .foregroundStyle(tab == item ? Color.accentColor : Color.primary)
-                    .background(tab == item ? Color.accentColor.opacity(0.18) : .clear)
+                    .foregroundStyle(env.settingsTab == item ? Color.accentColor : Color.primary)
+                    .background(env.settingsTab == item ? Color.accentColor.opacity(0.18) : .clear)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .contentShape(Rectangle())
                 }
@@ -97,7 +96,9 @@ struct SettingsPane: View {
             switch tab {
             case .calendar: CalendarSection()
             case .reminders: RemindersSection()
-            case .display: BrightnessSection()
+            case .display:
+                BrightnessSection()
+                TemperatureSection()
             case .windows:
                 WindowSwipeSection()
                 DockGesturesSection()
@@ -295,7 +296,7 @@ private struct KeyboardShortcutsSection: View {
                 if modifierString.isEmpty {
                     Text("Pick at least one modifier.").font(.system(size: 12)).foregroundStyle(.orange)
                 } else {
-                    Text("\(modifierString) + arrows:  ↑ maximize / monitor above · ↓ small / monitor below · ← left half / monitor left · → right half / monitor right. Press again to move to the adjacent monitor.")
+                    Text("\(modifierString) + arrows:  ↑ maximize (press again → monitor above) · ↓ move to the monitor below · ← left half (again → monitor left) · → right half (again → monitor right).")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 if env.permissions.status(for: .accessibility) != .granted {
@@ -449,6 +450,24 @@ private struct DisplayRow: View {
             get: { env.settingsStore.settings.displayBrightness[display.id] ?? 0.8 },
             set: { env.applyBrightness($0, to: display) }
         )
+    }
+}
+
+// MARK: - CPU temperature
+
+private struct TemperatureSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("CPU temperature") {
+            Toggle("Show CPU temperature in the menu bar", isOn: s.binding(\.cpuTemperatureEnabled))
+            Text("Adds a flame icon with the current CPU temperature, read from the Mac's sensors. It turns orange, then red, as the chip heats up.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            if s.settings.cpuTemperatureEnabled {
+                Toggle("Show in Fahrenheit", isOn: s.binding(\.temperatureFahrenheit))
+            }
+        }
     }
 }
 

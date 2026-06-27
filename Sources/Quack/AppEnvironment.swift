@@ -18,6 +18,9 @@ final class AppEnvironment: ObservableObject {
     /// dependably, which froze the countdown; this timer lives on the main
     /// run loop in `.common` mode so it keeps firing during menu tracking too.
     @Published var now = Date()
+    /// The currently selected settings tab (lifted here so features can deep-link
+    /// to a specific tab, e.g. the temperature popover → Display).
+    @Published var settingsTab: SettingsTab = .calendar
     private var clockTimer: Timer?
     private var activeObserver: NSObjectProtocol?
 
@@ -33,6 +36,7 @@ final class AppEnvironment: ObservableObject {
     private let gestureService: GestureMonitor
     private let hotkeyService: HotkeyMonitor
     private let dockPinchService: DockPinchMonitor
+    private let temperatureService: TemperatureStatusItem
 
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
@@ -61,6 +65,7 @@ final class AppEnvironment: ObservableObject {
         self.gestureService = GestureMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
+        self.temperatureService = TemperatureStatusItem(settings: settings)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -70,8 +75,10 @@ final class AppEnvironment: ObservableObject {
             .windowSwipe: gestureService,
             .windowShortcuts: hotkeyService,
             .dockPinch: dockPinchService,
+            .temperature: temperatureService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
+        temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .display) }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
         // `AppEnvironment` refresh when settings / meetings / permissions change.
@@ -165,8 +172,9 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// Opens (and focuses) the Quack settings window.
-    func showSettings() {
+    /// Opens (and focuses) the Quack settings window, optionally selecting a tab.
+    func showSettings(selecting tab: SettingsTab? = nil) {
+        if let tab { settingsTab = tab }
         settingsWindow.show(env: self)
     }
 
