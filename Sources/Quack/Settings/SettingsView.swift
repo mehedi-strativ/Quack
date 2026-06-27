@@ -99,6 +99,7 @@ struct SettingsPane: View {
             case .display: BrightnessSection()
             case .windows:
                 WindowSwipeSection()
+                DockGesturesSection()
                 KeyboardShortcutsSection()
             case .permissions:
                 PermissionsSection()
@@ -106,6 +107,21 @@ struct SettingsPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// A subtle inline caption about how cross-app calendar edits sync. Plain
+/// secondary text (no tint, no border) so it sits quietly inside its card and
+/// scrolls with the content.
+private struct CalendarSyncTip: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "info.circle")
+            Text("Edits made in another app (Google, Notion, etc.) appear after macOS syncs them. If they're slow, shorten **Calendar app → Settings → Accounts → Refresh Calendars**.")
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
 
@@ -121,13 +137,15 @@ private struct CalendarSection: View {
 
         Section {
             Toggle("Show meeting countdown in the menu bar", isOn: s.binding(\.menuBarCountdownEnabled))
-        } footer: {
             Text("When off, the menu bar shows just the duck.")
                 .font(.caption).foregroundStyle(.secondary)
         }
 
         Section {
-            Toggle("Show calendar events", isOn: s.binding(\.calendarEnabled))
+            Toggle("Show calendar events in dropdown list", isOn: s.binding(\.calendarEnabled))
+            if s.settings.calendarEnabled && env.permissions.status(for: .calendar) == .granted {
+                CalendarSyncTip()
+            }
         }
 
         if s.settings.calendarEnabled {
@@ -142,7 +160,8 @@ private struct CalendarSection: View {
                 }
             } else {
                 // One card per account; children are dividers within the card.
-                ForEach(accounts) { account in
+                // The first card carries the group header.
+                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
                     Section {
                         Toggle(isOn: accountBinding(account)) {
                             Text(account.title).fontWeight(.semibold)
@@ -150,10 +169,15 @@ private struct CalendarSection: View {
                         // Children only show while the account is on.
                         if isAccountOn(account) {
                             ForEach(account.calendars) { cal in
-                                Toggle(cal.title, isOn: calendarBinding(cal.id))
+                                // A provider's primary calendar is named after the
+                                // account itself — relabel it so it isn't a confusing
+                                // repeat of the account row above.
+                                Toggle(calendarLabel(cal, in: account), isOn: calendarBinding(cal.id))
                                     .padding(.leading, 14)
                             }
                         }
+                    } header: {
+                        if index == 0 { Text("Calendar accounts") }
                     }
                 }
 
@@ -167,21 +191,17 @@ private struct CalendarSection: View {
                     Text("Accounts are added in System Settings → Internet Accounts.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-
-                Section {
-                    Label {
-                        Text("Edits made in another app (Google, Notion, etc.) appear after macOS syncs them. If they're slow, shorten **Calendar app → Settings → Accounts → Refresh Calendars**.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } icon: {
-                        Image(systemName: "info.circle").foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Tip")
-                }
             }
         }
       }
       .onAppear { accounts = env.availableAccounts() }
+    }
+
+    /// Display name for a calendar row. The provider's primary calendar shares
+    /// the account's name (e.g. the email), so show "Primary calendar" instead
+    /// of repeating it under the account toggle.
+    private func calendarLabel(_ cal: CalendarInfo, in account: CalendarAccountInfo) -> String {
+        cal.title == account.title ? "Primary calendar" : cal.title
     }
 
     private var allCalendarIDs: [String] {
@@ -313,15 +333,37 @@ private struct RemindersSection: View {
 
     var body: some View {
         let s = env.settingsStore
-        Section("Reminders") {
-            Toggle("Meeting reminders", isOn: s.binding(\.remindersEnabled))
-            if s.settings.remindersEnabled {
-                if !s.settings.calendarEnabled {
-                    Text("Requires Calendar to be enabled.")
-                        .font(.caption).foregroundStyle(.orange)
+        Group {
+            Section("Reminders") {
+                Toggle("Meeting reminders", isOn: s.binding(\.remindersEnabled))
+                if s.settings.remindersEnabled {
+                    if !s.settings.calendarEnabled {
+                        Text("Requires Calendar to be enabled.")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                    ForEach(commonLeads, id: \.self) { lead in
+                        Toggle("\(lead) minutes before", isOn: leadBinding(lead))
+                            .padding(.leading, 14)
+                    }
                 }
-                ForEach(commonLeads, id: \.self) { lead in
-                    Toggle("\(lead) minutes before", isOn: leadBinding(lead))
+            }
+
+            if s.settings.remindersEnabled {
+                Section("Sound") {
+                    HStack {
+                        Picker("Sound", selection: s.binding(\.notificationSound)) {
+                            ForEach(NotificationSound.allCases) { sound in
+                                Text(sound.displayName).tag(sound.rawValue)
+                            }
+                        }
+                        Button {
+                            env.previewSound(NotificationSound.from(s.settings.notificationSound))
+                        } label: {
+                            Image(systemName: "play.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Preview sound")
+                    }
                 }
             }
         }
@@ -416,14 +458,14 @@ private struct WindowSwipeSection: View {
     var body: some View {
         let s = env.settingsStore
         Section("Window swipe") {
-            Toggle("Fling windows to another monitor with a two-finger swipe",
+            Toggle("Manage windows with a two-finger swipe on the title bar",
                    isOn: s.binding(\.windowSwipeEnabled))
-            Text("Point at a window's title bar, then swipe two fingers on the trackpad toward the other monitor. Works both directions.")
+            Text("Point at a window's title bar, then swipe two fingers: up to fill the screen, down to minimize. To move a window to another monitor, use the ⌘⌥ + arrow shortcuts.")
                 .font(.caption).foregroundStyle(.secondary)
             if s.settings.windowSwipeEnabled {
-                Toggle("Snap to half-screen when there's no monitor that way",
+                Toggle("Swipe left or right to snap to half-screen",
                        isOn: s.binding(\.windowSnapEnabled))
-                Text("Swiping left/right with no monitor in that direction aligns the window to that half of the screen.")
+                Text("A left or right swipe aligns the window to that half of the current screen.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Text("Sensitivity")
@@ -435,6 +477,33 @@ private struct WindowSwipeSection: View {
                             .font(.caption).foregroundStyle(.orange)
                         Button("Grant") { env.permissions.requestAccessibilityAccess() }
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Dock gestures
+
+private struct DockGesturesSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Dock gestures") {
+            Toggle("Pinch a Dock icon to quit the app", isOn: s.binding(\.dockPinchQuitEnabled))
+            Text("Point at an app's icon in the Dock and pinch two fingers together on the trackpad to quit it. Apps with unsaved work still get to ask before closing.")
+                .font(.caption).foregroundStyle(.secondary)
+            if s.settings.dockPinchQuitEnabled {
+                if env.permissions.status(for: .accessibility) != .granted {
+                    HStack {
+                        Text("Requires Accessibility permission.")
+                            .font(.caption).foregroundStyle(.orange)
+                        Button("Grant") { env.permissions.requestAccessibilityAccess() }
+                    }
+                } else if !env.diagnostics.dockPinchActive {
+                    Text("Trackpad not detected — this needs a Magic Trackpad or built-in trackpad.")
+                        .font(.caption).foregroundStyle(.orange)
                 }
             }
         }
@@ -485,6 +554,8 @@ private struct StatusSection: View {
                 onText: "listening", offText: env.settingsStore.settings.windowSwipeEnabled ? "needs Accessibility" : "off")
             row("Brightness keys active", d.brightnessKeyTapInstalled,
                 onText: "listening", offText: env.settingsStore.settings.brightnessEnabled ? "needs Accessibility" : "off")
+            row("Dock pinch active", d.dockPinchActive,
+                onText: "listening", offText: env.settingsStore.settings.dockPinchQuitEnabled ? "needs Accessibility / trackpad" : "off")
             HStack {
                 Text("External displays")
                 Spacer()

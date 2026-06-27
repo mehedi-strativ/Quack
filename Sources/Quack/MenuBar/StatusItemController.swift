@@ -72,6 +72,6 @@ final class StatusItemController {
     /// The duck glyph as a template image (AppKit-drawn — reliable, unlike
     /// ImageRenderer on a SwiftUI Canvas, which produced a blank image).
     private static func duckImage() -> NSImage {
-        DuckImage.template(height: 17)
+        DuckImage.template(height: 11)
     }
 }

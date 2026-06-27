@@ -49,6 +49,13 @@ enum AXHelpers {
         return AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, value) == .success
     }
 
+    /// Minimizes a window into the Dock (the AX equivalent of clicking its
+    /// yellow button). Returns whether the API accepted it.
+    @discardableResult
+    static func minimize(_ window: AXUIElement) -> Bool {
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue) == .success
+    }
+
     /// The focused window of the frontmost application (the one a keyboard
     /// shortcut should act on).
     static func focusedWindow() -> AXUIElement? {

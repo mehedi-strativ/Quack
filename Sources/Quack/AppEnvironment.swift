@@ -32,6 +32,7 @@ final class AppEnvironment: ObservableObject {
     private let cursorService: CursorBrightnessService
     private let gestureService: GestureMonitor
     private let hotkeyService: HotkeyMonitor
+    private let dockPinchService: DockPinchMonitor
 
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
@@ -59,6 +60,7 @@ final class AppEnvironment: ObservableObject {
         self.cursorService = CursorBrightnessService(controller: brightness, settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.gestureService = GestureMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
+        self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -67,6 +69,7 @@ final class AppEnvironment: ObservableObject {
             .brightness: cursorService,
             .windowSwipe: gestureService,
             .windowShortcuts: hotkeyService,
+            .dockPinch: dockPinchService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
 
@@ -122,6 +125,11 @@ final class AppEnvironment: ObservableObject {
             await meetingStore.refresh()
             objectWillChange.send()
         }
+    }
+
+    /// Plays a sound for the settings preview button.
+    func previewSound(_ sound: NotificationSound) {
+        quackSound.play(sound)
     }
 
     /// Re-reads the calendar now (e.g. when the menu opens) so the list is never

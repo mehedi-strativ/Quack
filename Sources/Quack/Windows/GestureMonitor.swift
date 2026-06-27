@@ -154,19 +154,21 @@ final class GestureMonitor: ManagedService {
         }
     }
 
-    /// Shows a floating directional-arrow badge while swiping — but only when a
-    /// monitor actually exists in that direction, so the badge means a valid move.
+    /// Shows a floating directional-arrow badge while swiping, for any direction
+    /// that will actually do something (up = fill, down = minimize always;
+    /// left/right only when snapping is enabled).
     private func updateCursor() {
-        guard eligible, let source = sourceScreen else { return }
+        guard eligible else { return }
         let threshold = TrackpadSwipe.requiredDisplacement(sensitivity: settings.settings.swipeSensitivity) * 0.4
-        let outcome = ScreenGeometry.swipeOutcome(
-            swipe: accumulated, from: source, in: WindowMover.screenInfos(),
-            snapEnabled: settings.settings.windowSnapEnabled, minMagnitude: threshold
-        )
-        if outcome != .none, let direction = ScreenGeometry.direction(forDelta: accumulated, minMagnitude: threshold) {
-            indicator.show(direction: direction, at: NSEvent.mouseLocation)
-        } else {
+        guard let direction = ScreenGeometry.direction(forDelta: accumulated, minMagnitude: threshold) else {
             indicator.hide()
+            return
+        }
+        let snapOff = !settings.settings.windowSnapEnabled
+        if (direction == .left || direction == .right), snapOff {
+            indicator.hide()
+        } else {
+            indicator.show(direction: direction, at: NSEvent.mouseLocation)
         }
     }
 

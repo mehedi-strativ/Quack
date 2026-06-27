@@ -16,10 +16,14 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var windowShortcutsEnabled: Bool
     /// Modifier bitmask for the shortcuts: bit0 ⌘, bit1 ⌥, bit2 ⌃, bit3 ⇧.
     public var windowShortcutModifiers: Int
+    /// Pinch two fingers in on an app's Dock icon to quit that app.
+    public var dockPinchQuitEnabled: Bool
 
     // MARK: Reminders
     /// Lead times (minutes before start) at which to fire a reminder.
     public var reminderLeadMinutes: [Int]
+    /// Identifier of the sound played for the "join now" toast (see NotificationSound).
+    public var notificationSound: String
 
     // MARK: Calendar
     public var useEventKit: Bool
@@ -48,7 +52,9 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowSnapEnabled: Bool = true,
         windowShortcutsEnabled: Bool = true,
         windowShortcutModifiers: Int = 0b0011,   // ⌘ + ⌥
+        dockPinchQuitEnabled: Bool = false,
         reminderLeadMinutes: [Int] = [10, 5],
+        notificationSound: String = "quack",
         useEventKit: Bool = true,
         useGoogle: Bool = false,
         syncAllCalendars: Bool = true,
@@ -66,7 +72,9 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.windowSnapEnabled = windowSnapEnabled
         self.windowShortcutsEnabled = windowShortcutsEnabled
         self.windowShortcutModifiers = windowShortcutModifiers
+        self.dockPinchQuitEnabled = dockPinchQuitEnabled
         self.reminderLeadMinutes = reminderLeadMinutes
+        self.notificationSound = notificationSound
         self.useEventKit = useEventKit
         self.useGoogle = useGoogle
         self.syncAllCalendars = syncAllCalendars
@@ -97,7 +105,9 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowSnapEnabled = v(.windowSnapEnabled, d.windowSnapEnabled)
         windowShortcutsEnabled = v(.windowShortcutsEnabled, d.windowShortcutsEnabled)
         windowShortcutModifiers = v(.windowShortcutModifiers, d.windowShortcutModifiers)
+        dockPinchQuitEnabled = v(.dockPinchQuitEnabled, d.dockPinchQuitEnabled)
         reminderLeadMinutes = v(.reminderLeadMinutes, d.reminderLeadMinutes)
+        notificationSound = v(.notificationSound, d.notificationSound)
         useEventKit = v(.useEventKit, d.useEventKit)
         useGoogle = v(.useGoogle, d.useGoogle)
         syncAllCalendars = v(.syncAllCalendars, d.syncAllCalendars)

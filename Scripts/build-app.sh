@@ -48,7 +48,7 @@ if [ -f "Resources/AppIcon.icns" ]; then
 else
     echo "⚠︎ Resources/AppIcon.icns missing — run Scripts/make-icon.sh"
 fi
-[ -f "Resources/quack.wav" ] && cp "Resources/quack.wav" "${APP_DIR}/Contents/Resources/quack.wav"
+[ -f "Resources/quack.mp3" ] && cp "Resources/quack.mp3" "${APP_DIR}/Contents/Resources/quack.mp3"
 
 echo "▸ Signing (identity: ${SIGN_ID})…"
 if [ "${SIGN_ID}" = "-" ]; then

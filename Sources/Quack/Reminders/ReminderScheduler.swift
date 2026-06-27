@@ -92,7 +92,7 @@ final class ReminderScheduler: ManagedService {
             if !fired.contains(sid), now >= meeting.start, now < meeting.start.addingTimeInterval(fireWindow) {
                 fired.insert(sid)
                 showStart(meeting)
-                sound.play()
+                sound.play(NotificationSound.from(settings.settings.notificationSound))
             }
         }
     }

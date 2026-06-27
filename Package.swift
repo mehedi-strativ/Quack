@@ -23,11 +23,19 @@ let package = Package(
                 .linkedFramework("CoreFoundation"),
             ]
         ),
+        // C shim for raw trackpad touches over the private MultitouchSupport API
+        // (loaded at runtime via dlopen — see CMultitouch.c).
+        .target(
+            name: "CMultitouch",
+            linkerSettings: [
+                .linkedFramework("CoreFoundation"),
+            ]
+        ),
         // The app target: SwiftUI + AppKit + system frameworks. Wires QuackKit
         // logic to live services (EventKit, UserNotifications, IOKit DDC, AX).
         .executableTarget(
             name: "Quack",
-            dependencies: ["QuackKit", "CDDC"],
+            dependencies: ["QuackKit", "CDDC", "CMultitouch"],
             linkerSettings: [
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("AppKit"),

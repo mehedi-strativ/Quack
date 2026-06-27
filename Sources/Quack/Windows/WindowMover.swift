@@ -17,36 +17,36 @@ enum WindowMover {
         }
     }
 
-    /// Handles a title-bar swipe: moves the window to the monitor in that
-    /// direction, or — if none exists and `snapEnabled` — snaps it to that half
-    /// of the current screen. Returns whether anything happened.
+    /// Handles a title-bar swipe — acting on the CURRENT screen only:
+    /// - up:    fill the screen (fullscreen)
+    /// - down:  minimize to the Dock
+    /// - left:  snap to the left half (when `snapEnabled`)
+    /// - right: snap to the right half (when `snapEnabled`)
+    ///
+    /// Moving a window to another monitor is intentionally NOT a swipe action —
+    /// that lives on the ⌘⌥ + arrow shortcuts instead. Returns whether anything
+    /// happened.
     @discardableResult
     static func move(window: AXUIElement, currentFrame: CGRect, swipe: CGVector, snapEnabled: Bool) -> Bool {
         let screens = screenInfos()
-        guard let source = ScreenGeometry.screen(containing: CGPoint(x: currentFrame.midX, y: currentFrame.midY), in: screens)
+        guard let source = ScreenGeometry.screen(containing: CGPoint(x: currentFrame.midX, y: currentFrame.midY), in: screens),
+              let direction = ScreenGeometry.direction(forDelta: swipe, minMagnitude: 1)
         else { return false }
+        let work = workArea(of: source)
 
-        let destination: CGRect
-        switch ScreenGeometry.swipeOutcome(swipe: swipe, from: source, in: screens, snapEnabled: snapEnabled, minMagnitude: 1) {
-        case .none:
-            return false
-        case .move(let screenID):
-            guard let target = screens.first(where: { $0.id == screenID }) else { return false }
-            if ScreenGeometry.fillsScreen(currentFrame, source) {
-                // A maximized window should fill the TARGET's usable area (below
-                // its own menu bar), not copy the source's inset — otherwise a
-                // taller source menu bar (e.g. a notched display) leaves a gap.
-                destination = workArea(of: target)
-            } else {
-                destination = ScreenGeometry.destinationFrame(windowFrame: currentFrame, from: source, to: target)
-            }
-        case .snap(let side):
-            destination = snapDestination(window: window, side: side, work: workArea(of: source))
+        switch direction {
+        case .up:
+            AXHelpers.raise(window)
+            animate(window: window, from: currentFrame, to: work)
+            return true
+        case .down:
+            return AXHelpers.minimize(window)
+        case .left, .right:
+            guard snapEnabled else { return false }
+            let side: ScreenGeometry.SnapSide = (direction == .left) ? .left : .right
+            animate(window: window, from: currentFrame, to: snapDestination(window: window, side: side, work: work))
+            return true
         }
-
-        AXHelpers.raise(window)   // bring above all other windows
-        animate(window: window, from: currentFrame, to: destination)
-        return true
     }
 
     /// Computes the snap rect, flush to the correct edge using the window's

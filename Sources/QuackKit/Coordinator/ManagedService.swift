@@ -18,6 +18,7 @@ public enum Feature: CaseIterable, Sendable {
     case brightness
     case windowSwipe
     case windowShortcuts
+    case dockPinch
 
     public func isEnabled(in settings: QuackSettings) -> Bool {
         switch self {
@@ -27,6 +28,7 @@ public enum Feature: CaseIterable, Sendable {
         case .brightness: return settings.brightnessEnabled
         case .windowSwipe: return settings.windowSwipeEnabled
         case .windowShortcuts: return settings.windowShortcutsEnabled
+        case .dockPinch: return settings.dockPinchQuitEnabled
         }
     }
 }

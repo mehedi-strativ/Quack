@@ -3,7 +3,7 @@ import Foundation
 /// Formats the menu-bar title from the current/next meeting.
 public enum CountdownFormatter {
 
-    public static let maxTitleLength = 22
+    public static let maxTitleLength = 14
 
     /// The menu-bar title string. Returns `nil` when there is no meeting (the
     /// caller then shows a neutral glyph).

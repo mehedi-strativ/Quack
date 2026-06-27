@@ -7,5 +7,6 @@ enum Log {
     static let reminders = Logger(subsystem: "com.quack.menubar", category: "reminders")
     static let brightness = Logger(subsystem: "com.quack.menubar", category: "brightness")
     static let swipe = Logger(subsystem: "com.quack.menubar", category: "swipe")
+    static let dock = Logger(subsystem: "com.quack.menubar", category: "dock")
     static let permissions = Logger(subsystem: "com.quack.menubar", category: "permissions")
 }
