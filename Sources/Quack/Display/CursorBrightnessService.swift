@@ -131,11 +131,11 @@ final class CursorBrightnessService: ManagedService {
         guard settings.settings.dimInactiveDisplay else { return }
         // Restore the now-active display to its stored brightness…
         if let target = settings.settings.displayBrightness[active.id] {
-            controller.setBrightness(Int((target * 100).rounded()), on: active)
+            controller.apply(fraction: target, to: active)
         }
         // …and dim the one we just left.
         if let previousID, let previous = controller.displays.first(where: { $0.id == previousID }) {
-            controller.setBrightness(20, on: previous)
+            controller.apply(fraction: 0.2, to: previous)
         }
     }
 
@@ -171,7 +171,7 @@ final class CursorBrightnessService: ManagedService {
             increase: increase
         )
         settings.update { $0.displayBrightness[display.id] = next }
-        controller.setBrightness(Int((next * 100).rounded()), on: display)
+        controller.apply(fraction: next, to: display)
         let screen = NSScreen.screens.first { $0.displayID == display.screenNumber }
         hud.show(displayName: display.name, level: next, on: screen)
     }

@@ -19,6 +19,8 @@ struct ControllableDisplay: Identifiable {
 final class BrightnessController: ObservableObject {
     @Published private(set) var displays: [ControllableDisplay] = []
 
+    private let dimmer = DisplayDimmer()
+
     /// Whether this Mac can do DDC at all (Apple Silicon path only here).
     var isSupportedPlatform: Bool { DDCControl.isAppleSilicon }
 
@@ -72,6 +74,21 @@ final class BrightnessController: ObservableObject {
     func setBrightness(_ percent: Int, on display: ControllableDisplay) -> Bool {
         guard display.supportsDDC else { return false }
         return DDCControl.setBrightness(percent, atIndex: display.ddcIndex)
+    }
+
+    /// Applies a 0…1 brightness fraction: DDC across the whole range, plus a
+    /// software dark overlay that ramps in below `dimThreshold` so the lowest
+    /// settings go darker than the monitor's DDC floor.
+    func apply(fraction: Double, to display: ControllableDisplay) {
+        let f = max(0, min(1, fraction))
+        setBrightness(Int((f * 100).rounded()), on: display)
+        dimmer.setOverlay(alpha: Self.overlayAlpha(for: f), for: display.screenNumber)
+    }
+
+    /// Extra software dimming for the bottom of the range (0 above the threshold).
+    static func overlayAlpha(for fraction: Double, dimThreshold: Double = 0.3, maxAlpha: Double = 0.7) -> Double {
+        guard fraction < dimThreshold else { return 0 }
+        return (dimThreshold - fraction) / dimThreshold * maxAlpha
     }
 
     /// The display's current brightness as a 0…1 fraction read over DDC, or nil

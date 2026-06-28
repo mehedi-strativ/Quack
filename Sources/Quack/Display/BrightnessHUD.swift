@@ -31,7 +31,8 @@ final class BrightnessHUD {
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
-        p.level = .statusBar
+        // Above the dim overlay (screenSaver) so the HUD stays readable.
+        p.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
         p.ignoresMouseEvents = true
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         let host = NSHostingView(rootView: BrightnessHUDView(model: model))
@@ -123,7 +124,7 @@ private struct BrightnessSlider: View {
             }
             .clipShape(Capsule())
         }
-        .frame(height: 26)
+        .frame(height: 4)
     }
 }
 
