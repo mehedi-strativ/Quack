@@ -28,22 +28,31 @@ final class TemperatureStatusItem: NSObject, ManagedService {
     }
 
     func start() {
-        guard statusItem == nil else { return }
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = item.button {
-            button.image = NSImage(systemSymbolName: "flame.fill", accessibilityDescription: "CPU temperature")
-            button.image?.isTemplate = true
-            button.imagePosition = .imageLeading
-            button.target = self
-            button.action = #selector(togglePopover)
+        // Create the status item once and reuse it. Toggling the feature flips
+        // `isVisible` instead of removing/re-adding the item — repeatedly
+        // removing and recreating status items corrupts the menu-bar layout and
+        // can drop *other* apps'/our own items (that's what made the duck vanish).
+        if statusItem == nil {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            if let button = item.button {
+                let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
+                let flame = NSImage(systemSymbolName: "flame.fill", accessibilityDescription: "CPU temperature")?
+                    .withSymbolConfiguration(cfg)
+                flame?.isTemplate = true
+                button.image = flame
+                button.imagePosition = .imageLeading
+                button.imageHugsTitle = true   // minimal gap between flame and value
+                button.target = self
+                button.action = #selector(togglePopover)
+            }
+            popover.behavior = .transient
+            popover.animates = false
+            popover.contentViewController = NSHostingController(
+                rootView: TemperaturePopover(model: model) { [weak self] in self?.openSettings() }
+            )
+            statusItem = item
         }
-        statusItem = item
-
-        popover.behavior = .transient
-        popover.animates = false
-        popover.contentViewController = NSHostingController(
-            rootView: TemperaturePopover(model: model) { [weak self] in self?.openSettings() }
-        )
+        statusItem?.isVisible = true
 
         // Re-render immediately when the unit toggle changes.
         cancellable = settings.objectWillChange
@@ -61,10 +70,7 @@ final class TemperatureStatusItem: NSObject, ManagedService {
         timer?.invalidate(); timer = nil
         cancellable = nil
         if popover.isShown { popover.performClose(nil) }
-        if let item = statusItem {
-            NSStatusBar.system.removeStatusItem(item)
-            statusItem = nil
-        }
+        statusItem?.isVisible = false   // hide, don't remove (keeps the layout stable)
     }
 
     @objc private func togglePopover() {
@@ -105,10 +111,25 @@ final class TemperatureStatusItem: NSObject, ManagedService {
         // Always use the default adaptive menu-bar color (a fixed attributed
         // color flickered between tinted and black/white against the menu bar).
         button.contentTintColor = nil
-        guard lastTempC > 0 else { button.title = " --"; return }
+        // Leading space sets the gap between the flame and the value.
+        if lastTempC > 0 {
+            let fahrenheit = settings.settings.temperatureFahrenheit
+            let value = fahrenheit ? lastTempC * 9 / 5 + 32 : lastTempC
+            button.title = " \(Int(value.rounded()))°"
+        } else {
+            button.title = " --"
+        }
+        tightenWidth(button)
+    }
 
-        let fahrenheit = settings.settings.temperatureFahrenheit
-        let value = fahrenheit ? lastTempC * 9 / 5 + 32 : lastTempC
-        button.title = " \(Int(value.rounded()))°"
+    /// `variableLength` adds generous system side-insets. Pin the item to the
+    /// content width (image + a small gap + text) with only a little padding.
+    private func tightenWidth(_ button: NSStatusBarButton) {
+        let font = button.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let textWidth = (button.title as NSString).size(withAttributes: [.font: font]).width
+        let imageWidth = button.image?.size.width ?? 0
+        // imageWidth + textWidth already covers the flame, gap, and value; the
+        // small extra is just the side padding — keep it minimal.
+        statusItem?.length = ceil(imageWidth + textWidth + 4)
     }
 }

@@ -24,7 +24,7 @@ final class BrightnessHUD {
     private func ensurePanel() -> NSPanel {
         if let panel { return panel }
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 280, height: 82),
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 92),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -76,51 +76,54 @@ private struct BrightnessHUDView: View {
     @ObservedObject var model: BrightnessHUDModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(model.displayName)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-            HStack(spacing: 9) {
-                Image(systemName: "sun.min.fill").font(.system(size: 12)).foregroundStyle(.secondary)
-                SegmentedBar(level: model.level)
-                Image(systemName: "sun.max.fill").font(.system(size: 16)).foregroundStyle(.primary)
+            HStack(spacing: 10) {
+                Image(systemName: "sun.min.fill").font(.system(size: 13)).foregroundStyle(.primary)
+                BrightnessSlider(level: model.level)
+                Image(systemName: "sun.max.fill").font(.system(size: 18)).foregroundStyle(.primary)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 13)
-        .frame(width: 280, alignment: .leading)
+        .padding(.vertical, 14)
+        .frame(width: 300, alignment: .leading)
         .background(HUDBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
     }
 }
 
-/// A continuous brightness track with faint tick marks, like the native HUD.
-private struct SegmentedBar: View {
+/// The tall, pill-shaped brightness track with tick marks and a white fill,
+/// matching the macOS Control Center "Display" slider.
+private struct BrightnessSlider: View {
     let level: Double
     private let ticks = 16
 
     var body: some View {
         GeometryReader { geo in
+            let h = geo.size.height
+            let fill = max(h, geo.size.width * CGFloat(min(max(level, 0), 1)))
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.white.opacity(0.22))
-                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.white)
-                    .frame(width: max(8, geo.size.width * CGFloat(min(max(level, 0), 1))))
-                // Faint notch marks like the native HUD.
+                Capsule().fill(Color.white.opacity(0.20))           // track
+                Capsule().fill(Color.white).frame(width: fill)      // filled portion
+                // Evenly spaced tick marks across the whole track.
                 HStack(spacing: 0) {
-                    ForEach(0..<ticks, id: \.self) { i in
-                        if i > 0 { Rectangle().fill(Color.black.opacity(0.10)).frame(width: 1) }
+                    ForEach(1..<ticks, id: \.self) { _ in
                         Spacer(minLength: 0)
+                        Rectangle().fill(Color.black.opacity(0.14)).frame(width: 1.5)
                     }
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, geo.size.width / CGFloat(ticks) / 2)
             }
+            .clipShape(Capsule())
         }
-        .frame(height: 8)
+        .frame(height: 26)
     }
 }
 
