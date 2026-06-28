@@ -27,5 +27,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let env = AppEnvironment()
         self.env = env
         statusController = StatusItemController(env: env)
+        env.showSettings()   // open Settings on launch
     }
 }

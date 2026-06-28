@@ -92,10 +92,11 @@ final class ReminderScheduler: ManagedService {
                 }
             }
             let sid = startID(meeting)
-            if !fired.contains(sid), now >= meeting.start, now < meeting.start.addingTimeInterval(fireWindow) {
+            if settings.settings.remindAtStart,
+               !fired.contains(sid), now >= meeting.start, now < meeting.start.addingTimeInterval(fireWindow) {
                 fired.insert(sid)
                 showStart(meeting)
-                sound.play(NotificationSound.from(settings.settings.notificationSound))
+                sound.play(NotificationSound.from(settings.settings.joinAlertSound))
             }
         }
         scheduleNext(now: now)
@@ -146,6 +147,9 @@ final class ReminderScheduler: ManagedService {
             joinable: joinable,
             isStart: false
         ), dismissAfter: joinable ? nil : 8)   // joinable stays; notifications auto-dismiss
+        // 1-minute heads-up uses the join-alert sound; 20/10/5 use the notification sound.
+        let soundID = joinable ? settings.settings.joinAlertSound : settings.settings.notificationSound
+        sound.play(NotificationSound.from(soundID))
     }
 
     private func showStart(_ meeting: MeetingEvent) {

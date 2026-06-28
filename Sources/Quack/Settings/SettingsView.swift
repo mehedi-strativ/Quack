@@ -3,12 +3,12 @@ import QuackKit
 
 /// The feature groups shown as tabs in the settings window.
 enum SettingsTab: String, CaseIterable {
-    case calendar, reminders, display, windows, permissions
+    case general, calendar, display, windows, permissions
 
     var title: String {
         switch self {
+        case .general: return "General"
         case .calendar: return "Calendar"
-        case .reminders: return "Reminders"
         case .display: return "Display"
         case .windows: return "Windows"
         case .permissions: return "Permissions"
@@ -17,8 +17,8 @@ enum SettingsTab: String, CaseIterable {
 
     var icon: String {
         switch self {
+        case .general: return "gearshape"
         case .calendar: return "calendar"
-        case .reminders: return "bell.badge"
         case .display: return "sun.max"
         case .windows: return "macwindow.on.rectangle"
         case .permissions: return "lock.shield"
@@ -30,7 +30,6 @@ enum SettingsTab: String, CaseIterable {
 /// launch-at-login), a tab strip, and the selected pane.
 struct SettingsRootView: View {
     @EnvironmentObject var env: AppEnvironment
-    @State private var launchAtLogin = LaunchAtLogin.isEnabled
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,8 +42,9 @@ struct SettingsRootView: View {
         }
         .frame(width: 540, height: 640)
         .font(.system(size: 14))   // bump the base text a little across the window
+        .background(Color(white: 0.07))
         .tint(.accentColor)
-        .onAppear { launchAtLogin = LaunchAtLogin.isEnabled; env.permissions.refreshAll() }
+        .onAppear { env.permissions.refreshAll() }
     }
 
     private var header: some View {
@@ -53,14 +53,10 @@ struct SettingsRootView: View {
                 .resizable().frame(width: 56, height: 56)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Quack").font(.title2).bold()
-                Text("Meeting countdowns, reminders, monitor brightness & window shortcuts.")
+                Text("All shortcuts in one app. Quack Quack!")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Toggle("Launch Quack at login", isOn: $launchAtLogin)
-                .onChange(of: launchAtLogin) { LaunchAtLogin.set($0) }
-                .toggleStyle(.switch)
-                .fixedSize()
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
     }
@@ -94,8 +90,10 @@ struct SettingsPane: View {
     var body: some View {
         Form {
             switch tab {
-            case .calendar: CalendarSection()
-            case .reminders: RemindersSection()
+            case .general: GeneralSection()
+            case .calendar:
+                CalendarSection()
+                RemindersSection()
             case .display:
                 BrightnessSection()
                 TemperatureSection()
@@ -109,6 +107,7 @@ struct SettingsPane: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)   // let the darker window bg show through
     }
 }
 
@@ -127,6 +126,30 @@ private struct CalendarSyncTip: View {
     }
 }
 
+// MARK: - General
+
+private struct GeneralSection: View {
+    @EnvironmentObject var env: AppEnvironment
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled
+
+    var body: some View {
+      Group {
+        let s = env.settingsStore
+        Section("General") {
+            Toggle("Launch Quack at login", isOn: $launchAtLogin)
+                .onChange(of: launchAtLogin) { LaunchAtLogin.set($0) }
+            Toggle("Hide the duck icon from the menu bar", isOn: s.binding(\.hideDuckIcon))
+            Text("The dropdown and settings are still reachable from the meeting countdown and temperature items.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+        }
+        Section {
+            Button("Quit Quack") { NSApp.terminate(nil) }
+        }
+      }
+      .onAppear { launchAtLogin = LaunchAtLogin.isEnabled }
+    }
+}
+
 // MARK: - Calendar
 
 private struct CalendarSection: View {
@@ -139,18 +162,11 @@ private struct CalendarSection: View {
 
         Section {
             Toggle("Show meeting countdown in the menu bar", isOn: s.binding(\.menuBarCountdownEnabled))
-            Text("When off, the menu bar shows just the duck.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-        }
-
-        Section {
-            Toggle("Show calendar events in dropdown list", isOn: s.binding(\.calendarEnabled))
-            if s.settings.calendarEnabled && env.permissions.status(for: .calendar) == .granted {
+            if env.permissions.status(for: .calendar) == .granted {
                 CalendarSyncTip()
             }
         }
 
-        if s.settings.calendarEnabled {
             if env.permissions.status(for: .calendar) != .granted {
                 Section {
                     HStack {
@@ -194,7 +210,6 @@ private struct CalendarSection: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
-        }
       }
       .onAppear { accounts = env.availableAccounts() }
     }
@@ -331,8 +346,6 @@ private struct KeyboardShortcutsSection: View {
 
 private struct RemindersSection: View {
     @EnvironmentObject var env: AppEnvironment
-    private let commonLeads = [20, 10, 5, 1]
-
     var body: some View {
         let s = env.settingsStore
         Group {
@@ -343,33 +356,42 @@ private struct RemindersSection: View {
                         Text("Requires Calendar to be enabled.")
                             .font(.system(size: 12)).foregroundStyle(.orange)
                     }
-                    ForEach(commonLeads, id: \.self) { lead in
-                        Toggle("\(lead) \(lead == 1 ? "minute" : "minutes") before", isOn: leadBinding(lead))
+                    // Advance notifications (no Join button).
+                    ForEach([20, 10, 5], id: \.self) { lead in
+                        Toggle("\(lead) minutes before", isOn: leadBinding(lead))
                             .padding(.leading, 14)
                     }
-                    Button("Preview toast") { env.previewToast() }
+                    Button("Preview notification") { env.previewReminderToast() }
+                        .padding(.leading, 14)
+
+                    // Join-now alerts (with the Join button).
+                    Toggle("1 minute before", isOn: leadBinding(1))
+                        .padding(.leading, 14)
+                    Toggle("On time", isOn: s.binding(\.remindAtStart))
+                        .padding(.leading, 14)
+                    Button("Preview join alert") { env.previewToast() }
+                        .padding(.leading, 14)
                 }
             }
 
             if s.settings.remindersEnabled {
                 Section("Sound") {
-                    HStack {
-                        Picker("Sound", selection: s.binding(\.notificationSound)) {
-                            ForEach(NotificationSound.allCases) { sound in
-                                Text(sound.displayName).tag(sound.rawValue)
-                            }
-                        }
-                        Button {
-                            env.previewSound(NotificationSound.from(s.settings.notificationSound))
-                        } label: {
-                            Image(systemName: "play.circle")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Preview sound")
-                    }
+                    soundPicker("Notification sound", binding: s.binding(\.notificationSound))
+                    soundPicker("Join alert sound", binding: s.binding(\.joinAlertSound))
                 }
             }
         }
+    }
+
+    /// A sound picker that previews the sound as soon as one is chosen.
+    @ViewBuilder
+    private func soundPicker(_ label: String, binding: Binding<String>) -> some View {
+        Picker(label, selection: binding) {
+            ForEach(NotificationSound.allCases) { sound in
+                Text(sound.displayName).tag(sound.rawValue)
+            }
+        }
+        .onChange(of: binding.wrappedValue) { env.previewSound(NotificationSound.from($0)) }
     }
 
     private func leadBinding(_ lead: Int) -> Binding<Bool> {

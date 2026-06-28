@@ -20,7 +20,7 @@ final class AppEnvironment: ObservableObject {
     @Published var now = Date()
     /// The currently selected settings tab (lifted here so features can deep-link
     /// to a specific tab, e.g. the temperature popover → Display).
-    @Published var settingsTab: SettingsTab = .calendar
+    @Published var settingsTab: SettingsTab = .general
     private var clockTimer: Timer?
     private var activeObserver: NSObjectProtocol?
 
@@ -43,6 +43,9 @@ final class AppEnvironment: ObservableObject {
 
     init() {
         let settings = SettingsStore()
+        // Calendar is always on now (its toggle was removed); it powers the
+        // countdown, reminders, and the dropdown list.
+        settings.update { $0.calendarEnabled = true }
         let permissions = PermissionsManager()
         let provider = EventKitProvider(permissions: permissions)
         let store = MeetingStore(
@@ -155,6 +158,25 @@ final class AppEnvironment: ObservableObject {
             joinable: true,
             isStart: true
         ), dismissAfter: nil)   // mirror the real join-now toast: stays until dismissed
+        quackSound.play(NotificationSound.from(settingsStore.settings.joinAlertSound))
+    }
+
+    /// Shows a sample advance-reminder toast (plain notification, no Join button,
+    /// auto-dismiss) — what the 20/10/5-minute reminders look like.
+    func previewReminderToast() {
+        let url = URL(string: "https://meet.google.com/abc-defg-hij")
+        let now = Date()
+        let f = DateFormatter(); f.dateFormat = "h:mm a"
+        toasts.show(ToastItem(
+            title: "Preview meeting",
+            relativeText: "in 10 min",
+            timeRange: "\(f.string(from: now.addingTimeInterval(600))) – \(f.string(from: now.addingTimeInterval(2400)))",
+            colorHex: nil,
+            joinURL: url,
+            provider: MeetingProvider(url: url),
+            joinable: false,
+            isStart: false
+        ), dismissAfter: 6)
         quackSound.play(NotificationSound.from(settingsStore.settings.notificationSound))
     }
 
@@ -189,7 +211,7 @@ final class AppEnvironment: ObservableObject {
     /// Applies a brightness change immediately and persists it.
     func applyBrightness(_ fraction: Double, to display: ControllableDisplay) {
         settingsStore.update { $0.displayBrightness[display.id] = fraction }
-        brightnessController.setBrightness(Int((fraction * 100).rounded()), on: display)
+        brightnessController.apply(fraction: fraction, to: display)
     }
 }
 

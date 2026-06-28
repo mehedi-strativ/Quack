@@ -20,14 +20,20 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var dockPinchQuitEnabled: Bool
     /// Show CPU temperature (with a flame icon) in the menu bar.
     public var cpuTemperatureEnabled: Bool
+    /// Hide the duck icon from the menu bar.
+    public var hideDuckIcon: Bool
+    /// Fire a "join now" reminder at the meeting's start time.
+    public var remindAtStart: Bool
     /// Show the temperature in Fahrenheit instead of Celsius.
     public var temperatureFahrenheit: Bool
 
     // MARK: Reminders
     /// Lead times (minutes before start) at which to fire a reminder.
     public var reminderLeadMinutes: [Int]
-    /// Identifier of the sound played for the "join now" toast (see NotificationSound).
+    /// Sound for advance reminders (20/10/5 min). See NotificationSound.
     public var notificationSound: String
+    /// Sound for the join alerts (1-minute + on-time).
+    public var joinAlertSound: String
 
     // MARK: Calendar
     public var useEventKit: Bool
@@ -58,9 +64,12 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowShortcutModifiers: Int = 0b0011,   // ⌘ + ⌥
         dockPinchQuitEnabled: Bool = false,
         cpuTemperatureEnabled: Bool = false,
+        hideDuckIcon: Bool = false,
+        remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
         reminderLeadMinutes: [Int] = [10, 5],
         notificationSound: String = "quack",
+        joinAlertSound: String = "quack",
         useEventKit: Bool = true,
         useGoogle: Bool = false,
         syncAllCalendars: Bool = true,
@@ -80,9 +89,12 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.windowShortcutModifiers = windowShortcutModifiers
         self.dockPinchQuitEnabled = dockPinchQuitEnabled
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
+        self.hideDuckIcon = hideDuckIcon
+        self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
         self.reminderLeadMinutes = reminderLeadMinutes
         self.notificationSound = notificationSound
+        self.joinAlertSound = joinAlertSound
         self.useEventKit = useEventKit
         self.useGoogle = useGoogle
         self.syncAllCalendars = syncAllCalendars
@@ -115,9 +127,12 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowShortcutModifiers = v(.windowShortcutModifiers, d.windowShortcutModifiers)
         dockPinchQuitEnabled = v(.dockPinchQuitEnabled, d.dockPinchQuitEnabled)
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
+        hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
+        remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)
         reminderLeadMinutes = v(.reminderLeadMinutes, d.reminderLeadMinutes)
         notificationSound = v(.notificationSound, d.notificationSound)
+        joinAlertSound = v(.joinAlertSound, d.joinAlertSound)
         useEventKit = v(.useEventKit, d.useEventKit)
         useGoogle = v(.useGoogle, d.useGoogle)
         syncAllCalendars = v(.syncAllCalendars, d.syncAllCalendars)
