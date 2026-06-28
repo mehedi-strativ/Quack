@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import CoreGraphics
 import Combine
 import QuackKit
@@ -22,19 +23,19 @@ final class CursorBrightnessService: ManagedService {
     private let permissions: PermissionsManager
     private let diagnostics: DiagnosticsStatus
 
-    // System-defined (NSEvent type 14) brightness key codes.
-    private static let brightnessUp: Int32 = 2     // NX_KEYTYPE_BRIGHTNESS_UP
-    private static let brightnessDown: Int32 = 3   // NX_KEYTYPE_BRIGHTNESS_DOWN
-    private static let auxButtonsSubtype = 8        // NX_SUBTYPE_AUX_CONTROL_BUTTONS
-
     private var cursorMonitor: Any?
     private var pollTimer: Timer?
-    private var keyTap: CFMachPort?
-    private var keyTapSource: CFRunLoopSource?
+    private var keyTap: BrightnessKeyTap?
     private var lastDisplayID: String?
     private var started = false
     private var permissionCancellable: AnyCancellable?
+    private var axObserver: NSObjectProtocol?
     private let hud = BrightnessHUD()
+
+    // Thread-safe snapshot of displays (frame + DDC support) read by the key tap
+    // on its background thread; rebuilt on the main actor.
+    private let snapshotLock = NSLock()
+    nonisolated(unsafe) private var displaySnapshot: [(frame: CGRect, supportsDDC: Bool, id: String, name: String, number: CGDirectDisplayID)] = []
 
     init(controller: BrightnessController, settings: SettingsStore, permissions: PermissionsManager, diagnostics: DiagnosticsStatus) {
         self.controller = controller
@@ -46,6 +47,7 @@ final class CursorBrightnessService: ManagedService {
     func start() {
         started = true
         controller.refreshDisplays()
+        rebuildSnapshot()
         diagnostics.externalDisplayCount = controller.displays.count
         diagnostics.ddcServiceCount = DDCControl.isAppleSilicon ? DDCControl.externalDisplayCount() : 0
         lastDisplayID = nil
@@ -60,31 +62,54 @@ final class CursorBrightnessService: ManagedService {
         pollTimer = timer
         evaluateCursor()
 
-        // Install the key tap when granted, but only PROMPT once (here), not on
-        // every status poll — repeated prompting was the cause of the dialog
-        // reappearing.
-        permissionCancellable = permissions.$statuses
-            .sink { [weak self] _ in Task { @MainActor in self?.installKeyTapIfGranted() } }
         if permissions.status(for: .accessibility) == .granted {
-            installKeyTapIfGranted()
+            reinstallKeyTap()
         } else {
             permissions.requestAccessibilityAccess()
         }
+
+        // On ANY Accessibility change, fully stop and recreate the tap (after a
+        // short delay so the TCC transition settles). This is exactly what
+        // MonitorControl does — it's the only reliable pattern: never leave a
+        // stale active tap alive (a lingering tap reactivated on re-grant freezes
+        // input), and don't gate on AXIsProcessTrusted (it returns stale values
+        // right after a toggle). `tapCreate` itself returns nil when not trusted.
+        axObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"), object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task { @MainActor in self?.reinstallKeyTap() }
+            }
+        }
+    }
+
+    /// Fully tears down any existing tap and creates a fresh one. Ungated:
+    /// `BrightnessKeyTap.start()` attempts `tapCreate`, which succeeds only when
+    /// Accessibility is actually trusted (and fails gracefully otherwise).
+    private func reinstallKeyTap() {
+        guard InputTaps.brightness, started else { return }
+        keyTap?.stop()
+        let tap = BrightnessKeyTap()
+        tap.ddcDisplayAt = { [weak self] point in self?.ddcDisplay(at: point) }
+        tap.onKey = { [weak self] increase, hit in
+            DispatchQueue.main.async { self?.applyKey(increase: increase, hit: hit) }
+        }
+        keyTap = tap
+        tap.start()
+        diagnostics.brightnessKeyTapInstalled = AXIsProcessTrusted()
     }
 
     func stop() {
         started = false
         permissionCancellable = nil
+        if let axObserver { DistributedNotificationCenter.default().removeObserver(axObserver) }
+        axObserver = nil
         if let cursorMonitor { NSEvent.removeMonitor(cursorMonitor) }
         cursorMonitor = nil
         pollTimer?.invalidate()
         pollTimer = nil
-        if let keyTapSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), keyTapSource, .commonModes)
-        }
-        if let keyTap { CGEvent.tapEnable(tap: keyTap, enable: false) }
+        keyTap?.stop()
         keyTap = nil
-        keyTapSource = nil
         lastDisplayID = nil
         diagnostics.brightnessKeyTapInstalled = false
         // Intentionally makes no DDC writes on stop.
@@ -93,6 +118,7 @@ final class CursorBrightnessService: ManagedService {
     // MARK: Cursor tracking (dim inactive display)
 
     private func evaluateCursor() {
+        rebuildSnapshot()   // keep the key tap's snapshot current as displays move/change
         let point = NSEvent.mouseLocation   // Cocoa Y-up global coords
         guard let active = controller.display(containing: point) else {
             lastDisplayID = nil
@@ -115,75 +141,38 @@ final class CursorBrightnessService: ManagedService {
 
     // MARK: Brightness-key routing
 
-    /// Installs the key tap only when access is granted. Never prompts.
-    private func installKeyTapIfGranted() {
-        guard started, keyTap == nil, permissions.status(for: .accessibility) == .granted else { return }
-
-        let mask: CGEventMask = 1 << 14   // NSSystemDefined
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,          // active: can consume events
-            eventsOfInterest: mask,
-            callback: { _, type, event, refcon in
-                guard let refcon else { return Unmanaged.passUnretained(event) }
-                let service = Unmanaged<CursorBrightnessService>.fromOpaque(refcon).takeUnretainedValue()
-                return service.handleSystemDefined(type: type, event: event)
-            },
-            userInfo: refcon
-        ) else {
-            Log.brightness.error("Failed to create brightness key tap (Accessibility not effective?)")
-            return
+    /// Rebuilds the thread-safe display snapshot the key tap reads.
+    private func rebuildSnapshot() {
+        let snap = controller.displays.compactMap {
+            d -> (frame: CGRect, supportsDDC: Bool, id: String, name: String, number: CGDirectDisplayID)? in
+            guard let screen = NSScreen.screens.first(where: { $0.displayID == d.screenNumber }) else { return nil }
+            return (screen.frame, d.supportsDDC, d.id, d.name, d.screenNumber)
         }
-
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-        keyTap = tap
-        keyTapSource = source
-        diagnostics.brightnessKeyTapInstalled = true
-        Log.brightness.log("Brightness key tap installed")
+        snapshotLock.lock(); displaySnapshot = snap; snapshotLock.unlock()
     }
 
-    /// Returns nil to swallow the event (when routed to an external display) or
-    /// the original event to let it pass through to the built-in display.
-    fileprivate func handleSystemDefined(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        let passthrough = Unmanaged.passUnretained(event)
+    /// The DDC display under `point`, from the snapshot. Called on the tap thread.
+    private nonisolated func ddcDisplay(at point: CGPoint) -> BrightnessKeyTap.Hit? {
+        snapshotLock.lock(); let snap = displaySnapshot; snapshotLock.unlock()
+        guard let d = snap.first(where: { $0.supportsDDC && $0.frame.contains(point) }) else { return nil }
+        return BrightnessKeyTap.Hit(id: d.id, name: d.name, number: d.number)
+    }
 
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let keyTap { CGEvent.tapEnable(tap: keyTap, enable: true) }
-            return passthrough
-        }
-        guard let ns = NSEvent(cgEvent: event), ns.subtype.rawValue == Self.auxButtonsSubtype else {
-            return passthrough
-        }
-
-        let data1 = ns.data1
-        let keyCode = Int32((data1 & 0xFFFF0000) >> 16)
-        let isKeyDown = ((data1 & 0x0000FF00) >> 8) == 0x0A
-        guard keyCode == Self.brightnessUp || keyCode == Self.brightnessDown else { return passthrough }
-
-        // Only route when the cursor is on a DDC-capable external display.
-        guard let active = controller.display(containing: NSEvent.mouseLocation), active.supportsDDC else {
-            return passthrough
-        }
-
-        if isKeyDown {
-            let current = settings.settings.displayBrightness[active.id]
-                ?? controller.currentFraction(of: active)
-                ?? 0.8
-            let next = BrightnessMath.stepped(
-                current: current,
-                stepPercent: settings.settings.brightnessStepPercent,
-                increase: keyCode == Self.brightnessUp
-            )
-            settings.update { $0.displayBrightness[active.id] = next }
-            controller.setBrightness(Int((next * 100).rounded()), on: active)
-            let screen = NSScreen.screens.first { $0.displayID == active.screenNumber }
-            hud.show(displayName: active.name, level: next, on: screen)
-        }
-        // Swallow both key-down and key-up so the built-in display is untouched.
-        return nil
+    /// Applies a brightness-key press to the external display (on the main actor;
+    /// the tap thread dispatched here, so a slow DDC write can't stall input).
+    private func applyKey(increase: Bool, hit: BrightnessKeyTap.Hit) {
+        guard let display = controller.displays.first(where: { $0.id == hit.id }) else { return }
+        let current = settings.settings.displayBrightness[display.id]
+            ?? controller.currentFraction(of: display)
+            ?? 0.8
+        let next = BrightnessMath.stepped(
+            current: current,
+            stepPercent: settings.settings.brightnessStepPercent,
+            increase: increase
+        )
+        settings.update { $0.displayBrightness[display.id] = next }
+        controller.setBrightness(Int((next * 100).rounded()), on: display)
+        let screen = NSScreen.screens.first { $0.displayID == display.screenNumber }
+        hud.show(displayName: display.name, level: next, on: screen)
     }
 }

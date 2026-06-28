@@ -24,7 +24,7 @@ final class GestureMonitor: ManagedService {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var started = false
-    private var permissionCancellable: AnyCancellable?
+    private var axObserver: NSObjectProtocol?
 
     // Per-gesture state.
     private var tracking = false
@@ -40,35 +40,51 @@ final class GestureMonitor: ManagedService {
 
     func start() {
         started = true
-        // Install the tap as soon as access is granted — but only PROMPT once,
-        // here, not on every status poll (that caused repeated prompts).
-        permissionCancellable = permissions.$statuses
-            .sink { [weak self] _ in Task { @MainActor in self?.installTapIfGranted() } }
         if permissions.status(for: .accessibility) == .granted {
-            installTapIfGranted()
+            reinstall()
         } else {
             permissions.requestAccessibilityAccess()
+        }
+
+        // Stop + recreate the tap on any Accessibility change (MonitorControl's
+        // proven pattern — see CursorBrightnessService). Prevents the
+        // toggle-Accessibility freeze.
+        axObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"), object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task { @MainActor in self?.reinstall() }
+            }
         }
     }
 
     func stop() {
         started = false
-        permissionCancellable = nil
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        }
-        if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: false) }
-        runLoopSource = nil
-        eventTap = nil
-        diagnostics.swipeTapInstalled = false
+        if let axObserver { DistributedNotificationCenter.default().removeObserver(axObserver) }
+        axObserver = nil
+        teardownTap()
         resetGesture()
     }
 
-    /// Installs the tap only when access is granted. Never prompts (so it can be
-    /// called on every status poll without spamming the Accessibility dialog).
-    private func installTapIfGranted() {
-        guard started, eventTap == nil, permissions.status(for: .accessibility) == .granted else { return }
+    /// Fully tears down any existing tap and creates a fresh one. Ungated:
+    /// `tapCreate` succeeds only when Accessibility is actually trusted.
+    private func reinstall() {
+        guard InputTaps.swipe, started else { return }
+        teardownTap()
         installTap()
+    }
+
+    private func teardownTap() {
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        }
+        if let eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+            CFMachPortInvalidate(eventTap)
+        }
+        runLoopSource = nil
+        eventTap = nil
+        diagnostics.swipeTapInstalled = false
     }
 
     private func installTap() {
@@ -102,9 +118,12 @@ final class GestureMonitor: ManagedService {
     }
 
     fileprivate func handleScroll(type: CGEventType, event: CGEvent) {
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+        if type == .tapDisabledByTimeout {
+            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }   // callback too slow; safe
             return
+        }
+        if type == .tapDisabledByUserInput {
+            return   // Accessibility revoked — re-enabling here loops and freezes input
         }
         guard let ns = NSEvent(cgEvent: event), ns.hasPreciseScrollingDeltas else { return }
 

@@ -4,18 +4,22 @@ import Combine
 import QuackKit
 
 /// Global keyboard shortcuts for window management: the configured modifier
-/// (default ⌘⌥) + arrow keys. Installs a `CGEventTap` for key-down events,
-/// applies the matching action to the focused window, and consumes the event.
-/// Requires Accessibility permission.
+/// (default ⌘⌥) + arrow keys. The key tap runs on a dedicated thread (so it can
+/// never freeze input); on a match the window action is dispatched to the main
+/// actor and the key is consumed. Requires Accessibility permission.
 @MainActor
 final class HotkeyMonitor: ManagedService {
     private let settings: SettingsStore
     private let permissions: PermissionsManager
 
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    private var tap: EventTapThread?
     private var started = false
-    private var permissionCancellable: AnyCancellable?
+    private var settingsCancellable: AnyCancellable?
+    private var axObserver: NSObjectProtocol?
+
+    // Modifier bitmask snapshot, read on the tap thread.
+    private let modLock = NSLock()
+    nonisolated(unsafe) private var modifierMask = 0
 
     // Arrow key codes.
     private static let keyLeft: Int64 = 123, keyRight: Int64 = 124, keyDown: Int64 = 125, keyUp: Int64 = 126
@@ -27,68 +31,66 @@ final class HotkeyMonitor: ManagedService {
 
     func start() {
         started = true
-        permissionCancellable = permissions.$statuses
-            .sink { [weak self] _ in Task { @MainActor in self?.installTapIfGranted() } }
+        refreshModifierSnapshot()
+        settingsCancellable = settings.objectWillChange
+            .sink { [weak self] _ in Task { @MainActor in self?.refreshModifierSnapshot() } }
+
         if permissions.status(for: .accessibility) == .granted {
-            installTapIfGranted()
+            reinstallTap()
         } else {
             permissions.requestAccessibilityAccess()
+        }
+
+        // Stop + recreate the tap on any Accessibility change (MonitorControl's
+        // proven pattern — see CursorBrightnessService). Prevents the
+        // toggle-Accessibility freeze.
+        axObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"), object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task { @MainActor in self?.reinstallTap() }
+            }
         }
     }
 
     func stop() {
         started = false
-        permissionCancellable = nil
-        if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
-        if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: false) }
-        runLoopSource = nil
-        eventTap = nil
+        settingsCancellable = nil
+        if let axObserver { DistributedNotificationCenter.default().removeObserver(axObserver) }
+        axObserver = nil
+        tap?.stop()
+        tap = nil
     }
 
-    private func installTapIfGranted() {
-        guard started, eventTap == nil, permissions.status(for: .accessibility) == .granted else { return }
-        let mask: CGEventMask = 1 << CGEventType.keyDown.rawValue
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: { _, type, event, refcon in
-                guard let refcon else { return Unmanaged.passUnretained(event) }
-                let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
-                return monitor.handleKey(type: type, event: event)
-            },
-            userInfo: refcon
-        ) else {
-            Log.swipe.error("Failed to create hotkey tap (Accessibility not effective?)")
-            return
-        }
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-        eventTap = tap
-        runLoopSource = source
-        Log.swipe.log("Window-shortcut hotkey tap installed")
-    }
-
-    private func requiredFlags() -> CGEventFlags {
+    private func refreshModifierSnapshot() {
         let m = settings.settings.windowShortcutModifiers
-        var flags = CGEventFlags()
-        if m & 0b0001 != 0 { flags.insert(.maskCommand) }
-        if m & 0b0010 != 0 { flags.insert(.maskAlternate) }
-        if m & 0b0100 != 0 { flags.insert(.maskControl) }
-        if m & 0b1000 != 0 { flags.insert(.maskShift) }
-        return flags
+        modLock.lock(); modifierMask = m; modLock.unlock()
     }
 
-    fileprivate func handleKey(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        let passthrough = Unmanaged.passUnretained(event)
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
-            return passthrough
+    /// Fully tears down any existing tap and creates a fresh one. Ungated:
+    /// `tapCreate` succeeds only when Accessibility is actually trusted.
+    private func reinstallTap() {
+        guard InputTaps.hotkey, started else { return }
+        tap?.stop()
+        let t = EventTapThread(
+            mask: 1 << CGEventType.keyDown.rawValue,
+            options: .defaultTap,
+            label: "com.quack.hotkeyTap"
+        ) { [weak self] type, event in
+            self?.handle(type: type, event: event) ?? Unmanaged.passUnretained(event)
         }
+        tap = t
+        t.start()
+    }
+
+    /// Runs on the tap thread. Decides synchronously whether to consume; the
+    /// actual window move is dispatched to the main actor.
+    private nonisolated func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        let passthrough = Unmanaged.passUnretained(event)
         guard type == .keyDown else { return passthrough }
 
-        let required = requiredFlags()
+        modLock.lock(); let mask = modifierMask; modLock.unlock()
+        let required = Self.flags(from: mask)
         guard !required.isEmpty else { return passthrough }   // never hijack plain arrows
         let relevant: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
         guard event.flags.intersection(relevant) == required else { return passthrough }
@@ -102,9 +104,20 @@ final class HotkeyMonitor: ManagedService {
         default: return passthrough
         }
 
-        if let window = AXHelpers.focusedWindow() {
-            WindowMover.applyArrow(arrow, window: window)
+        DispatchQueue.main.async {
+            if let window = AXHelpers.focusedWindow() {
+                WindowMover.applyArrow(arrow, window: window)
+            }
         }
         return nil   // consume — we handled it
+    }
+
+    private nonisolated static func flags(from mask: Int) -> CGEventFlags {
+        var flags = CGEventFlags()
+        if mask & 0b0001 != 0 { flags.insert(.maskCommand) }
+        if mask & 0b0010 != 0 { flags.insert(.maskAlternate) }
+        if mask & 0b0100 != 0 { flags.insert(.maskControl) }
+        if mask & 0b1000 != 0 { flags.insert(.maskShift) }
+        return flags
     }
 }
