@@ -31,9 +31,19 @@ public class MediaController {
     }
 
     private var libraryPath: String? {
-        let bundle = Bundle(for: MediaController.self)
-        guard let path = bundle.executablePath else {
-            assertionFailure("Could not locate the executable path for the MediaRemoteAdapter framework.")
+        // Quack local patch (see VENDORED.md): upstream returns
+        // Bundle(for: MediaController.self).executablePath, which assumes an
+        // Xcode-embedded framework. In Quack's hand-assembled .app the adapter is
+        // a loose dylib in Contents/Frameworks and Bundle(for:) resolves to
+        // Bundle.main (the Quack executable, which no longer holds the C symbols).
+        // Point perl explicitly at the bundled dylib; fall back to the upstream
+        // path for SPM/dev builds.
+        if let frameworks = Bundle.main.privateFrameworksPath {
+            let dylib = (frameworks as NSString).appendingPathComponent("libMediaRemoteAdapter.dylib")
+            if FileManager.default.fileExists(atPath: dylib) { return dylib }
+        }
+        guard let path = Bundle(for: MediaController.self).executablePath else {
+            assertionFailure("Could not locate the MediaRemoteAdapter dylib.")
             return nil
         }
         return path
