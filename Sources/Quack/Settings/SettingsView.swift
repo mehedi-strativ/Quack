@@ -104,6 +104,7 @@ struct SettingsPane: View {
                 WindowSwipeSection()
                 DockGesturesSection()
                 KeyboardShortcutsSection()
+                NotchRevealSection()
             case .permissions:
                 PermissionsSection()
                 StatusSection()
@@ -556,6 +557,38 @@ private struct DockGesturesSection: View {
                 } else if !env.diagnostics.dockPinchActive {
                     Text("Trackpad not detected — this needs a Magic Trackpad or built-in trackpad.")
                         .font(.system(size: 12)).foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Notch reveal
+
+private struct NotchRevealSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Notch") {
+            Toggle("Reveal menu bar icons hidden behind the notch", isOn: s.binding(\.notchRevealEnabled))
+            Text("Move the pointer to the notch to reveal icons the notch is covering, then click one to open it. Built-in display only.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            if s.settings.notchRevealEnabled {
+                if env.permissions.status(for: .screenRecording) != .granted {
+                    HStack {
+                        Text("Needs Screen Recording to show the hidden icons.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Grant") { _ = env.permissions.requestScreenRecording() }
+                    }
+                }
+                if env.permissions.status(for: .accessibility) != .granted {
+                    HStack {
+                        Text("Needs Accessibility to click a revealed icon.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Grant") { env.permissions.requestAccessibilityAccess() }
+                    }
                 }
             }
         }
