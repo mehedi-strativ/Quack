@@ -27,6 +27,8 @@ final class NotchScreenReader {
     /// non-notched Mac). Callers treat nil as "feature inactive," not an error.
     func currentLayout() -> NotchLayout? {
         guard let screen = NSScreen.screens.first(where: { $0.isBuiltIn }) else { return nil }
+        // Always satisfied on the package's macOS 13 floor; kept as the
+        // notch-API version marker (defense-in-depth / SDK clarity).
         guard #available(macOS 12.0, *) else { return nil }   // notch APIs are 12+
         let insets = screen.safeAreaInsets
         guard insets.top > 0 else { return nil }               // no notch

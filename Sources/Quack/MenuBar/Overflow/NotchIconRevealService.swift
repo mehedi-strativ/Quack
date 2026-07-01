@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import Combine
 import QuackKit
 
 /// Wires the notch reveal feature together: owns the always-present panel at the
@@ -25,6 +24,10 @@ final class NotchIconRevealService: NSObject, ManagedService {
     private let collapsedHeight: CGFloat = 24
     /// Expanded panel height (room for a row of mirrored icons below the notch).
     private let expandedHeight: CGFloat = 40
+
+    /// Guards `requestScreenRecording()` (a TCC prompt) so it fires at most
+    /// once per service lifetime, not on every hover-in while ungranted.
+    private var hasRequestedScreenRecording = false
 
     init(settings: SettingsStore, permissions: PermissionsManager) {
         self.settings = settings
@@ -61,6 +64,7 @@ final class NotchIconRevealService: NSObject, ManagedService {
 
     private func buildPanelIfNeeded() {
         guard panel == nil else { return }
+        // Placeholder frame; reposition() immediately sets the real notch-derived frame.
         let p = NotchPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: collapsedHeight))
         let host = NSHostingView(rootView: NotchRevealView(model: model))
         host.frame = p.contentView!.bounds
@@ -105,9 +109,12 @@ final class NotchIconRevealService: NSObject, ManagedService {
     private func handleHover(_ hovering: Bool) {
         if hovering {
             // Refresh permissions non-invasively; prompt for Screen Recording
-            // once if missing (the pixel mirror needs it).
+            // once if missing (the pixel mirror needs it). The prompt itself
+            // (`requestScreenRecording`, a TCC call) is gated to fire at most
+            // once per service lifetime — repeat hovers only refresh status.
             permissions.refreshScreenRecording()
-            if permissions.status(for: .screenRecording) != .granted {
+            if permissions.status(for: .screenRecording) != .granted, !hasRequestedScreenRecording {
+                hasRequestedScreenRecording = true
                 _ = permissions.requestScreenRecording()
             }
             model.items = scanAndMirror()

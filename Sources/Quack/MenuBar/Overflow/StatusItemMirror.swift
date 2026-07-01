@@ -21,6 +21,8 @@ enum StatusItemMirror {
             [.boundsIgnoreFraming, .bestResolution]
         )
         guard let cgImage else { return nil }
+        // Point size (not the 2x pixel size) is intentional: NSImage scales the
+        // Retina-resolution capture down to render crisply at the correct point size.
         return NSImage(cgImage: cgImage, size: item.frame.size)
     }
 }
