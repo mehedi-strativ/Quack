@@ -10,6 +10,15 @@ let package = Package(
         .executable(name: "Quack", targets: ["Quack"]),
         .library(name: "QuackKit", targets: ["QuackKit"]),
     ],
+    dependencies: [
+        // Local sub-package for the vendored MediaRemoteAdapter dylib. Kept as
+        // a separate package (not same-package targets) so Quack consumes it
+        // as a genuine product dependency and SwiftPM links it dynamically
+        // via @rpath instead of statically embedding it — see the comment atop
+        // Sources/MediaRemoteAdapterPkg/Package.swift for why that split is
+        // required.
+        .package(path: "Sources/MediaRemoteAdapterPkg"),
+    ],
     targets: [
         // Pure, side-effect-free logic. Fully unit-testable, no GUI/system deps.
         .target(
@@ -39,30 +48,17 @@ let package = Package(
                 .linkedFramework("CoreFoundation"),
             ]
         ),
-        // Vendored (ejbills/mediaremote-adapter @ cf30c4f, BSD-3-Clause):
-        // ObjC resolver for private MediaRemote symbols. Compiled without ARC.
-        .target(
-            name: "CIMediaRemote",
-            publicHeadersPath: "include",
-            cSettings: [.unsafeFlags(["-fno-objc-arc"])],
-            linkerSettings: [
-                .linkedFramework("Foundation"),
-                .linkedFramework("AppKit"),
-            ]
-        ),
-        // Vendored: Swift controller that spawns /usr/bin/perl + run.pl to load
-        // the CIMediaRemote dylib and stream/command now-playing over pipes.
-        .target(
-            name: "MediaRemoteAdapter",
-            dependencies: ["CIMediaRemote"],
-            exclude: ["LICENSE", "VENDORED.md"],
-            resources: [.copy("Resources/run.pl")]
-        ),
         // The app target: SwiftUI + AppKit + system frameworks. Wires QuackKit
         // logic to live services (EventKit, UserNotifications, IOKit DDC, AX).
         .executableTarget(
             name: "Quack",
-            dependencies: ["QuackKit", "CDDC", "CMultitouch", "CSMC", "MediaRemoteAdapter"],
+            dependencies: [
+                "QuackKit", "CDDC", "CMultitouch", "CSMC",
+                // Dynamic-library product from the local sub-package (see
+                // dependencies: above) — resolves to libMediaRemoteAdapter.dylib
+                // linked via @rpath, not statically embedded.
+                .product(name: "MediaRemoteAdapter", package: "MediaRemoteAdapterPkg"),
+            ],
             linkerSettings: [
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("AppKit"),
