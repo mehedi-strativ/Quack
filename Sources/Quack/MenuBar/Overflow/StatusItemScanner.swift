@@ -15,8 +15,10 @@ enum StatusItemScanner {
     private static let statusWindowLayer = 25
 
     /// The crushed status items on the built-in screen, left-to-right. `notch`
-    /// and `screenXRange` come from `NotchScreenReader.currentLayout()`.
-    @MainActor
+    /// and `screenXRange` come from `NotchScreenReader.currentLayout()` (read on
+    /// the main actor). Safe to call off the main actor: `CGWindowListCopyWindowInfo`
+    /// is thread-safe and the rest is pure computation, so the reveal service runs
+    /// this on a background queue to keep the hover-in expand animation smooth.
     static func scan(notch: NotchGeometry.NotchSpan, screenXRange: ClosedRange<CGFloat>) -> [StatusItemFrame] {
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]

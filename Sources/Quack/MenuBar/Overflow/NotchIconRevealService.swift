@@ -107,29 +107,62 @@ final class NotchIconRevealService: NSObject, ManagedService {
     // MARK: - Interaction
 
     private func handleHover(_ hovering: Bool) {
-        if hovering {
-            // Refresh permissions non-invasively; prompt for Screen Recording
-            // once if missing (the pixel mirror needs it). The prompt itself
-            // (`requestScreenRecording`, a TCC call) is gated to fire at most
-            // once per service lifetime — repeat hovers only refresh status.
-            permissions.refreshScreenRecording()
-            if permissions.status(for: .screenRecording) != .granted, !hasRequestedScreenRecording {
-                hasRequestedScreenRecording = true
-                _ = permissions.requestScreenRecording()
-            }
-            model.items = scanAndMirror()
-            model.isOpen = true
-        } else {
+        guard hovering else {
             model.isOpen = false
             model.items = []
+            reposition()
+            return
         }
+
+        // Refresh permissions non-invasively; prompt for Screen Recording
+        // once if missing (the pixel mirror needs it). The prompt itself
+        // (`requestScreenRecording`, a TCC call) is gated to fire at most
+        // once per service lifetime — repeat hovers only refresh status.
+        permissions.refreshScreenRecording()
+        if permissions.status(for: .screenRecording) != .granted, !hasRequestedScreenRecording {
+            hasRequestedScreenRecording = true
+            _ = permissions.requestScreenRecording()
+        }
+
+        // Expand immediately so the panel animates open without waiting on the
+        // scan. The notch layout is read here on the main actor (an `NSScreen`
+        // read); the window-list enumeration and per-item pixel captures then run
+        // on a background queue — they are thread-safe system reads that touch no
+        // main-actor state, and doing them synchronously here hitched the expand
+        // animation. Results flow back onto `model.items` on the main actor via
+        // `@Published` (mirrors `TemperatureStatusItem.refresh`). No event tap or
+        // run-loop source is involved, so the CLAUDE.md freeze rules do not apply.
+        model.isOpen = true
         reposition()
+
+        guard let layout = reader.currentLayout() else {
+            model.items = []
+            return
+        }
+        let notch = layout.span
+        let screenXRange = layout.screen.frame.minX...layout.screen.frame.maxX
+        DispatchQueue.global(qos: .userInitiated).async {
+            let items = Self.scanAndMirror(notch: notch, screenXRange: screenXRange)
+            DispatchQueue.main.async { [weak self] in
+                // Drop late results if the pointer already left the notch.
+                guard let self, self.model.isOpen else { return }
+                self.model.items = items
+                self.reposition()
+            }
+        }
     }
 
-    private func scanAndMirror() -> [NotchItem] {
-        guard let layout = reader.currentLayout() else { return [] }
-        let xRange = layout.screen.frame.minX...layout.screen.frame.maxX
-        let crushed = StatusItemScanner.scan(notch: layout.span, screenXRange: xRange)
+    /// Scans for crushed status items and captures a live pixel snapshot of each.
+    /// Runs off the main actor: `CGWindowListCopyWindowInfo` /
+    /// `CGWindowListCreateImage` are thread-safe and touch no main-actor state, so
+    /// the caller runs this on a background queue to keep the hover-in expand
+    /// animation smooth. `notch` / `screenXRange` are captured from
+    /// `NotchScreenReader.currentLayout()` on the main actor before dispatch.
+    private nonisolated static func scanAndMirror(
+        notch: NotchGeometry.NotchSpan,
+        screenXRange: ClosedRange<CGFloat>
+    ) -> [NotchItem] {
+        let crushed = StatusItemScanner.scan(notch: notch, screenXRange: screenXRange)
         return crushed.compactMap { item in
             guard let image = StatusItemMirror.snapshot(of: item) else { return nil }
             return NotchItem(id: item.windowID, image: image, source: item)
