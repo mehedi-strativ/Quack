@@ -3,6 +3,7 @@ import EventKit
 import UserNotifications
 import ApplicationServices
 import AppKit
+import CoreGraphics
 import Combine
 import QuackKit
 
@@ -23,6 +24,7 @@ final class PermissionsManager: ObservableObject {
     func refreshAll() {
         refreshCalendar()
         refreshAccessibility()
+        refreshScreenRecording()
         Task { await refreshNotifications() }
     }
 
@@ -38,6 +40,14 @@ final class PermissionsManager: ObservableObject {
 
     func refreshAccessibility() {
         statuses[.accessibility] = PermissionStatusMapper.accessibility(isTrusted: AXIsProcessTrusted())
+    }
+
+    func refreshScreenRecording() {
+        // Non-invasive check — does NOT prompt. `CGRequestScreenCaptureAccess`
+        // (in `requestScreenRecording`) is the prompting call.
+        statuses[.screenRecording] = PermissionStatusMapper.screenRecording(
+            hasAccess: CGPreflightScreenCaptureAccess()
+        )
     }
 
     // MARK: Requests
@@ -84,12 +94,22 @@ final class PermissionsManager: ObservableObject {
         startAccessibilityPolling()
     }
 
+    /// Triggers the system Screen Recording prompt the first time; subsequently
+    /// macOS ignores it (the user must toggle in System Settings), so callers
+    /// should fall back to `openSystemSettings(for: .screenRecording)`.
+    @discardableResult
+    func requestScreenRecording() -> Bool {
+        let granted = CGRequestScreenCaptureAccess()
+        refreshScreenRecording()
+        return granted
+    }
+
     func openSystemSettings(for kind: PermissionKind) {
         let anchor: String
         switch kind {
         case .accessibility: anchor = "Privacy_Accessibility"
         case .calendar: anchor = "Privacy_Calendars"
-        case .screenRecording: anchor = "Privacy_ScreenRecording"
+        case .screenRecording: anchor = "Privacy_ScreenCapture"
         case .notifications:
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
             return
