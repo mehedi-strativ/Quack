@@ -20,6 +20,7 @@ public enum Feature: CaseIterable, Sendable {
     case windowShortcuts
     case dockPinch
     case temperature
+    case notchReveal
     case notchMedia
 
     public func isEnabled(in settings: QuackSettings) -> Bool {

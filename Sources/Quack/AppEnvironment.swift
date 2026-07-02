@@ -71,7 +71,7 @@ final class AppEnvironment: ObservableObject {
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
-        self.notchMediaService = NotchMediaService()
+        self.notchRevealService = NotchIconRevealService(settings: settings, permissions: permissions)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -82,6 +82,7 @@ final class AppEnvironment: ObservableObject {
             .windowShortcuts: hotkeyService,
             .dockPinch: dockPinchService,
             .temperature: temperatureService,
+            .notchReveal: notchRevealService,
             .notchMedia: notchMediaService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)

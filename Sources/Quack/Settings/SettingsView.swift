@@ -143,36 +143,28 @@ struct SettingsPane: View {
     @EnvironmentObject var env: AppEnvironment
 
     var body: some View {
-        switch tab {
-        case .general:
-            DashboardView()
-        case .calendar:
-            CalendarAgendaView()
-        default:
-            Form {
-                switch tab {
-                case .display:
-                    BrightnessSection()
-                case .temperature:
-                    TemperatureSection()
-                case .windows:
-                    WindowSwipeSection()
-                    DockGesturesSection()
-                    KeyboardShortcutsSection()
-                    NotchMediaSection()
-                case .permissions:
-                    PermissionsSection()
-                    StatusSection()
-                case .settings:
-                    SettingsSection()
-                    CalendarSection()
-                    RemindersSection()
-                case .general, .calendar:
-                    EmptyView()
-                }
+        Form {
+            switch tab {
+            case .general: GeneralSection()
+            case .calendar:
+                CalendarSection()
+                RemindersSection()
+            case .display:
+                BrightnessSection()
+            case .temperature:
+                TemperatureSection()
+            case .windows:
+                WindowSwipeSection()
+                DockGesturesSection()
+                KeyboardShortcutsSection()
+                NotchRevealSection()
+            case .permissions:
+                PermissionsSection()
+                StatusSection()
             }
-            .formStyle(.grouped)
         }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)   // let the darker window bg show through
     }
 }
 
@@ -1040,16 +1032,34 @@ private struct DockGesturesSection: View {
     }
 }
 
-// MARK: - Notch media
+// MARK: - Notch reveal
 
-private struct NotchMediaSection: View {
+private struct NotchRevealSection: View {
     @EnvironmentObject var env: AppEnvironment
+
     var body: some View {
         let s = env.settingsStore
         Section("Notch") {
-            Toggle("Show a media player when you hover the notch", isOn: s.binding(\.notchMediaEnabled))
-            Text("Move the pointer to the notch to see what's playing and control it. Built-in display only.")
+            Toggle("Reveal menu bar icons hidden behind the notch", isOn: s.binding(\.notchRevealEnabled))
+            Text("Move the pointer to the notch to reveal icons the notch is covering, then click one to open it. Built-in display only.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            if s.settings.notchRevealEnabled {
+                if env.permissions.status(for: .screenRecording) != .granted {
+                    HStack {
+                        Text("Needs Screen Recording to show the hidden icons.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Grant") { _ = env.permissions.requestScreenRecording() }
+                    }
+                }
+                if env.permissions.status(for: .accessibility) != .granted {
+                    HStack {
+                        Text("Needs Accessibility to click a revealed icon.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Grant") { env.permissions.requestAccessibilityAccess() }
+                    }
+                }
+            }
         }
     }
 }
