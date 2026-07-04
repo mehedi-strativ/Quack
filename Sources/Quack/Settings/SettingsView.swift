@@ -161,6 +161,7 @@ struct SettingsPane: View {
                         WindowSwipeSection()
                         DockGesturesSection()
                         KeyboardShortcutsSection()
+                        NotchSection()
                         NotchRevealSection()
                     case .permissions:
                         PermissionsSection()
@@ -1039,6 +1040,47 @@ private struct DockGesturesSection: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Notch panel
+
+private struct NotchSection: View {
+    @EnvironmentObject var env: AppEnvironment
+    @State private var installed = false
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Notch panel") {
+            Toggle("Show the media player in the notch", isOn: s.binding(\.notchMediaEnabled))
+            Text("Hover the notch to see the current track and control playback.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            Toggle("Show Claude Code agents in the notch", isOn: s.binding(\.notchAgentsEnabled))
+            Text("Live status of your Claude Code sessions: which agents are working, which need you, and your usage limits.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            if s.settings.notchAgentsEnabled {
+                HStack {
+                    if installed {
+                        Text("Claude integration installed.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        Button("Remove") {
+                            env.removeClaudeIntegration()
+                            installed = env.claudeIntegrationInstalled()
+                        }
+                    } else {
+                        Text("Needs hooks in ~/.claude/settings.json to see your agents.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Enable Claude integration") {
+                            env.installClaudeIntegration()
+                            installed = env.claudeIntegrationInstalled()
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear { installed = env.claudeIntegrationInstalled() }
     }
 }
 

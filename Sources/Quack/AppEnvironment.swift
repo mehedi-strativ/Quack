@@ -266,6 +266,24 @@ final class AppEnvironment: ObservableObject {
         settingsStore.update { $0.displayBrightness[display.id] = fraction }
         brightnessController.apply(fraction: fraction, to: display)
     }
+
+    /// Claude Code integration state/actions for the settings pane. Returns
+    /// success; failures are logged, never fatal (the panel degrades quietly).
+    func claudeIntegrationInstalled() -> Bool {
+        claudeInstaller.isInstalled()
+    }
+
+    @discardableResult
+    func installClaudeIntegration() -> Bool {
+        do { try claudeInstaller.install(); return true }
+        catch { Log.claude.error("Claude integration install failed: \(error.localizedDescription)"); return false }
+    }
+
+    @discardableResult
+    func removeClaudeIntegration() -> Bool {
+        do { try claudeInstaller.uninstall(); return true }
+        catch { Log.claude.error("Claude integration uninstall failed: \(error.localizedDescription)"); return false }
+    }
 }
 
 /// A no-op service used for features that are purely reactive (the menu-bar
