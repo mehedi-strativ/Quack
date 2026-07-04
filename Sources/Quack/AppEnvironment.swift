@@ -38,7 +38,7 @@ final class AppEnvironment: ObservableObject {
     private let hotkeyService: HotkeyMonitor
     private let dockPinchService: DockPinchMonitor
     private let temperatureService: TemperatureStatusItem
-    private let notchMediaService: NotchMediaService
+    private let notchService: NotchService
     private let notchRevealService: NotchIconRevealService
     let claudeInstaller = ClaudeConfigInstaller()
 
@@ -74,7 +74,7 @@ final class AppEnvironment: ObservableObject {
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.notchRevealService = NotchIconRevealService(settings: settings, permissions: permissions)
-        self.notchMediaService = NotchMediaService()
+        self.notchService = NotchService(settings: settings, installer: claudeInstaller)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -86,7 +86,7 @@ final class AppEnvironment: ObservableObject {
             .dockPinch: dockPinchService,
             .temperature: temperatureService,
             .notchReveal: notchRevealService,
-            .notchMedia: notchMediaService,
+            .notch: notchService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .temperature) }
