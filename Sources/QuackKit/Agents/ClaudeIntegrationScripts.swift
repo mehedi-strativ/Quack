@@ -99,13 +99,23 @@ public enum ClaudeIntegrationScripts {
 
     /// Bakes the delegation line. With a previous command, pipe the same stdin
     /// into it; without one, emit the model name so the status line isn't blank.
+    /// The previous command is emitted single-quoted (escaping embedded single
+    /// quotes with the `'\''` idiom) rather than double-quoted, so a `"` in the
+    /// path can never break out of the wrapper script.
     public static func statusLineWrapper(previousCommand: String?) -> String {
         let delegation: String
         if let previousCommand, !previousCommand.isEmpty {
-            delegation = #"printf '%s' "$INPUT" | "\#(previousCommand)""#
+            delegation = #"printf '%s' "$INPUT" | \#(shellSingleQuoted(previousCommand))"#
         } else {
             delegation = #"command -v jq >/dev/null 2>&1 && printf '%s' "$INPUT" | jq -r '.model.display_name // ""'"#
         }
         return statusLineWrapperTemplate.replacingOccurrences(of: "__PREV_STATUSLINE__", with: delegation)
+    }
+
+    /// Wraps `value` in single quotes for safe use as one shell word, escaping
+    /// any embedded single quote as `'\''` (close quote, escaped literal quote,
+    /// reopen quote).
+    private static func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 }

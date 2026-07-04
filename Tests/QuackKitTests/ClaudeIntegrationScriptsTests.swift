@@ -19,8 +19,15 @@ import Testing
 
     @Test func wrapperBakesPreviousCommand() {
         let s = ClaudeIntegrationScripts.statusLineWrapper(previousCommand: "/Users/x/.claude/statusline.sh")
-        #expect(s.contains(#"printf '%s' "$INPUT" | "/Users/x/.claude/statusline.sh""#))
+        #expect(s.contains(#"printf '%s' "$INPUT" | '/Users/x/.claude/statusline.sh'"#))
         #expect(!s.contains("__PREV_STATUSLINE__"))
+    }
+
+    @Test func wrapperEscapesEmbeddedSingleQuote() {
+        let s = ClaudeIntegrationScripts.statusLineWrapper(previousCommand: "/tmp/o'brien.sh")
+        #expect(s.contains(#"'/tmp/o'\''brien.sh'"#))
+        // Never embed the raw path unescaped inside a single-quoted segment.
+        #expect(!s.contains(#"'/tmp/o'brien.sh'"#))
     }
 
     @Test func wrapperWithoutPreviousEmitsModelName() {

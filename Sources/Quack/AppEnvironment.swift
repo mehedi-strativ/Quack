@@ -40,6 +40,7 @@ final class AppEnvironment: ObservableObject {
     private let temperatureService: TemperatureStatusItem
     private let notchMediaService: NotchMediaService
     private let notchRevealService: NotchIconRevealService
+    let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
