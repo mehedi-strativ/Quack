@@ -124,3 +124,32 @@ import Foundation
         #expect(Feature.timeAwareness.isEnabled(in: s))
     }
 }
+
+@Suite struct MouseSettingsDecodingTests {
+    @Test func mouseFieldsDefaultWhenMissing() throws {
+        // A pre-mouse settings blob must decode with mouse defaults.
+        let old = #"{"calendarEnabled": true}"#.data(using: .utf8)!
+        let s = try JSONDecoder().decode(QuackSettings.self, from: old)
+        #expect(s.mouseSensitivityEnabled == false)
+        #expect(s.mouseSensitivity == 1.0)
+        #expect(s.savedSystemMouseScaling == nil)
+        #expect(s.smoothScrollEnabled == false)
+        #expect(s.mouseButton4Action == "default")
+        #expect(s.mouseButton5Action == "default")
+        #expect(s.mouseButton4Shortcut == nil)
+        #expect(s.mouseButton5Shortcut == nil)
+    }
+    @Test func mouseFieldsRoundTrip() throws {
+        var s = QuackSettings()
+        s.mouseSensitivityEnabled = true
+        s.mouseSensitivity = 2.5
+        s.savedSystemMouseScaling = 0.6875
+        s.smoothScrollEnabled = true
+        s.mouseButton4Action = MouseButtonAction.missionControl.rawValue
+        s.mouseButton5Action = MouseButtonAction.customShortcut.rawValue
+        s.mouseButton5Shortcut = MouseShortcut(keyCode: 40, modifiers: 0b0001)
+        let data = try JSONEncoder().encode(s)
+        let back = try JSONDecoder().decode(QuackSettings.self, from: data)
+        #expect(back == s)
+    }
+}

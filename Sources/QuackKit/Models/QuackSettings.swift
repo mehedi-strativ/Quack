@@ -65,6 +65,23 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     /// See `AppAppearance`.
     public var appearance: String
 
+    // MARK: Mouse
+    /// Override the system pointer tracking speed.
+    public var mouseSensitivityEnabled: Bool
+    /// Pointer speed 0…3 (com.apple.mouse.scaling's practical range).
+    public var mouseSensitivity: Double
+    /// System scaling captured before Quack first overrode it; restored on
+    /// disable / quit. nil = never overridden.
+    public var savedSystemMouseScaling: Double?
+    /// Animate discrete scroll-wheel ticks into smooth pixel scrolling.
+    public var smoothScrollEnabled: Bool
+    /// Raw values of `MouseButtonAction` for mouse buttons 4 and 5.
+    public var mouseButton4Action: String
+    public var mouseButton5Action: String
+    /// Recorded combo used when the action is `customShortcut`.
+    public var mouseButton4Shortcut: MouseShortcut?
+    public var mouseButton5Shortcut: MouseShortcut?
+
     // MARK: Time awareness
     /// Show the continuous-activity timer in the menu bar.
     public var timeAwarenessEnabled: Bool
@@ -106,6 +123,14 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         displayBrightness: [String: Double] = [:],
         swipeSensitivity: Double = 0.5,
         appearance: String = AppAppearance.system.rawValue,
+        mouseSensitivityEnabled: Bool = false,
+        mouseSensitivity: Double = 1.0,
+        savedSystemMouseScaling: Double? = nil,
+        smoothScrollEnabled: Bool = false,
+        mouseButton4Action: String = "default",
+        mouseButton5Action: String = "default",
+        mouseButton4Shortcut: MouseShortcut? = nil,
+        mouseButton5Shortcut: MouseShortcut? = nil,
         timeAwarenessEnabled: Bool = false,
         restRemindersEnabled: Bool = true,
         activityReminderMinutes: Int = 50,
@@ -140,6 +165,14 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.displayBrightness = displayBrightness
         self.swipeSensitivity = swipeSensitivity
         self.appearance = appearance
+        self.mouseSensitivityEnabled = mouseSensitivityEnabled
+        self.mouseSensitivity = mouseSensitivity
+        self.savedSystemMouseScaling = savedSystemMouseScaling
+        self.smoothScrollEnabled = smoothScrollEnabled
+        self.mouseButton4Action = mouseButton4Action
+        self.mouseButton5Action = mouseButton5Action
+        self.mouseButton4Shortcut = mouseButton4Shortcut
+        self.mouseButton5Shortcut = mouseButton5Shortcut
         self.timeAwarenessEnabled = timeAwarenessEnabled
         self.restRemindersEnabled = restRemindersEnabled
         self.activityReminderMinutes = activityReminderMinutes
@@ -187,6 +220,14 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         displayBrightness = v(.displayBrightness, d.displayBrightness)
         swipeSensitivity = v(.swipeSensitivity, d.swipeSensitivity)
         appearance = v(.appearance, d.appearance)
+        mouseSensitivityEnabled = v(.mouseSensitivityEnabled, d.mouseSensitivityEnabled)
+        mouseSensitivity = v(.mouseSensitivity, d.mouseSensitivity)
+        savedSystemMouseScaling = v(.savedSystemMouseScaling, d.savedSystemMouseScaling)
+        smoothScrollEnabled = v(.smoothScrollEnabled, d.smoothScrollEnabled)
+        mouseButton4Action = v(.mouseButton4Action, d.mouseButton4Action)
+        mouseButton5Action = v(.mouseButton5Action, d.mouseButton5Action)
+        mouseButton4Shortcut = v(.mouseButton4Shortcut, d.mouseButton4Shortcut)
+        mouseButton5Shortcut = v(.mouseButton5Shortcut, d.mouseButton5Shortcut)
         timeAwarenessEnabled = v(.timeAwarenessEnabled, d.timeAwarenessEnabled)
         restRemindersEnabled = v(.restRemindersEnabled, d.restRemindersEnabled)
         activityReminderMinutes = v(.activityReminderMinutes, d.activityReminderMinutes)
