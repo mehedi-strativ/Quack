@@ -35,6 +35,7 @@ and services start **only** when their toggle is on.
 | ✋ | **Window swipe** | Two-finger title-bar swipe: ↑ fullscreen, ↓ minimize, ←→ snap to half | Accessibility |
 | 🔥 | **Dock pinch-to-quit** | Pinch-in on an app's Dock icon to quit it | Accessibility |
 | 🌡️ | **CPU temperature** | Flame + live temperature (°C/°F) read from the Mac's sensors, à la `hot` | — |
+| ⏳ | **Time awareness** | Menu-bar timer of continuous activity with a per-app breakdown; break reminders; daily statistics with a 30-day day-by-day view | — |
 
 ¹ The brightness slider works without Accessibility; only intercepting F1/F2
 needs it (to consume the key so the built-in display doesn't also change).
@@ -94,6 +95,10 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
   has its own sound (previewed on selection) and a **Preview** button.
 - **Temperature** — toggle under **CPU**; click the flame for thermal pressure +
   exact reading.
+- **Time awareness** — toggle under **Time Awareness**; the hourglass shows time
+  since your last real break, its menu lists your top apps, and toasts nudge you
+  to rest at the interval you choose. The Dashboard's Time card and the tab's
+  Statistics section keep 30 days of daily totals, breaks, and top apps.
 
 ---
 
