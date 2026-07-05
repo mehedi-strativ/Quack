@@ -1140,15 +1140,16 @@ private struct MouseScrollSection: View {
 
 private struct MouseButtonsSection: View {
     @EnvironmentObject var env: AppEnvironment
+    @State private var activeRecorder: Int? = nil
 
     var body: some View {
         let s = env.settingsStore
         let anyRemapped = s.settings.mouseButton4Action != MouseButtonAction.default_.rawValue
             || s.settings.mouseButton5Action != MouseButtonAction.default_.rawValue
         Section("Extra buttons") {
-            buttonRow(label: "Button 4",
+            buttonRow(label: "Button 4", id: 4,
                       action: \.mouseButton4Action, shortcut: \.mouseButton4Shortcut)
-            buttonRow(label: "Button 5",
+            buttonRow(label: "Button 5", id: 5,
                       action: \.mouseButton5Action, shortcut: \.mouseButton5Shortcut)
             Text("Buttons 4 and 5 are the side (back/forward) buttons on most mice.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
@@ -1163,7 +1164,7 @@ private struct MouseButtonsSection: View {
     }
 
     @ViewBuilder
-    private func buttonRow(label: String,
+    private func buttonRow(label: String, id: Int,
                            action: WritableKeyPath<QuackSettings, String>,
                            shortcut: WritableKeyPath<QuackSettings, MouseShortcut?>) -> some View {
         let s = env.settingsStore
@@ -1177,7 +1178,8 @@ private struct MouseButtonsSection: View {
             }
         }
         if actionBinding.wrappedValue == .customShortcut {
-            ShortcutRecorderField(shortcut: s.binding(shortcut))
+            ShortcutRecorderField(shortcut: s.binding(shortcut),
+                                   recorderID: id, activeRecorder: $activeRecorder)
         }
     }
 }
@@ -1185,8 +1187,15 @@ private struct MouseButtonsSection: View {
 /// Click-to-record keyboard shortcut field. Recording uses a local NSEvent
 /// monitor (only sees keys while Quack's settings window is focused) — no
 /// event tap, no extra permissions. Esc cancels.
+///
+/// `activeRecorder` is shared across sibling fields (see `MouseButtonsSection`):
+/// AppKit delivers a keydown to every registered local monitor regardless of
+/// what any one of them returns, so without this, recording on two fields at
+/// once would silently map both buttons to the same keypress.
 private struct ShortcutRecorderField: View {
     @Binding var shortcut: MouseShortcut?
+    let recorderID: Int
+    @Binding var activeRecorder: Int?
     @State private var recording = false
     @State private var monitor: Any?
 
@@ -1200,11 +1209,14 @@ private struct ShortcutRecorderField: View {
                 Text(recording ? "Press keys… (⎋ cancels)" : (shortcut?.display ?? "Record Shortcut"))
                     .frame(minWidth: 140)
             }
+            .disabled(activeRecorder != nil && activeRecorder != recorderID)
         }
         .onDisappear { stopRecording() }
     }
 
     private func startRecording() {
+        guard activeRecorder == nil else { return }   // defensive: another field is recording
+        activeRecorder = recorderID
         recording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             defer { stopRecording() }
@@ -1223,6 +1235,7 @@ private struct ShortcutRecorderField: View {
         recording = false
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        if activeRecorder == recorderID { activeRecorder = nil }
     }
 }
 
