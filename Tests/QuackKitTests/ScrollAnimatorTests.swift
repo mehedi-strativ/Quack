@@ -67,4 +67,15 @@ import Testing
         a.add(dx: 0, dy: 0)
         #expect(a.isIdle)
     }
+
+    @Test func negativeDtNeverAmplifies() {
+        var a = ScrollAnimator()
+        a.add(dx: 0, dy: -100)
+        let f = a.step(dt: -1.0)
+        // Clamped to dt=0: no decay factor, nothing beyond a possible
+        // sub-pixel flush — and the pool must never grow.
+        #expect(abs(f?.dy ?? 0) <= 100)
+        let total = (f?.dy ?? 0) + drain(&a).y
+        #expect(abs(total - (-100)) < 0.001)
+    }
 }

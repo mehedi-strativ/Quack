@@ -33,9 +33,10 @@ public struct ScrollAnimator: Sendable {
     }
 
     /// Advance by `dt` seconds. Returns the pixel delta to emit this frame,
-    /// or nil when idle.
+    /// or nil when idle. Negative or zero `dt` is clamped to 0 (safe; no decay).
     public mutating func step(dt: Double) -> Frame? {
         if isIdle { return nil }
+        let dt = max(0, dt)
         let factor = 1 - exp(-dt / tau)
         var outX = pendingX * factor
         var outY = pendingY * factor
