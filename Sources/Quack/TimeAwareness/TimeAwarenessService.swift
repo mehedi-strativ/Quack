@@ -9,7 +9,7 @@ import QuackKit
 /// minutes away — see `tickNow()`. Zero permissions — idle comes from
 /// `CGEventSource.secondsSinceLastEventType`, no event taps.
 @MainActor
-final class TimeAwarenessService: ManagedService {
+final class TimeAwarenessService: ObservableObject, ManagedService {
     /// Set by AppEnvironment after construction (opens the Settings window).
     var onOpenSettings: (() -> Void)?
 
@@ -17,6 +17,13 @@ final class TimeAwarenessService: ManagedService {
     private let toasts: ToastPresenter
     private var tracker = ActivityTracker()
     private let statusItem = TimeAwarenessStatusItem()
+
+    private let historyStore = ActivityHistoryStore()
+    /// In-memory day aggregates; today's entry includes the live session.
+    private(set) var history = ActivityHistory()
+    private var lastSavedAt = Date.distantPast
+    private var historyDirty = false
+    private var terminateObserver: NSObjectProtocol?
 
     private var timer: Timer?
     private var forcedIdleSince: Date?
@@ -33,6 +40,9 @@ final class TimeAwarenessService: ManagedService {
     func start() {
         guard !started else { return }
         started = true
+
+        history = historyStore.load()
+        history.prune(keepDays: 30, today: Date(), calendar: .current)
 
         statusItem.onReset = { [weak self] in
             self?.tracker.reset()
@@ -86,6 +96,12 @@ final class TimeAwarenessService: ManagedService {
         timer.tolerance = 0.3
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+
+        terminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { [weak self] in self?.saveHistoryNow() }
+        }
     }
 
     func stop() {
@@ -98,6 +114,9 @@ final class TimeAwarenessService: ManagedService {
         let dnc = DistributedNotificationCenter.default()
         distributedObservers.forEach { dnc.removeObserver($0) }
         distributedObservers = []
+        saveHistoryNow()
+        if let terminateObserver { NotificationCenter.default.removeObserver(terminateObserver) }
+        terminateObserver = nil
         statusItem.hide()
         tracker.reset()
         forcedIdleSince = nil
@@ -121,15 +140,27 @@ final class TimeAwarenessService: ManagedService {
                                   frontmostBundleID: front?.bundleIdentifier,
                                   frontmostName: front?.localizedName,
                                   config: config)
+        let now = Date()
+        if result.activeDelta > 0 {
+            history.record(date: now, calendar: .current,
+                           activeDelta: result.activeDelta,
+                           bundleID: front?.bundleIdentifier,
+                           name: front?.localizedName)
+            historyDirty = true
+        }
         for event in result.events {
             switch event {
             case .reminderDue(let activeSeconds):
                 showBreakToast(activeSeconds: activeSeconds)
             case .restCompleted:
-                break   // menu bar simply shows 0m again
+                history.recordBreak(date: now, calendar: .current)
+                saveHistoryNow()   // breaks are rare — persist immediately
             }
         }
         render()
+        if historyDirty, Date().timeIntervalSince(lastSavedAt) >= 60 {
+            saveHistoryNow()
+        }
     }
 
     /// Seconds since the last user input, session-wide. No single "any input"
@@ -164,5 +195,14 @@ final class TimeAwarenessService: ManagedService {
         guard force || minute != lastRenderedMinute else { return }
         lastRenderedMinute = minute
         statusItem.render(total: tracker.activeSeconds)
+        objectWillChange.send()
+    }
+
+    /// Prunes and writes the history file; cheap enough for the 1/min cadence.
+    private func saveHistoryNow() {
+        history.prune(keepDays: 30, today: Date(), calendar: .current)
+        historyStore.save(history)
+        lastSavedAt = Date()
+        historyDirty = false
     }
 }

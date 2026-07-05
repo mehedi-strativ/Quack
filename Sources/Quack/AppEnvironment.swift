@@ -99,6 +99,7 @@ final class AppEnvironment: ObservableObject {
         permissions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         brightness.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         diagnostics.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        timeAwarenessService.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
 
         permissions.refreshAll()
         coordinator.activate()
@@ -237,6 +238,21 @@ final class AppEnvironment: ObservableObject {
         return MeetingSelection.filter(fetched, window: window, calendarIDs: ids)
             .map { $0.withConferencingURL(MeetingURLParser.joinURL(for: $0)) }
             .sorted { $0.start < $1.start }
+    }
+
+    /// Day statistics for the Dashboard card and the day-by-day view. Today
+    /// includes the live session (history is fed every tick in memory).
+    func activityStats(for date: Date) -> ActivityHistory.DayStats? {
+        timeAwarenessService.history.stats(for: date, calendar: .current)
+    }
+
+    func activityTopApps(for date: Date, _ n: Int) -> [ActivityTracker.AppSlice] {
+        timeAwarenessService.history.topApps(for: date, calendar: .current, n)
+    }
+
+    /// Oldest day with recorded stats (bounds the ‹ chevron), nil if none.
+    func activityOldestDay() -> Date? {
+        timeAwarenessService.history.oldestDay(calendar: .current)
     }
 
     /// Reads the current CPU temperature (°C) off the main thread — the first

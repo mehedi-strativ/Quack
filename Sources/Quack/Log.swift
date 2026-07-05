@@ -11,4 +11,5 @@ enum Log {
     static let permissions = Logger(subsystem: "com.quack.menubar", category: "permissions")
     static let claude = Logger(subsystem: "com.quack.menubar", category: "claude")
     static let notch = Logger(subsystem: "com.quack.menubar", category: "notch")
+    static let time = Logger(subsystem: "com.quack.menubar", category: "time")
 }
