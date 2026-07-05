@@ -130,3 +130,17 @@ public enum ActivityFormat {
         return "\(mins / 60)h \(mins % 60)m"
     }
 }
+
+/// Maps the service's raw idle signals to the value fed into
+/// `ActivityTracker.tick`. While the screen is locked / the Mac is asleep,
+/// idle is at least the 60 s activity grace (accumulation stops immediately)
+/// and at least the real time since the lock began — so the K-minute reset
+/// threshold is crossed after K real minutes away, never earlier.
+public enum IdleReport {
+    public static func effectiveIdle(realIdle: Double,
+                                     forcedIdleSince: Date?,
+                                     now: Date) -> Double {
+        guard let since = forcedIdleSince else { return realIdle }
+        return max(realIdle, 60, now.timeIntervalSince(since))
+    }
+}

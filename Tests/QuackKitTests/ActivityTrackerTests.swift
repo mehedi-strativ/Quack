@@ -169,3 +169,28 @@ import Testing
         #expect(ActivityFormat.compact(3600 + 23 * 60) == "1h 23m")
     }
 }
+
+@Suite struct IdleReportTests {
+    private let t0 = Date(timeIntervalSince1970: 2_000_000)
+
+    @Test func unlockedPassesRealIdleThrough() {
+        #expect(IdleReport.effectiveIdle(realIdle: 12, forcedIdleSince: nil, now: t0) == 12)
+    }
+    @Test func justLockedSkipsGraceButNotMore() {
+        // 10 s after lock: at least the 60 s grace (stops accumulation), but
+        // nowhere near a K-minute reset.
+        let idle = IdleReport.effectiveIdle(realIdle: 10, forcedIdleSince: t0.addingTimeInterval(-10), now: t0)
+        #expect(idle == 60)
+    }
+    @Test func lockedKMinutesReportsExactlyKMinutes() {
+        // 5 real minutes after lock: reports 300 — the K=5 threshold is crossed
+        // at exactly K minutes, not K-1.
+        let idle = IdleReport.effectiveIdle(realIdle: 290, forcedIdleSince: t0.addingTimeInterval(-300), now: t0)
+        #expect(idle == 300)
+    }
+    @Test func realIdleDominatesWhenLonger() {
+        // Idle long before locking: real idle is the ground truth.
+        let idle = IdleReport.effectiveIdle(realIdle: 500, forcedIdleSince: t0.addingTimeInterval(-30), now: t0)
+        #expect(idle == 500)
+    }
+}

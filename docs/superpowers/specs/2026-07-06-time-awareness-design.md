@@ -135,8 +135,8 @@ Transition rules (config read per tick, so settings changes apply live):
   `"com.apple.screenIsLocked"` distributed notification (record
   `forcedIdleSince = forcedIdleSince ?? Date()` on lock/sleep — don't restart
   the clock if already set; cleared to `nil` on the wake/unlock counterparts).
-- Each tick: `idle = forcedIdleSince.map { max(systemIdleSeconds(),
-  Date().timeIntervalSince($0) + 60) } ?? systemIdleSeconds()`, where
+- Each tick: `idle = IdleReport.effectiveIdle(realIdle: systemIdleSeconds(),
+  forcedIdleSince: forcedIdleSince, now: Date())`, where
   `systemIdleSeconds()` reads
   `CGEventSource.secondsSinceLastEventType(.combinedSessionState,
   eventType: kCGAnyInputEventType-equivalent)`, frontmost from

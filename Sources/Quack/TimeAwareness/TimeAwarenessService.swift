@@ -112,12 +112,9 @@ final class TimeAwarenessService: ManagedService {
             idleResetMinutes: s.activityIdleResetMinutes,
             remindersEnabled: s.restRemindersEnabled
         )
-        // Lock/sleep counts as idle immediately (>= the 60 s activity grace,
-        // so accumulation stops on the first locked tick), but the K-minute
-        // reset threshold is still only crossed after K real minutes away —
-        // report idle as at-least (time since lock + grace), never infinity.
-        let idle = forcedIdleSince.map { max(Self.systemIdleSeconds(), Date().timeIntervalSince($0) + 60) }
-            ?? Self.systemIdleSeconds()
+        let idle = IdleReport.effectiveIdle(realIdle: Self.systemIdleSeconds(),
+                                            forcedIdleSince: forcedIdleSince,
+                                            now: Date())
         let front = NSWorkspace.shared.frontmostApplication
         let events = tracker.tick(now: Date(),
                                   idleSeconds: idle,
