@@ -30,7 +30,7 @@ enum MouseActionPerformer {
             postMediaKey(7)     // NX_KEYTYPE_MUTE
         case .customShortcut:
             guard let shortcut else { return }
-            postKeystroke(keyCode: CGKeyCode(shortcut.keyCode),
+            postKeystroke(keyCode: CGKeyCode(clamping: shortcut.keyCode),
                           flags: Self.flags(from: shortcut.modifiers))
         }
     }

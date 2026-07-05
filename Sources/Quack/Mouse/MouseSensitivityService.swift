@@ -28,7 +28,7 @@ final class MouseSensitivityService: ObservableObject {
 
     // MARK: private HID API (dlsym'd — no headers for these)
     private typealias CreateSimpleClient = @convention(c) (CFAllocator?) -> Unmanaged<AnyObject>?
-    private typealias SetProperty = @convention(c) (AnyObject, CFString, CFTypeRef) -> Void
+    private typealias SetProperty = @convention(c) (AnyObject, CFString, CFTypeRef) -> Int32
     private let hidClient: AnyObject?
     private let hidSetProperty: SetProperty?
 
@@ -114,8 +114,13 @@ final class MouseSensitivityService: ObservableObject {
         // 2. Live apply through the HID event system.
         if let client = hidClient, let setProp = hidSetProperty {
             let fixed = NSNumber(value: Int(value * 65536))
-            setProp(client, "HIDMouseAcceleration" as CFString, fixed)
-            if !liveApplyAvailable { liveApplyAvailable = true }
+            let result = setProp(client, "HIDMouseAcceleration" as CFString, fixed)
+            if result != 0 {
+                if !liveApplyAvailable { liveApplyAvailable = true }
+            } else {
+                liveApplyAvailable = false
+                Log.mouse.error("HID live apply rejected by client — wrote prefs only (takes effect after replug/login)")
+            }
         } else {
             liveApplyAvailable = false
             Log.mouse.error("HID live apply unavailable — wrote prefs only (takes effect after replug/login)")
