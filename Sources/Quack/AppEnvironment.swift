@@ -39,6 +39,7 @@ final class AppEnvironment: ObservableObject {
     private let dockPinchService: DockPinchMonitor
     private let temperatureService: TemperatureStatusItem
     private let notchService: NotchService
+    private let timeAwarenessService: TimeAwarenessService
     let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
@@ -73,6 +74,7 @@ final class AppEnvironment: ObservableObject {
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.notchService = NotchService(settings: settings, permissions: permissions, installer: claudeInstaller)
+        self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -84,9 +86,11 @@ final class AppEnvironment: ObservableObject {
             .dockPinch: dockPinchService,
             .temperature: temperatureService,
             .notch: notchService,
+            .timeAwareness: timeAwarenessService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .temperature) }
+        timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .timeAwareness) }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
         // `AppEnvironment` refresh when settings / meetings / permissions change.

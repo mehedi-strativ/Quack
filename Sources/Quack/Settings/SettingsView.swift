@@ -4,7 +4,7 @@ import QuackKit
 /// The feature groups shown in the left sidebar. `general` is the schedule
 /// (agenda) view; `settings` holds the app-level preferences.
 enum SettingsTab: String, CaseIterable {
-    case general, calendar, temperature, display, windows, notch, settings
+    case general, calendar, temperature, timeAwareness, display, windows, notch, settings
 
     var title: String {
         switch self {
@@ -12,6 +12,7 @@ enum SettingsTab: String, CaseIterable {
         case .calendar: return "Agenda"
         case .display: return "Display"
         case .temperature: return "CPU"
+        case .timeAwareness: return "Time Awareness"
         case .windows: return "Windows"
         case .notch: return "Notch"
         case .settings: return "Settings"
@@ -24,6 +25,7 @@ enum SettingsTab: String, CaseIterable {
         case .calendar: return "calendar"
         case .display: return "sun.max"
         case .temperature: return "thermometer.medium"
+        case .timeAwareness: return "hourglass"
         case .windows: return "macwindow.on.rectangle"
         case .notch: return "menubar.rectangle"
         case .settings: return "gearshape"
@@ -42,7 +44,7 @@ private enum SidebarGroup: String, CaseIterable {
     var tabs: [SettingsTab] {
         switch self {
         case .top: return [.general]
-        case .menuBar: return [.calendar, .temperature]
+        case .menuBar: return [.calendar, .temperature, .timeAwareness]
         case .controls: return [.display, .windows, .notch]
         case .bottom: return [.settings]
         }
@@ -165,6 +167,8 @@ struct SettingsPane: View {
                     RemindersSection()
                     PermissionsSection()
                     StatusSection()
+                case .timeAwareness:
+                    EmptyView()
                 case .general, .calendar:
                     EmptyView()
                 }
