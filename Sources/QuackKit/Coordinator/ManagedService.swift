@@ -21,6 +21,7 @@ public enum Feature: CaseIterable, Sendable {
     case dockPinch
     case temperature
     case notch
+    case timeAwareness
 
     public func isEnabled(in settings: QuackSettings) -> Bool {
         switch self {
@@ -33,6 +34,7 @@ public enum Feature: CaseIterable, Sendable {
         case .dockPinch: return settings.dockPinchQuitEnabled || settings.windowPinchCloseEnabled
         case .temperature: return settings.cpuTemperatureEnabled
         case .notch: return settings.notchMediaEnabled || settings.notchAgentsEnabled
+        case .timeAwareness: return settings.timeAwarenessEnabled
         }
     }
 }

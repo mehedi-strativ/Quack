@@ -65,6 +65,18 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     /// See `AppAppearance`.
     public var appearance: String
 
+    // MARK: Time awareness
+    /// Show the continuous-activity timer in the menu bar.
+    public var timeAwarenessEnabled: Bool
+    /// Toast reminders to take a break.
+    public var restRemindersEnabled: Bool
+    /// Remind after this many minutes of continuous activity (N).
+    public var activityReminderMinutes: Int
+    /// Repeat the reminder every further M minutes while activity continues.
+    public var activityRepeatMinutes: Int
+    /// Consecutive idle minutes that count as a rest and reset the timer (K).
+    public var activityIdleResetMinutes: Int
+
     public init(
         calendarEnabled: Bool = true,
         remindersEnabled: Bool = true,
@@ -93,7 +105,12 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         dimInactiveDisplay: Bool = false,
         displayBrightness: [String: Double] = [:],
         swipeSensitivity: Double = 0.5,
-        appearance: String = AppAppearance.system.rawValue
+        appearance: String = AppAppearance.system.rawValue,
+        timeAwarenessEnabled: Bool = false,
+        restRemindersEnabled: Bool = true,
+        activityReminderMinutes: Int = 50,
+        activityRepeatMinutes: Int = 10,
+        activityIdleResetMinutes: Int = 5
     ) {
         self.calendarEnabled = calendarEnabled
         self.remindersEnabled = remindersEnabled
@@ -123,6 +140,11 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.displayBrightness = displayBrightness
         self.swipeSensitivity = swipeSensitivity
         self.appearance = appearance
+        self.timeAwarenessEnabled = timeAwarenessEnabled
+        self.restRemindersEnabled = restRemindersEnabled
+        self.activityReminderMinutes = activityReminderMinutes
+        self.activityRepeatMinutes = activityRepeatMinutes
+        self.activityIdleResetMinutes = activityIdleResetMinutes
     }
 
     // Custom decoding so that adding a new field never breaks an existing
@@ -165,5 +187,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         displayBrightness = v(.displayBrightness, d.displayBrightness)
         swipeSensitivity = v(.swipeSensitivity, d.swipeSensitivity)
         appearance = v(.appearance, d.appearance)
+        timeAwarenessEnabled = v(.timeAwarenessEnabled, d.timeAwarenessEnabled)
+        restRemindersEnabled = v(.restRemindersEnabled, d.restRemindersEnabled)
+        activityReminderMinutes = v(.activityReminderMinutes, d.activityReminderMinutes)
+        activityRepeatMinutes = v(.activityRepeatMinutes, d.activityRepeatMinutes)
+        activityIdleResetMinutes = v(.activityIdleResetMinutes, d.activityIdleResetMinutes)
     }
 }

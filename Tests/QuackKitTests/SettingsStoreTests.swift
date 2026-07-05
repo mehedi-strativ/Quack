@@ -94,3 +94,33 @@ import Foundation
     }
 
 }
+
+@Suite struct TimeAwarenessSettingsTests {
+    @Test func fieldsDefaultWhenMissing() throws {
+        let old = #"{"calendarEnabled": true}"#.data(using: .utf8)!
+        let s = try JSONDecoder().decode(QuackSettings.self, from: old)
+        #expect(s.timeAwarenessEnabled == false)
+        #expect(s.restRemindersEnabled == true)
+        #expect(s.activityReminderMinutes == 50)
+        #expect(s.activityRepeatMinutes == 10)
+        #expect(s.activityIdleResetMinutes == 5)
+    }
+    @Test func fieldsRoundTrip() throws {
+        var s = QuackSettings()
+        s.timeAwarenessEnabled = true
+        s.restRemindersEnabled = false
+        s.activityReminderMinutes = 25
+        s.activityRepeatMinutes = 15
+        s.activityIdleResetMinutes = 3
+        let back = try JSONDecoder().decode(QuackSettings.self, from: JSONEncoder().encode(s))
+        #expect(back == s)
+    }
+    @Test func featureGatedOnMasterToggle() {
+        var s = QuackSettings()
+        #expect(Feature.timeAwareness.isEnabled(in: s) == false)
+        s.timeAwarenessEnabled = true
+        #expect(Feature.timeAwareness.isEnabled(in: s))
+        s.restRemindersEnabled = false   // reminders toggle must NOT gate the feature
+        #expect(Feature.timeAwareness.isEnabled(in: s))
+    }
+}
