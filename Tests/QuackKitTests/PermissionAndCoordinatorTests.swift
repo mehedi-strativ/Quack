@@ -11,12 +11,6 @@ import Testing
         #expect(PermissionStatusMapper.calendar(fromEventKitRawValue: 5) == .granted)  // fullAccess
     }
 
-    @Test func notificationsMapping() {
-        #expect(PermissionStatusMapper.notifications(fromUNRawValue: 0) == .notRequested)
-        #expect(PermissionStatusMapper.notifications(fromUNRawValue: 1) == .denied)
-        #expect(PermissionStatusMapper.notifications(fromUNRawValue: 2) == .granted)
-        #expect(PermissionStatusMapper.notifications(fromUNRawValue: 3) == .granted)   // provisional
-    }
 
     @Test func accessibilityMapping() {
         #expect(PermissionStatusMapper.accessibility(isTrusted: true) == .granted)

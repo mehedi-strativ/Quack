@@ -1,15 +1,15 @@
 import Foundation
 
-/// The macOS permissions Quack may need, one per feature group.
+/// The macOS permissions Quack may need, one per feature group. Notifications
+/// deliberately absent: reminders are Quack's own toast windows, which need no
+/// system permission.
 public enum PermissionKind: String, CaseIterable, Sendable {
-    case notifications
     case calendar
     case accessibility
     case screenRecording
 
     public var displayName: String {
         switch self {
-        case .notifications: return "Notifications"
         case .calendar: return "Calendar"
         case .accessibility: return "Accessibility"
         case .screenRecording: return "Screen Recording"
@@ -38,16 +38,6 @@ public enum PermissionStatusMapper {
         case 3, 5: return .granted
         case 0: return .notRequested
         default: return .denied   // restricted, denied, writeOnly
-        }
-    }
-
-    /// `UNAuthorizationStatus` raw values:
-    /// 0 notDetermined, 1 denied, 2 authorized, 3 provisional, 4 ephemeral.
-    public static func notifications(fromUNRawValue raw: Int) -> PermissionStatus {
-        switch raw {
-        case 2, 3, 4: return .granted
-        case 0: return .notRequested
-        default: return .denied
         }
     }
 

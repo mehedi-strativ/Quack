@@ -1,6 +1,5 @@
 import Foundation
 import EventKit
-import UserNotifications
 import ApplicationServices
 import AppKit
 import CoreGraphics
@@ -25,17 +24,11 @@ final class PermissionsManager: ObservableObject {
         refreshCalendar()
         refreshAccessibility()
         refreshScreenRecording()
-        Task { await refreshNotifications() }
     }
 
     func refreshCalendar() {
         let raw = Int(EKEventStore.authorizationStatus(for: .event).rawValue)
         statuses[.calendar] = PermissionStatusMapper.calendar(fromEventKitRawValue: raw)
-    }
-
-    func refreshNotifications() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        statuses[.notifications] = PermissionStatusMapper.notifications(fromUNRawValue: Int(settings.authorizationStatus.rawValue))
     }
 
     func refreshAccessibility() {
@@ -78,14 +71,6 @@ final class PermissionsManager: ObservableObject {
         return granted
     }
 
-    @discardableResult
-    func requestNotificationAccess() async -> Bool {
-        let granted = (try? await UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound])) ?? false
-        await refreshNotifications()
-        return granted
-    }
-
     /// Accessibility cannot be granted programmatically. Prompt the system to
     /// surface its dialog, then poll until the user flips the switch.
     func requestAccessibilityAccess() {
@@ -110,9 +95,6 @@ final class PermissionsManager: ObservableObject {
         case .accessibility: anchor = "Privacy_Accessibility"
         case .calendar: anchor = "Privacy_Calendars"
         case .screenRecording: anchor = "Privacy_ScreenCapture"
-        case .notifications:
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
-            return
         }
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
             NSWorkspace.shared.open(url)
