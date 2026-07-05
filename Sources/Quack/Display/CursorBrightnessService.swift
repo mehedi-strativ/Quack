@@ -31,6 +31,9 @@ final class CursorBrightnessService: ManagedService {
     private var permissionCancellable: AnyCancellable?
     private var axObserver: NSObjectProtocol?
     private let hud = BrightnessHUD()
+    // Rated max luminance per display id (nil = display doesn't report one),
+    // cached so the IORegistry walk runs once per display, not per keypress.
+    private var maxNitsCache: [String: Double?] = [:]
 
     // Thread-safe snapshot of displays (frame + DDC support) read by the key tap
     // on its background thread; rebuilt on the main actor.
@@ -173,6 +176,13 @@ final class CursorBrightnessService: ManagedService {
         settings.update { $0.displayBrightness[display.id] = next }
         controller.apply(fraction: next, to: display)
         let screen = NSScreen.screens.first { $0.displayID == display.screenNumber }
-        hud.show(displayName: display.name, level: next, on: screen)
+        hud.show(displayName: display.name, level: next, maxNits: maxNits(for: display), on: screen)
+    }
+
+    private func maxNits(for display: ControllableDisplay) -> Double? {
+        if let cached = maxNitsCache[display.id] { return cached }
+        let value = DisplayLuminance.maxNits(forProductName: display.name)
+        maxNitsCache[display.id] = value
+        return value
     }
 }

@@ -72,11 +72,9 @@ final class ToastPresenter {
         panel.hasShadow = true
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        // Invert the theme relative to the OS: a white toast in dark mode, a dark
-        // toast in light mode. Forcing the panel's appearance flips the material,
-        // the window-background color, and SwiftUI's colorScheme together.
-        let systemDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        panel.appearance = NSAppearance(named: systemDark ? .aqua : .darkAqua)
+        // Follow the system theme: leaving `appearance` nil inherits the app's
+        // effective appearance, so the material, window-background color, and
+        // SwiftUI colorScheme all track light/dark mode automatically.
         let view = ToastView(
             item: item,
             onJoin: { [weak self, weak panel] in

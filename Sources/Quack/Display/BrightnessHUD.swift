@@ -10,9 +10,10 @@ final class BrightnessHUD {
     private var hideWork: DispatchWorkItem?
     private let model = BrightnessHUDModel()
 
-    func show(displayName: String, level: Double, on screen: NSScreen?) {
+    func show(displayName: String, level: Double, maxNits: Double? = nil, on screen: NSScreen?) {
         model.displayName = displayName
         model.level = max(0, min(1, level))
+        model.maxNits = maxNits
 
         let panel = ensurePanel()
         position(panel, on: screen)
@@ -71,6 +72,8 @@ final class BrightnessHUD {
 final class BrightnessHUDModel: ObservableObject {
     @Published var displayName: String = ""
     @Published var level: Double = 0
+    /// The display's rated max luminance, when known — enables the nits readout.
+    @Published var maxNits: Double?
 }
 
 private struct BrightnessHUDView: View {
@@ -78,10 +81,18 @@ private struct BrightnessHUDView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(model.displayName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            HStack(alignment: .firstTextBaseline) {
+                Text(model.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(readout)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
             HStack(spacing: 10) {
                 Image(systemName: "sun.min.fill").font(.system(size: 13)).foregroundStyle(.primary)
                 BrightnessSlider(level: model.level)
@@ -97,6 +108,13 @@ private struct BrightnessHUDView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    /// "33% · 132 nits" when the display reports a max luminance, else "33%".
+    private var readout: String {
+        let percent = "\(Int((model.level * 100).rounded()))%"
+        guard let maxNits = model.maxNits else { return percent }
+        return "\(percent) · \(Int((model.level * maxNits).rounded())) nits"
     }
 }
 
