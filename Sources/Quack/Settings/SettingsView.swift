@@ -156,6 +156,7 @@ struct SettingsPane: View {
                 case .temperature:
                     TemperatureSection()
                 case .timeAwareness:
+                    TimeAwarenessStatsSection()
                     TimeAwarenessSection()
                 case .windows:
                     WindowSwipeSection()
@@ -256,6 +257,9 @@ private struct DashboardView: View {
                     DashCard(tab: .temperature) { cpuSummary }
                     DashCard(tab: .display) { displaySummary }
                     DashCard(tab: .windows) { windowsSummary }
+                    if env.settingsStore.settings.timeAwarenessEnabled {
+                        DashCard(tab: .timeAwareness, title: "Time", icon: "hourglass") { timeSummary }
+                    }
                     DashCard(tab: .settings, title: "Permissions", icon: "lock.shield") { permissionsSummary }
                 }
             }
@@ -317,6 +321,18 @@ private struct DashboardView: View {
         while !Task.isCancelled {
             tempC = await env.currentCPUTemperatureC()
             try? await Task.sleep(nanoseconds: 4_000_000_000)
+        }
+    }
+
+    // MARK: Time awareness (today's stats)
+
+    @ViewBuilder private var timeSummary: some View {
+        if let stats = env.activityStats(for: Date()), stats.activeSeconds >= 60 {
+            let top = env.activityTopApps(for: Date(), 1).first
+            gist("\(ActivityFormat.compact(stats.activeSeconds)) active today · \(stats.breaks) break\(stats.breaks == 1 ? "" : "s")",
+                 top.map { "Top: \($0.name) (\(ActivityFormat.compact($0.seconds)))" } ?? "No app breakdown yet")
+        } else {
+            gist("No activity yet today", "The timer records while you work")
         }
     }
 
@@ -1020,6 +1036,62 @@ private struct TemperatureSection: View {
                 Toggle("Show in Fahrenheit", isOn: s.binding(\.temperatureFahrenheit))
             }
         }
+    }
+}
+
+// MARK: - Time awareness statistics (day-by-day)
+
+private struct TimeAwarenessStatsSection: View {
+    @EnvironmentObject var env: AppEnvironment
+    /// 0 = today, -1 = yesterday, … Resets whenever the tab is recreated.
+    @State private var dayOffset = 0
+
+    var body: some View {
+        let cal = Calendar.current
+        let date = cal.date(byAdding: .day, value: dayOffset, to: cal.startOfDay(for: env.now)) ?? env.now
+        let stats = env.activityStats(for: date)
+        Section("Statistics") {
+            HStack {
+                Button { dayOffset -= 1 } label: { Image(systemName: "chevron.left") }
+                    .buttonStyle(.borderless)
+                    .disabled(!canGoBack(cal))
+                Spacer()
+                Text(label(for: date, cal)).font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Button { dayOffset += 1 } label: { Image(systemName: "chevron.right") }
+                    .buttonStyle(.borderless)
+                    .disabled(dayOffset >= 0)
+            }
+            if let stats {
+                LabeledContent("Active", value: ActivityFormat.compact(stats.activeSeconds))
+                LabeledContent("Breaks", value: "\(stats.breaks)")
+                ForEach(env.activityTopApps(for: date, 5), id: \.bundleID) { app in
+                    LabeledContent(app.name, value: ActivityFormat.compact(app.seconds))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("No activity recorded.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Back stops at the older of: 29 days before today, or the oldest stored
+    /// day (no point paging through guaranteed-empty days).
+    private func canGoBack(_ cal: Calendar) -> Bool {
+        let todayStart = cal.startOfDay(for: env.now)
+        guard let floor29 = cal.date(byAdding: .day, value: -29, to: todayStart),
+              let target = cal.date(byAdding: .day, value: dayOffset - 1, to: todayStart) else { return false }
+        let oldest = env.activityOldestDay() ?? todayStart
+        return target >= max(floor29, oldest)
+    }
+
+    private func label(for date: Date, _ cal: Calendar) -> String {
+        if cal.isDateInToday(date) { return "Today" }
+        if cal.isDateInYesterday(date) { return "Yesterday" }
+        let f = DateFormatter()
+        f.dateFormat = "EEEE, MMM d"
+        return f.string(from: date)
     }
 }
 
