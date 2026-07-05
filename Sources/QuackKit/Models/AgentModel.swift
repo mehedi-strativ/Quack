@@ -18,10 +18,20 @@ public struct AgentSnapshot: Equatable, Sendable, Identifiable {
     public let statusMessage: String?
     /// 0...1 (TodoWrite ratio, else context-window fraction), nil = hide meter.
     public let progress: Double?
+    /// This session's own context-window usage, 0...100 (from statusLine JSON).
+    public let contextUsedPercent: Double?
+    /// This session's own cumulative cost in USD (from statusLine JSON).
+    public let costUSD: Double?
+    /// This session's own 5h rate-limit window usage, 0...100.
+    public let fiveHourUsedPercent: Double?
+    /// This session's own 7d rate-limit window usage, 0...100.
+    public let sevenDayUsedPercent: Double?
     public let lastUpdate: Date
 
     public init(sessionID: String, project: String, branch: String?, model: String?,
-                status: AgentStatus, statusMessage: String?, progress: Double?, lastUpdate: Date) {
+                status: AgentStatus, statusMessage: String?, progress: Double?,
+                contextUsedPercent: Double?, costUSD: Double?, fiveHourUsedPercent: Double?,
+                sevenDayUsedPercent: Double?, lastUpdate: Date) {
         self.sessionID = sessionID
         self.project = project
         self.branch = branch
@@ -29,23 +39,11 @@ public struct AgentSnapshot: Equatable, Sendable, Identifiable {
         self.status = status
         self.statusMessage = statusMessage
         self.progress = progress
-        self.lastUpdate = lastUpdate
-    }
-}
-
-/// Account-global Claude usage limits (5h / 7d windows), from statusLine JSON.
-public struct UsageLimits: Equatable, Sendable {
-    public let fiveHourUsedPercent: Double?
-    public let fiveHourResetsAt: Date?
-    public let sevenDayUsedPercent: Double?
-    public let sevenDayResetsAt: Date?
-
-    public init(fiveHourUsedPercent: Double?, fiveHourResetsAt: Date?,
-                sevenDayUsedPercent: Double?, sevenDayResetsAt: Date?) {
+        self.contextUsedPercent = contextUsedPercent
+        self.costUSD = costUSD
         self.fiveHourUsedPercent = fiveHourUsedPercent
-        self.fiveHourResetsAt = fiveHourResetsAt
         self.sevenDayUsedPercent = sevenDayUsedPercent
-        self.sevenDayResetsAt = sevenDayResetsAt
+        self.lastUpdate = lastUpdate
     }
 }
 
@@ -102,10 +100,13 @@ public struct StatusFileRaw: Decodable, Sendable {
         public let seven_day: RateWindow?
     }
 
+    public struct Cost: Decodable, Sendable { public let total_cost_usd: Double? }
+
     public let session_id: String?
     public let model: Model?
     public let context_window: ContextWindow?
     public let rate_limits: RateLimits?
+    public let cost: Cost?
 }
 
 /// Shared defensive ISO-8601 parsing (with and without fractional seconds).

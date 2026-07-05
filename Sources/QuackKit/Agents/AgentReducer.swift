@@ -36,18 +36,19 @@ public enum AgentReducer {
             }
     }
 
-    /// Account-global limits from the freshest status file that has any.
-    public static func usageLimits(from files: [SessionFiles]) -> UsageLimits? {
-        let best = files
-            .filter { $0.status?.rate_limits != nil }
-            .max { ($0.statusModified ?? .distantPast) < ($1.statusModified ?? .distantPast) }
-        guard let rl = best?.status?.rate_limits else { return nil }
-        return UsageLimits(
-            fiveHourUsedPercent: rl.five_hour?.used_percentage,
-            fiveHourResetsAt: rl.five_hour?.resetsAtDate,
-            sevenDayUsedPercent: rl.seven_day?.used_percentage,
-            sevenDayResetsAt: rl.seven_day?.resetsAtDate
-        )
+    /// Plain single-line per-agent stat, built from this session's OWN status
+    /// file (rate limits are per-account, so a global aggregate would mix
+    /// accounts for multi-profile users). Parts are omitted when absent —
+    /// desktop sessions with no status file may yield just the model, or nil.
+    public static func statLine(for snapshot: AgentSnapshot) -> String? {
+        var parts: [String] = []
+        if let model = snapshot.model { parts.append(model) }
+        if let pct = snapshot.contextUsedPercent { parts.append("ctx \(Int(pct.rounded()))%") }
+        if let cost = snapshot.costUSD { parts.append(String(format: "$%.2f", cost)) }
+        if let p = snapshot.fiveHourUsedPercent { parts.append("5h \(Int(p.rounded()))%") }
+        if let p = snapshot.sevenDayUsedPercent { parts.append("7d \(Int(p.rounded()))%") }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
     }
 
     /// Turns a raw model id into a short versioned display name.
@@ -103,6 +104,10 @@ public enum AgentReducer {
             status: status,
             statusMessage: statusMessage(state: state, status: status),
             progress: progress(state: state, status: f.status),
+            contextUsedPercent: f.status?.context_window?.used_percentage,
+            costUSD: f.status?.cost?.total_cost_usd,
+            fiveHourUsedPercent: f.status?.rate_limits?.five_hour?.used_percentage,
+            sevenDayUsedPercent: f.status?.rate_limits?.seven_day?.used_percentage,
             lastUpdate: last
         )
     }

@@ -2,7 +2,8 @@ import SwiftUI
 import QuackKit
 
 /// One agent card: status dot + project + branch, one-line status message,
-/// then the pill row (status / model / progress).
+/// a per-agent stat line (model / context / cost / rate limits), then the
+/// pill row (status / progress).
 struct AgentCardView: View {
     let agent: AgentSnapshot
 
@@ -27,9 +28,11 @@ struct AgentCardView: View {
             }
             Text(agent.statusMessage ?? " ")
                 .font(.system(size: 11)).foregroundStyle(NotchTheme.textSecondary).lineLimit(1)
+            if let stat = AgentReducer.statLine(for: agent) {
+                Text(stat).font(.system(size: 10)).foregroundStyle(NotchTheme.textMuted).lineLimit(1)
+            }
             HStack(spacing: 8) {
                 statusPill
-                if let model = agent.model { grayPill(model) }
                 Spacer(minLength: 0)
                 if let progress = agent.progress { progressPill(progress) }
             }
@@ -39,13 +42,7 @@ struct AgentCardView: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(NotchTheme.card))
     }
 
-    private var dotColor: Color {
-        switch agent.status {
-        case .needsYou: return NotchTheme.orange
-        case .working: return NotchTheme.green
-        case .idle: return NotchTheme.textMuted
-        }
-    }
+    private var dotColor: Color { NotchTheme.statusColor(agent.status) }
 
     @ViewBuilder
     private var statusPill: some View {
@@ -70,13 +67,6 @@ struct AgentCardView: View {
         .foregroundStyle(fg)
         .padding(.horizontal, 7).padding(.vertical, 3)
         .background(Capsule().fill(bg))
-    }
-
-    private func grayPill(_ text: String) -> some View {
-        Text(text).font(.system(size: 9, weight: .medium))
-            .foregroundStyle(NotchTheme.textSecondary)
-            .padding(.horizontal, 7).padding(.vertical, 3)
-            .background(Capsule().fill(Color.white.opacity(0.08)))
     }
 
     private func progressPill(_ progress: Double) -> some View {

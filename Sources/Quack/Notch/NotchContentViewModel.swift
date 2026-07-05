@@ -3,13 +3,12 @@ import Combine
 import QuackKit
 import MediaRemoteAdapter
 
-/// Observable state for the unified notch panel: agent snapshots + usage on
-/// top, media strip at the bottom. Replaces NotchMediaViewModel.
+/// Observable state for the unified notch panel: agent snapshots on top,
+/// media strip at the bottom. Replaces NotchMediaViewModel.
 @MainActor
 final class NotchContentViewModel: ObservableObject {
     @Published var isOpen = false
     @Published var agents: [AgentSnapshot] = []
-    @Published var usage: UsageLimits?
     @Published var tokensTodayText: String?
     @Published var track: TrackInfo?
     @Published var mediaEnabled = false

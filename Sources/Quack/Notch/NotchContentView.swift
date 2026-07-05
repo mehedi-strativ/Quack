@@ -29,7 +29,6 @@ struct NotchContentView: View {
             if model.agentsEnabled {
                 VStack(alignment: .leading, spacing: 10) {
                     NotchHeaderView(model: model)
-                    if let usage = model.usage { UsageLimitsView(usage: usage) }
                     agentsZone
                 }
                 .padding(.horizontal, 14)
@@ -64,7 +63,7 @@ struct NotchContentView: View {
                 .font(.system(size: 11)).foregroundStyle(NotchTheme.textMuted)
         } else if model.agents.count > 3 {
             ScrollView(showsIndicators: false) { cards }
-                .frame(maxHeight: 3 * 92 + 2 * 8)
+                .frame(maxHeight: 3 * 100 + 2 * 8)
         } else {
             cards
         }
@@ -78,13 +77,12 @@ struct NotchContentView: View {
 
     private var peek: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(model.needsYouCount > 0 ? NotchTheme.orange : NotchTheme.green)
-                    .frame(width: 6, height: 6)
-                Text("\(model.activeCount)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white)
+            HStack(spacing: 4) {
+                ForEach(model.agents.filter { $0.status != .idle }.prefix(6)) { agent in
+                    Circle()
+                        .fill(NotchTheme.statusColor(agent.status))
+                        .frame(width: 6, height: 6)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 3)

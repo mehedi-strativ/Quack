@@ -69,9 +69,6 @@ final class NotchService: NSObject, ManagedService {
         agentsService.$agents
             .sink { [weak self] a in self?.model.agents = a; self?.repositionIfNeeded() }
             .store(in: &cancellables)
-        agentsService.$usage
-            .sink { [weak self] u in self?.model.usage = u }
-            .store(in: &cancellables)
         agentsService.$integrationInstalled
             .sink { [weak self] i in self?.model.integrationInstalled = i }
             .store(in: &cancellables)
@@ -161,12 +158,11 @@ final class NotchService: NSObject, ManagedService {
         var h: CGFloat = 10                                     // top padding
         if model.agentsEnabled {
             h += 30                                             // header row
-            if model.usage != nil { h += 52 }                   // 5h/7d section
             if !model.integrationInstalled || model.agents.isEmpty {
                 h += 28                                         // CTA / empty row
             } else {
                 let visible = min(model.agents.count, 3)
-                h += CGFloat(visible) * 92 + CGFloat(visible - 1) * 8
+                h += CGFloat(visible) * 100 + CGFloat(visible - 1) * 8
             }
             h += 10                                             // zone bottom pad
         } else {

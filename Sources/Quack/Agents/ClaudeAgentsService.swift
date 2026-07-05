@@ -3,14 +3,13 @@ import Combine
 import QuackKit
 
 /// Reads the session files the Claude Code integration writes and publishes
-/// reduced agent snapshots + usage limits. Fail-soft: missing directory or
-/// malformed files yield empty state, never a crash. A periodic tick re-runs
-/// the staleness prune even when no file event arrives (an abandoned session
-/// must eventually drop off the panel).
+/// reduced agent snapshots. Fail-soft: missing directory or malformed files
+/// yield empty state, never a crash. A periodic tick re-runs the staleness
+/// prune even when no file event arrives (an abandoned session must
+/// eventually drop off the panel).
 @MainActor
 final class ClaudeAgentsService: ObservableObject {
     @Published private(set) var agents: [AgentSnapshot] = []
-    @Published private(set) var usage: UsageLimits?
     @Published private(set) var integrationInstalled = false
 
     private let installer: ClaudeConfigInstaller
@@ -42,7 +41,7 @@ final class ClaudeAgentsService: ObservableObject {
         watcher.stop()
         watcher.onChange = nil
         pruneTimer?.invalidate(); pruneTimer = nil
-        agents = []; usage = nil
+        agents = []
     }
 
     func refreshNow() {
@@ -50,7 +49,6 @@ final class ClaudeAgentsService: ObservableObject {
         let files = readSessionFiles()
         let now = Date()
         agents = AgentReducer.snapshots(from: files, now: now)
-        usage = AgentReducer.usageLimits(from: files)
     }
 
     private func readSessionFiles() -> [SessionFiles] {

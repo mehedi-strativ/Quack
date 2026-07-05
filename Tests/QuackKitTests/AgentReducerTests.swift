@@ -72,20 +72,6 @@ import Foundation
         #expect(out.map(\.sessionID) == ["n", "w", "i"])
     }
 
-    @Test func usageLimitsFromFreshestStatus() throws {
-        let old = try JSONDecoder().decode(StatusFileRaw.self,
-            from: Data(#"{"rate_limits":{"five_hour":{"used_percentage":50}}}"#.utf8))
-        let new = try JSONDecoder().decode(StatusFileRaw.self,
-            from: Data(#"{"rate_limits":{"five_hour":{"used_percentage":16},"seven_day":{"used_percentage":19}}}"#.utf8))
-        let files = [
-            SessionFiles(sessionID: "a", state: nil, status: old, stateModified: nil, statusModified: now.addingTimeInterval(-600)),
-            SessionFiles(sessionID: "b", state: nil, status: new, stateModified: nil, statusModified: now),
-        ]
-        let u = AgentReducer.usageLimits(from: files)
-        #expect(u?.fiveHourUsedPercent == 16)
-        #expect(u?.sevenDayUsedPercent == 19)
-    }
-
     @Test func statusOnlySessionIsNotACard() throws {
         let status = try JSONDecoder().decode(StatusFileRaw.self, from: Data("{}".utf8))
         let f = SessionFiles(sessionID: "x", state: nil, status: status, stateModified: nil, statusModified: now)
@@ -144,5 +130,31 @@ import Foundation
     @Test func emptyBranchBecomesNil() throws {
         let f = files(try state(["branch": ""]))
         #expect(AgentReducer.snapshots(from: [f], now: now, staleAfter: 900)[0].branch == nil)
+    }
+
+    // MARK: - Amendments: per-agent stat line (replaces global usage section)
+
+    @Test func statLineAllFields() throws {
+        let status = try JSONDecoder().decode(StatusFileRaw.self,
+            from: Data(#"{"context_window":{"used_percentage":22.4},"cost":{"total_cost_usd":0.324},"rate_limits":{"five_hour":{"used_percentage":10.2},"seven_day":{"used_percentage":16.8}}}"#.utf8))
+        let f = files(try state(["model_id": "claude-sonnet-4-6"]), status: status)
+        let snap = AgentReducer.snapshots(from: [f], now: now, staleAfter: 900)[0]
+        #expect(snap.contextUsedPercent == 22.4)
+        #expect(snap.costUSD == 0.324)
+        #expect(snap.fiveHourUsedPercent == 10.2)
+        #expect(snap.sevenDayUsedPercent == 16.8)
+        #expect(AgentReducer.statLine(for: snap) == "Sonnet 4.6 · ctx 22% · $0.32 · 5h 10% · 7d 17%")
+    }
+
+    @Test func statLineModelOnly() throws {
+        let f = files(try state(["model_id": "claude-sonnet-4-6"]))
+        let snap = AgentReducer.snapshots(from: [f], now: now, staleAfter: 900)[0]
+        #expect(AgentReducer.statLine(for: snap) == "Sonnet 4.6")
+    }
+
+    @Test func statLineNilWhenNothing() throws {
+        let f = files(try state([:]))
+        let snap = AgentReducer.snapshots(from: [f], now: now, staleAfter: 900)[0]
+        #expect(AgentReducer.statLine(for: snap) == nil)
     }
 }
