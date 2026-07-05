@@ -143,28 +143,38 @@ struct SettingsPane: View {
     @EnvironmentObject var env: AppEnvironment
 
     var body: some View {
-        Form {
-            switch tab {
-            case .general: GeneralSection()
-            case .calendar:
-                CalendarSection()
-                RemindersSection()
-            case .display:
-                BrightnessSection()
-            case .temperature:
-                TemperatureSection()
-            case .windows:
-                WindowSwipeSection()
-                DockGesturesSection()
-                KeyboardShortcutsSection()
-                NotchRevealSection()
-            case .permissions:
-                PermissionsSection()
-                StatusSection()
+        switch tab {
+        case .general:
+            DashboardView()
+        case .calendar:
+            CalendarAgendaView()
+        default:
+            Form {
+                switch tab {
+                case .display:
+                    BrightnessSection()
+                case .temperature:
+                    TemperatureSection()
+                case .windows:
+                    WindowSwipeSection()
+                    DockGesturesSection()
+                    KeyboardShortcutsSection()
+                    NotchMediaSection()
+                    NotchRevealSection()
+                case .permissions:
+                    PermissionsSection()
+                    StatusSection()
+                case .settings:
+                    SettingsSection()
+                    CalendarSection()
+                    RemindersSection()
+                case .general, .calendar:
+                    EmptyView()
+                }
             }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)   // let the darker window bg show through
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)   // let the darker window bg show through
     }
 }
 
@@ -1028,6 +1038,20 @@ private struct DockGesturesSection: View {
                         .font(.system(size: 12)).foregroundStyle(.orange)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Notch media player
+
+private struct NotchMediaSection: View {
+    @EnvironmentObject var env: AppEnvironment
+    var body: some View {
+        let s = env.settingsStore
+        Section("Notch") {
+            Toggle("Show a media player when you hover the notch", isOn: s.binding(\.notchMediaEnabled))
+            Text("Move the pointer to the notch to see what's playing and control it. Built-in display only.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
         }
     }
 }
