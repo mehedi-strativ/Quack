@@ -10,4 +10,6 @@ enum InputTaps {
     static let brightness = true    // F1/F2 → external-display brightness
     static let hotkey = true        // ⌘⌥ + arrow window shortcuts
     static let swipe = true         // two-finger title-bar swipe
+    static let mouseButtons = true  // buttons 4/5 remap
+    static let smoothScroll = true  // wheel-tick smoothing
 }
