@@ -155,6 +155,8 @@ struct SettingsPane: View {
                     BrightnessSection()
                 case .temperature:
                     TemperatureSection()
+                case .timeAwareness:
+                    TimeAwarenessSection()
                 case .windows:
                     WindowSwipeSection()
                     DockGesturesSection()
@@ -167,8 +169,6 @@ struct SettingsPane: View {
                     RemindersSection()
                     PermissionsSection()
                     StatusSection()
-                case .timeAwareness:
-                    EmptyView()
                 case .general, .calendar:
                     EmptyView()
                 }
@@ -1018,6 +1018,36 @@ private struct TemperatureSection: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             if s.settings.cpuTemperatureEnabled {
                 Toggle("Show in Fahrenheit", isOn: s.binding(\.temperatureFahrenheit))
+            }
+        }
+    }
+}
+
+// MARK: - Time awareness
+
+private struct TimeAwarenessSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Time awareness") {
+            Toggle("Show an activity timer in the menu bar", isOn: s.binding(\.timeAwarenessEnabled))
+            Text("Counts how long you've been using the Mac without a real break, with a per-app breakdown in its menu. The timer resets after you've been away long enough.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+        }
+        if s.settings.timeAwarenessEnabled {
+            Section("Rest reminders") {
+                Toggle("Remind me to take breaks", isOn: s.binding(\.restRemindersEnabled))
+                if s.settings.restRemindersEnabled {
+                    Stepper("Remind after: \(s.settings.activityReminderMinutes) min of activity",
+                            value: s.binding(\.activityReminderMinutes), in: 10...120, step: 5)
+                    Stepper("Repeat every: \(s.settings.activityRepeatMinutes) min while I keep going",
+                            value: s.binding(\.activityRepeatMinutes), in: 5...60, step: 5)
+                }
+                Stepper("Count a break after: \(s.settings.activityIdleResetMinutes) min away",
+                        value: s.binding(\.activityIdleResetMinutes), in: 1...30, step: 1)
+                Text("\"Away\" means no keyboard or mouse input — the screen being locked or the Mac asleep counts immediately.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
             }
         }
     }
