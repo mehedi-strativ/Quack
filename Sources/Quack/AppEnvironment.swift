@@ -39,7 +39,6 @@ final class AppEnvironment: ObservableObject {
     private let dockPinchService: DockPinchMonitor
     private let temperatureService: TemperatureStatusItem
     private let notchService: NotchService
-    private let notchRevealService: NotchIconRevealService
     let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
@@ -73,7 +72,6 @@ final class AppEnvironment: ObservableObject {
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
-        self.notchRevealService = NotchIconRevealService(settings: settings, permissions: permissions)
         self.notchService = NotchService(settings: settings, permissions: permissions, installer: claudeInstaller)
 
         let services: [Feature: ManagedService] = [
@@ -85,7 +83,6 @@ final class AppEnvironment: ObservableObject {
             .windowShortcuts: hotkeyService,
             .dockPinch: dockPinchService,
             .temperature: temperatureService,
-            .notchReveal: notchRevealService,
             .notch: notchService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)

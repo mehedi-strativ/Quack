@@ -159,7 +159,6 @@ struct SettingsPane: View {
                     KeyboardShortcutsSection()
                 case .notch:
                     NotchSection()
-                    NotchRevealSection()
                 case .settings:
                     SettingsSection()
                     CalendarSection()
@@ -1122,40 +1121,20 @@ private struct NotchSection: View {
                     }
                 }
             }
-        }
-        .onAppear { installed = env.claudeIntegrationInstalled() }
-    }
-}
 
-// MARK: - Notch reveal
-
-private struct NotchRevealSection: View {
-    @EnvironmentObject var env: AppEnvironment
-
-    var body: some View {
-        let s = env.settingsStore
-        Section("Notch") {
-            Toggle("Reveal menu bar icons hidden behind the notch", isOn: s.binding(\.notchRevealEnabled))
-            Text("Move the pointer to the notch to reveal icons the notch is covering, then click one to open it. Built-in display only.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-
-            if s.settings.notchRevealEnabled {
-                if env.permissions.status(for: .screenRecording) != .granted {
-                    HStack {
-                        Text("Needs Screen Recording to show the hidden icons.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Grant") { _ = env.permissions.requestScreenRecording() }
-                    }
-                }
+            // The panel also lists menu-bar icons hidden behind the notch;
+            // finding and clicking them both go through Accessibility.
+            if s.settings.notchMediaEnabled || s.settings.notchAgentsEnabled {
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
-                        Text("Needs Accessibility to click a revealed icon.")
+                        Text("Needs Accessibility to show and click menu bar icons hidden behind the notch.")
                             .font(.system(size: 12)).foregroundStyle(.orange)
                         Button("Grant") { env.permissions.requestAccessibilityAccess() }
                     }
                 }
             }
         }
+        .onAppear { installed = env.claudeIntegrationInstalled() }
     }
 }
 

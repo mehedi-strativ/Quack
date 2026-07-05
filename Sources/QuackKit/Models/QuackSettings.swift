@@ -25,8 +25,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var cpuTemperatureEnabled: Bool
     /// Dynamic notch media player controls.
     public var notchMediaEnabled: Bool
-    /// Reveal menu-bar icons hidden behind the notch (needs Screen Recording + AX).
-    public var notchRevealEnabled: Bool
     /// Show Claude Code agent progress in the notch panel.
     public var notchAgentsEnabled: Bool
     /// Hide the duck icon from the menu bar.
@@ -80,7 +78,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowPinchCloseEnabled: Bool = false,
         cpuTemperatureEnabled: Bool = false,
         notchMediaEnabled: Bool = false,
-        notchRevealEnabled: Bool = false,
         notchAgentsEnabled: Bool = false,
         hideDuckIcon: Bool = false,
         remindAtStart: Bool = true,
@@ -110,7 +107,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.windowPinchCloseEnabled = windowPinchCloseEnabled
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
         self.notchMediaEnabled = notchMediaEnabled
-        self.notchRevealEnabled = notchRevealEnabled
         self.notchAgentsEnabled = notchAgentsEnabled
         self.hideDuckIcon = hideDuckIcon
         self.remindAtStart = remindAtStart
@@ -153,7 +149,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowPinchCloseEnabled = v(.windowPinchCloseEnabled, d.windowPinchCloseEnabled)
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
         notchMediaEnabled = v(.notchMediaEnabled, d.notchMediaEnabled)
-        notchRevealEnabled = v(.notchRevealEnabled, d.notchRevealEnabled)
         notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         remindAtStart = v(.remindAtStart, d.remindAtStart)

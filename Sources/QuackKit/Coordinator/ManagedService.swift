@@ -20,7 +20,6 @@ public enum Feature: CaseIterable, Sendable {
     case windowShortcuts
     case dockPinch
     case temperature
-    case notchReveal
     case notch
 
     public func isEnabled(in settings: QuackSettings) -> Bool {
@@ -33,7 +32,6 @@ public enum Feature: CaseIterable, Sendable {
         case .windowShortcuts: return settings.windowShortcutsEnabled
         case .dockPinch: return settings.dockPinchQuitEnabled || settings.windowPinchCloseEnabled
         case .temperature: return settings.cpuTemperatureEnabled
-        case .notchReveal: return settings.notchRevealEnabled
         case .notch: return settings.notchMediaEnabled || settings.notchAgentsEnabled
         }
     }

@@ -27,11 +27,6 @@ struct NotchContentView: View {
     private var expanded: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: model.contentTopInset)
-            if !model.hiddenIcons.isEmpty {
-                hiddenIconsRow
-                    .padding(.horizontal, 14)
-                    .padding(.top, 8)
-            }
             if model.agentsEnabled {
                 VStack(alignment: .leading, spacing: 10) {
                     NotchHeaderView(model: model)
@@ -44,6 +39,9 @@ struct NotchContentView: View {
                 Spacer().frame(height: 6)
             }
             Spacer(minLength: 0)
+            hiddenIconsRow
+                .padding(.horizontal, 14)
+                .padding(.vertical, 4)
             if model.mediaEnabled {
                 MediaStripView(model: model)
             }
@@ -54,20 +52,37 @@ struct NotchContentView: View {
         .foregroundStyle(.white)
     }
 
-    /// The menu-bar icons the notch is hiding, mirrored live. Tap forwards the
-    /// click to the real (crushed) status item.
+    /// The menu-bar status items the notch is hiding, shown as their apps'
+    /// icons (the window server unmaps crushed items, so there are no live
+    /// pixels to mirror). Tap asks the owning app to press the item via AX.
+    /// Placeholder when nothing is hidden, so the row is always visible.
+    @ViewBuilder
     private var hiddenIconsRow: some View {
-        HStack(spacing: 10) {
-            ForEach(model.hiddenIcons) { item in
-                Image(nsImage: item.image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 18)
-                    .onTapGesture { model.onHiddenIconTap?(item.source) }
-                    .help("Reveal hidden menu bar item")
+        if model.hiddenIcons.isEmpty {
+            Text(model.axTrusted
+                 ? "No icons hidden behind the notch"
+                 : "Grant Accessibility to show hidden icons")
+                .font(.system(size: 10))
+                .foregroundStyle(model.axTrusted ? NotchTheme.textMuted : NotchTheme.orange)
+                .frame(maxWidth: .infinity)
+                .frame(height: 18)
+        } else {
+            HStack(spacing: 10) {
+                ForEach(model.hiddenIcons) { item in
+                    Group {
+                        if let icon = item.icon {
+                            Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
+                        } else {
+                            Image(systemName: "app.dashed")
+                        }
+                    }
+                    .frame(width: 18, height: 18)
+                    .onTapGesture { model.onHiddenIconTap?(item) }
+                    .help("\(item.appName): \(item.title)")
+                }
             }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder

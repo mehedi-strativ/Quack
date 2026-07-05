@@ -22,10 +22,9 @@ final class NotchService: NSObject, ManagedService {
     private var wired = false
     private var mediaRunning = false
     private var agentsRunning = false
-
-    /// Guards `requestScreenRecording()` (a TCC prompt) so it fires at most
-    /// once per service lifetime, not on every hover-in while ungranted.
-    private var hasRequestedScreenRecording = false
+    /// Last completed hidden-icon scan; shown instantly on the next hover-in
+    /// while a fresh scan runs behind it.
+    private var hiddenIconsCache: [HiddenStatusItem] = []
 
     private let hoverMargin: CGFloat = 24
     private let expandedWidth: CGFloat = 420
@@ -47,6 +46,7 @@ final class NotchService: NSObject, ManagedService {
         buildPanelIfNeeded()
         wireIfNeeded()
         reposition()
+        refreshHiddenIcons()   // warm the cache so the first hover shows icons
     }
 
     func stop() {
@@ -180,7 +180,7 @@ final class NotchService: NSObject, ManagedService {
     /// tuned on hardware in Task 12.
     private func expandedHeight() -> CGFloat {
         var h: CGFloat = 10                                     // top padding
-        if !model.hiddenIcons.isEmpty { h += hiddenIconsRowHeight }
+        h += hiddenIconsRowHeight                               // icons row or its placeholder
         if model.agentsEnabled {
             h += 30                                             // header row
             if !model.integrationInstalled || model.agents.isEmpty {
@@ -200,6 +200,7 @@ final class NotchService: NSObject, ManagedService {
     private func handleHover(_ hovering: Bool) {
         model.isOpen = hovering
         if hovering {
+            Log.notch.notice("hover-in: agents=\(self.model.agentsEnabled) media=\(self.model.mediaEnabled)")
             refreshTokensToday()
             refreshHiddenIcons()
         } else {
@@ -208,43 +209,49 @@ final class NotchService: NSObject, ManagedService {
         reposition()
     }
 
-    /// Mirrors the menu-bar icons the notch is hiding into the top of the
-    /// panel. Same flow as `NotchIconRevealService.handleHover`: the notch
-    /// layout is read here on the main actor; the window-list scan and
-    /// per-item pixel captures run on a background queue (thread-safe system
-    /// reads) so the expand animation doesn't hitch. The pixel mirror needs
-    /// Screen Recording; prompt for it at most once per service lifetime.
+    /// Finds the menu-bar status items the notch is hiding, for the row above
+    /// the media strip. The notch layout is read here on the main actor; the
+    /// AX sweep across running apps (blocking IPC) runs on a background queue
+    /// so the expand animation doesn't hitch. Needs Accessibility — the scan
+    /// quietly returns nothing without it, and the row shows its placeholder.
     private func refreshHiddenIcons() {
-        permissions.refreshScreenRecording()
-        if permissions.status(for: .screenRecording) != .granted, !hasRequestedScreenRecording {
-            hasRequestedScreenRecording = true
-            _ = permissions.requestScreenRecording()
-        }
-
+        model.axTrusted = permissions.status(for: .accessibility) == .granted
         guard let layout = reader.currentLayout() else {
+            Log.notch.notice("hidden-icon scan skipped: no notch layout")
             model.hiddenIcons = []
             return
         }
+        Log.notch.notice("hidden-icon scan starting: axTrusted=\(self.model.axTrusted)")
+        model.hiddenIcons = hiddenIconsCache   // last known, instantly; refresh below
         let notch = layout.span
-        let screenXRange = layout.screen.frame.minX...layout.screen.frame.maxX
+        // AX frames are global Quartz (top-left origin); the built-in menu-bar
+        // band is the top ~40pt of that screen. Cocoa maxY → Quartz top.
+        let primaryTop = NSScreen.screens.first?.frame.maxY ?? layout.screen.frame.maxY
+        let quartzTop = primaryTop - layout.screen.frame.maxY
+        let band = quartzTop...(quartzTop + 40)
         DispatchQueue.global(qos: .userInitiated).async {
-            let items = NotchIconCapture.scanAndMirror(notch: notch, screenXRange: screenXRange)
+            let items = AXStatusItemScanner.scan(notch: notch, menuBarBandY: band)
+            Log.notch.notice("hidden-icon scan: \(items.count) item(s) in notch \(notch.minX, format: .fixed(precision: 0))–\(notch.maxX, format: .fixed(precision: 0)), band \(band.lowerBound, format: .fixed(precision: 0))–\(band.upperBound, format: .fixed(precision: 0)): \(items.map(\.appName).joined(separator: ", "), privacy: .public)")
             DispatchQueue.main.async { [weak self] in
-                // Drop late results if the pointer already left the notch.
-                guard let self, self.model.isOpen else { return }
+                guard let self else { return }
+                self.hiddenIconsCache = items   // remember even if the pointer left
+                guard self.model.isOpen else { return }
                 self.model.hiddenIcons = items
                 self.reposition()
             }
         }
     }
 
-    /// Click-through to the real (crushed) status item; needs Accessibility.
-    private func forwardHiddenIconTap(_ item: StatusItemFrame) {
+    /// Clicking a hidden item: AXPress via its owning app (the crushed item
+    /// has no window of its own to click). Needs Accessibility.
+    private func forwardHiddenIconTap(_ item: HiddenStatusItem) {
         guard permissions.status(for: .accessibility) == .granted else {
             permissions.requestAccessibilityAccess()
             return
         }
-        StatusItemForwarder.forward(to: item)
+        DispatchQueue.global(qos: .userInitiated).async {
+            AXStatusItemScanner.press(item)
+        }
     }
 
     /// Click-to-focus: activate the app hosting the agent's session; fall back

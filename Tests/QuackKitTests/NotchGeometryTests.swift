@@ -43,30 +43,32 @@ import CoreGraphics
         ) == nil)
     }
 
-    @Test func crushedItemsAreThoseWhoseMidpointFallsUnderTheNotch() {
-        let span = NotchGeometry.notchSpan(
-            screenMinX: 0, screenWidth: 1512,
-            leftAuxWidth: 666, rightAuxWidth: 666
-        )!
-        // visible: midX 900 (right of notch)
-        let visible = StatusItemFrame(ownerPID: 1, windowID: 10,
-            frame: CGRect(x: 884, y: 0, width: 32, height: 24))   // midX 900
-        // crushed: midX 756 (inside 666...846)
-        let crushed = StatusItemFrame(ownerPID: 2, windowID: 11,
-            frame: CGRect(x: 740, y: 0, width: 32, height: 24))   // midX 756
-        let result = NotchGeometry.crushedItems([visible, crushed], notch: span)
-        #expect(result == [crushed])
+    // Empirical hardware layout (14" MBP, notch 663–848): every VISIBLE status
+    // item starts right of the notch's right edge; items macOS hid reported AX
+    // frames starting under or left of it.
+
+    @Test func itemStartingRightOfTheNotchIsVisible() {
+        let span = NotchGeometry.NotchSpan(minX: 663, maxX: 848)
+        #expect(!NotchGeometry.isHiddenByNotch(itemMinX: 868, notch: span))   // RescueTime
     }
 
-    @Test func itemExactlyOnTheNotchEdgeCountsAsCrushed() {
-        let span = NotchGeometry.NotchSpan(minX: 666, maxX: 846)
-        let onEdge = StatusItemFrame(ownerPID: 3, windowID: 12,
-            frame: CGRect(x: 650, y: 0, width: 32, height: 24))   // midX 666 == minX
-        #expect(NotchGeometry.crushedItems([onEdge], notch: span) == [onEdge])
+    @Test func itemUnderTheNotchIsHidden() {
+        let span = NotchGeometry.NotchSpan(minX: 663, maxX: 848)
+        #expect(NotchGeometry.isHiddenByNotch(itemMinX: 758, notch: span))    // Typeless
     }
 
-    @Test func emptyInputYieldsEmptyOutput() {
-        let span = NotchGeometry.NotchSpan(minX: 666, maxX: 846)
-        #expect(NotchGeometry.crushedItems([], notch: span).isEmpty)
+    @Test func itemEntirelyLeftOfTheNotchIsHidden() {
+        let span = NotchGeometry.NotchSpan(minX: 663, maxX: 848)
+        #expect(NotchGeometry.isHiddenByNotch(itemMinX: 582, notch: span))    // Quack temp
+    }
+
+    @Test func itemStraddlingTheNotchRightEdgeIsHidden() {
+        let span = NotchGeometry.NotchSpan(minX: 663, maxX: 848)
+        #expect(NotchGeometry.isHiddenByNotch(itemMinX: 830, notch: span))    // Malwarebytes
+    }
+
+    @Test func itemExactlyAtTheNotchRightEdgeIsVisible() {
+        let span = NotchGeometry.NotchSpan(minX: 663, maxX: 848)
+        #expect(!NotchGeometry.isHiddenByNotch(itemMinX: 848, notch: span))
     }
 }

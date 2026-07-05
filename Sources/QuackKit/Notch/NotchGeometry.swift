@@ -1,20 +1,5 @@
 import CoreGraphics
 
-/// A single menu-bar status item as scanned from the window server, decoupled
-/// from CoreGraphics' window-info dictionaries so the classification math is
-/// unit-testable. `frame` is in CG (Y-down, top-left) global coordinates.
-public struct StatusItemFrame: Equatable, Sendable {
-    public let ownerPID: Int32
-    public let windowID: UInt32
-    public let frame: CGRect
-
-    public init(ownerPID: Int32, windowID: UInt32, frame: CGRect) {
-        self.ownerPID = ownerPID
-        self.windowID = windowID
-        self.frame = frame
-    }
-}
-
 /// Pure notch geometry. The notch's horizontal span is the same number in both
 /// Cocoa (Y-up) and CoreGraphics (Y-down) coordinate spaces because only the Y
 /// axis flips between them — so all of this is coordinate-system-agnostic and
@@ -52,11 +37,12 @@ public enum NotchGeometry {
         return NotchSpan(minX: minX, maxX: maxX)
     }
 
-    /// The subset of `items` whose horizontal midpoint falls within the notch
-    /// span — i.e. items the notch has crushed and hidden. Midpoint-in-span is a
-    /// deliberately simple, tunable predicate; the exact threshold is refined
-    /// empirically on real hardware (see the design spec's open risks).
-    public static func crushedItems(_ items: [StatusItemFrame], notch: NotchSpan) -> [StatusItemFrame] {
-        items.filter { $0.frame.midX >= notch.minX && $0.frame.midX <= notch.maxX }
+    /// Whether a status item laid out at `itemMinX` (in the menu-bar band) is
+    /// hidden by the notch. Empirically confirmed on hardware: macOS never
+    /// draws a status item left of the notch — visible items are always laid
+    /// out entirely to its right — so any item whose frame STARTS left of the
+    /// notch's right edge exists only in its app's AX tree, not on screen.
+    public static func isHiddenByNotch(itemMinX: CGFloat, notch: NotchSpan) -> Bool {
+        itemMinX < notch.maxX
     }
 }
