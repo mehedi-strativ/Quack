@@ -17,7 +17,7 @@ import Testing
             events += tracker.tick(now: start.addingTimeInterval(Double(i)),
                                    idleSeconds: idle,
                                    frontmostBundleID: app?.id, frontmostName: app?.name,
-                                   config: config ?? cfg)
+                                   config: config ?? cfg).events
         }
         return events
     }
@@ -74,7 +74,7 @@ import Testing
         _ = a.tick(now: t0, idleSeconds: 0, frontmostBundleID: nil, frontmostName: nil, config: cfg)
         _ = run(&a, from: t0, seconds: 120)
         let events = a.tick(now: t0.addingTimeInterval(121), idleSeconds: 100_000,
-                            frontmostBundleID: nil, frontmostName: nil, config: cfg)
+                            frontmostBundleID: nil, frontmostName: nil, config: cfg).events
         #expect(events == [.restCompleted])
         #expect(a.activeSeconds == 0)
     }
@@ -156,6 +156,25 @@ import Testing
         _ = a.tick(now: t0, idleSeconds: 0, frontmostBundleID: nil, frontmostName: nil, config: cfg)
         let events = run(&a, from: t0, seconds: 400, idle: 400)   // idle > K with nothing accumulated
         #expect(events.isEmpty)
+    }
+
+    @Test func tickReportsActiveDelta() {
+        var a = ActivityTracker()
+        // First tick: no previous tick, delta 0.
+        #expect(a.tick(now: t0, idleSeconds: 0, frontmostBundleID: nil,
+                       frontmostName: nil, config: cfg).activeDelta == 0)
+        // Active tick 1 s later: delta 1.
+        let active = a.tick(now: t0.addingTimeInterval(1), idleSeconds: 0,
+                            frontmostBundleID: nil, frontmostName: nil, config: cfg)
+        #expect(abs(active.activeDelta - 1) < 0.001)
+        // Idle tick: delta 0 even though wall clock advanced.
+        let idle = a.tick(now: t0.addingTimeInterval(2), idleSeconds: 400,
+                          frontmostBundleID: nil, frontmostName: nil, config: cfg)
+        #expect(idle.activeDelta == 0)
+        // Clamped: 2-hour gap contributes at most 5.
+        let clamped = a.tick(now: t0.addingTimeInterval(7202), idleSeconds: 0,
+                             frontmostBundleID: nil, frontmostName: nil, config: cfg)
+        #expect(clamped.activeDelta <= 5)
     }
 }
 

@@ -116,12 +116,12 @@ final class TimeAwarenessService: ManagedService {
                                             forcedIdleSince: forcedIdleSince,
                                             now: Date())
         let front = NSWorkspace.shared.frontmostApplication
-        let events = tracker.tick(now: Date(),
+        let result = tracker.tick(now: Date(),
                                   idleSeconds: idle,
                                   frontmostBundleID: front?.bundleIdentifier,
                                   frontmostName: front?.localizedName,
                                   config: config)
-        for event in events {
+        for event in result.events {
             switch event {
             case .reminderDue(let activeSeconds):
                 showBreakToast(activeSeconds: activeSeconds)

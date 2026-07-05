@@ -47,6 +47,16 @@ public struct ActivityTracker: Sendable {
         }
     }
 
+    public struct TickResult: Equatable, Sendable {
+        public var events: [Event]
+        /// Seconds of activity this tick contributed (0 when idle or first tick).
+        public var activeDelta: TimeInterval
+        public init(events: [Event] = [], activeDelta: TimeInterval = 0) {
+            self.events = events
+            self.activeDelta = activeDelta
+        }
+    }
+
     /// Idle below this still counts as active (reading/watching without input).
     private static let activityGraceSeconds = 60.0
     /// Upper bound on one tick's wall-clock contribution.
@@ -63,7 +73,7 @@ public struct ActivityTracker: Sendable {
 
     public mutating func tick(now: Date, idleSeconds: Double,
                               frontmostBundleID: String?, frontmostName: String?,
-                              config: Config) -> [Event] {
+                              config: Config) -> TickResult {
         let delta: TimeInterval
         if let last = lastTickAt {
             delta = min(max(now.timeIntervalSince(last), 0), Self.maxTickDelta)
@@ -73,8 +83,10 @@ public struct ActivityTracker: Sendable {
         lastTickAt = now
 
         var events: [Event] = []
+        var activeDelta: TimeInterval = 0
         if idleSeconds < Self.activityGraceSeconds {
             activeSeconds += delta
+            activeDelta = delta
             if delta > 0, let id = frontmostBundleID {
                 perAppSeconds[id, default: 0] += delta
                 if let name = frontmostName { appNames[id] = name }
@@ -96,7 +108,7 @@ public struct ActivityTracker: Sendable {
             events.append(.restCompleted)
             reset()
         }
-        return events
+        return TickResult(events: events, activeDelta: activeDelta)
     }
 
     /// Clears all counters and the reminder schedule. Keeps `lastTickAt` so the
