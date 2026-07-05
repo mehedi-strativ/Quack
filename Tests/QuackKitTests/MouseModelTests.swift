@@ -38,3 +38,19 @@ import Testing
         #expect(MouseShortcut(keyCode: 999, modifiers: 0b0001).display == "⌘key999")
     }
 }
+
+@Suite struct MouseFeatureTests {
+    @Test func disabledByDefault() {
+        #expect(Feature.mouse.isEnabled(in: QuackSettings()) == false)
+    }
+    @Test func anySubFeatureEnables() {
+        var s = QuackSettings(); s.mouseSensitivityEnabled = true
+        #expect(Feature.mouse.isEnabled(in: s))
+        s = QuackSettings(); s.smoothScrollEnabled = true
+        #expect(Feature.mouse.isEnabled(in: s))
+        s = QuackSettings(); s.mouseButton4Action = MouseButtonAction.missionControl.rawValue
+        #expect(Feature.mouse.isEnabled(in: s))
+        s = QuackSettings(); s.mouseButton5Action = MouseButtonAction.disabled.rawValue
+        #expect(Feature.mouse.isEnabled(in: s))
+    }
+}
