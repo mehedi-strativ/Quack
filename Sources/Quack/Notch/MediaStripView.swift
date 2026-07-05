@@ -1,28 +1,22 @@
 import SwiftUI
-import MediaRemoteAdapter
 
-/// The below-notch media panel: album art + title/artist + transport controls
-/// when open and something is playing; a near-invisible hover target otherwise.
-struct NotchMediaView: View {
-    @ObservedObject var model: NotchMediaViewModel
+/// The media player as a compact strip pinned at the bottom of the unified
+/// notch panel: artwork + title/artist + transport controls.
+struct MediaStripView: View {
+    @ObservedObject var model: NotchContentViewModel
 
     var body: some View {
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .onHover { model.onHoverChange?($0) }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if model.isOpen {
+        VStack(spacing: 0) {
+            Rectangle().fill(NotchTheme.hairline).frame(height: 1)
             HStack(spacing: 12) {
                 artwork
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.track?.payload.title ?? "Nothing playing")
-                        .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NotchTheme.textPrimary).lineLimit(1)
                     Text(model.track?.payload.artist ?? "")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                        .font(.system(size: 10))
+                        .foregroundStyle(NotchTheme.textMuted).lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 if model.track != nil {
@@ -33,15 +27,10 @@ struct NotchMediaView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, model.contentTopInset + 8)
-            .padding(.bottom, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(NotchShape().fill(Color.black))
-            .foregroundStyle(.white)
-        } else {
-            Color.black.opacity(0.001)   // hover target only (below the notch)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
+        .background(NotchTheme.strip)
     }
 
     @ViewBuilder
@@ -52,7 +41,7 @@ struct NotchMediaView: View {
         } else {
             RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.12))
                 .frame(width: 28, height: 28)
-                .overlay(Image(systemName: "music.note").font(.system(size: 12)).foregroundStyle(.secondary))
+                .overlay(Image(systemName: "music.note").font(.system(size: 12)).foregroundStyle(NotchTheme.textMuted))
         }
     }
 

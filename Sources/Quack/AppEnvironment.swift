@@ -38,8 +38,9 @@ final class AppEnvironment: ObservableObject {
     private let hotkeyService: HotkeyMonitor
     private let dockPinchService: DockPinchMonitor
     private let temperatureService: TemperatureStatusItem
+    private let notchService: NotchService
     private let notchRevealService: NotchIconRevealService
-    private let notchMediaService: NotchMediaService
+    let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
@@ -73,7 +74,7 @@ final class AppEnvironment: ObservableObject {
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.notchRevealService = NotchIconRevealService(settings: settings, permissions: permissions)
-        self.notchMediaService = NotchMediaService()
+        self.notchService = NotchService(settings: settings, installer: claudeInstaller)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -85,7 +86,7 @@ final class AppEnvironment: ObservableObject {
             .dockPinch: dockPinchService,
             .temperature: temperatureService,
             .notchReveal: notchRevealService,
-            .notchMedia: notchMediaService,
+            .notch: notchService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .temperature) }
@@ -264,6 +265,24 @@ final class AppEnvironment: ObservableObject {
     func applyBrightness(_ fraction: Double, to display: ControllableDisplay) {
         settingsStore.update { $0.displayBrightness[display.id] = fraction }
         brightnessController.apply(fraction: fraction, to: display)
+    }
+
+    /// Claude Code integration state/actions for the settings pane. Returns
+    /// success; failures are logged, never fatal (the panel degrades quietly).
+    func claudeIntegrationInstalled() -> Bool {
+        claudeInstaller.isInstalled()
+    }
+
+    @discardableResult
+    func installClaudeIntegration() -> Bool {
+        do { try claudeInstaller.install(); return true }
+        catch { Log.claude.error("Claude integration install failed: \(error.localizedDescription)"); return false }
+    }
+
+    @discardableResult
+    func removeClaudeIntegration() -> Bool {
+        do { try claudeInstaller.uninstall(); return true }
+        catch { Log.claude.error("Claude integration uninstall failed: \(error.localizedDescription)"); return false }
     }
 }
 

@@ -9,4 +9,5 @@ enum Log {
     static let swipe = Logger(subsystem: "com.quack.menubar", category: "swipe")
     static let dock = Logger(subsystem: "com.quack.menubar", category: "dock")
     static let permissions = Logger(subsystem: "com.quack.menubar", category: "permissions")
+    static let claude = Logger(subsystem: "com.quack.menubar", category: "claude")
 }

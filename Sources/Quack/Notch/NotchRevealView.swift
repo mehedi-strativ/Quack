@@ -1,8 +1,6 @@
 import SwiftUI
 import QuackKit
 
-// NotchShape lives in NotchShape.swift (shared with the media panel).
-
 /// The reveal panel's content: when hovered, a black rounded strip showing the
 /// mirrored crushed icons in a row; each tappable to forward the click. When not
 /// hovered it collapses to a bare notch-width sliver that only detects hover.

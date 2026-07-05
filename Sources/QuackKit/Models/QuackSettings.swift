@@ -27,6 +27,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var notchMediaEnabled: Bool
     /// Reveal menu-bar icons hidden behind the notch (needs Screen Recording + AX).
     public var notchRevealEnabled: Bool
+    /// Show Claude Code agent progress in the notch panel.
+    public var notchAgentsEnabled: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
     /// Fire a "join now" reminder at the meeting's start time.
@@ -79,6 +81,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         cpuTemperatureEnabled: Bool = false,
         notchMediaEnabled: Bool = false,
         notchRevealEnabled: Bool = false,
+        notchAgentsEnabled: Bool = false,
         hideDuckIcon: Bool = false,
         remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
@@ -108,6 +111,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
         self.notchMediaEnabled = notchMediaEnabled
         self.notchRevealEnabled = notchRevealEnabled
+        self.notchAgentsEnabled = notchAgentsEnabled
         self.hideDuckIcon = hideDuckIcon
         self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
@@ -150,6 +154,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
         notchMediaEnabled = v(.notchMediaEnabled, d.notchMediaEnabled)
         notchRevealEnabled = v(.notchRevealEnabled, d.notchRevealEnabled)
+        notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)

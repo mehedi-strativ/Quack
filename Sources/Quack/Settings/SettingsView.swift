@@ -4,7 +4,7 @@ import QuackKit
 /// The feature groups shown in the left sidebar. `general` is the schedule
 /// (agenda) view; `settings` holds the app-level preferences.
 enum SettingsTab: String, CaseIterable {
-    case general, calendar, temperature, display, windows, permissions, settings
+    case general, calendar, temperature, display, windows, notch, permissions, settings
 
     var title: String {
         switch self {
@@ -13,6 +13,7 @@ enum SettingsTab: String, CaseIterable {
         case .display: return "Display"
         case .temperature: return "CPU"
         case .windows: return "Windows"
+        case .notch: return "Notch"
         case .permissions: return "Permissions"
         case .settings: return "Settings"
         }
@@ -25,6 +26,7 @@ enum SettingsTab: String, CaseIterable {
         case .display: return "sun.max"
         case .temperature: return "thermometer.medium"
         case .windows: return "macwindow.on.rectangle"
+        case .notch: return "menubar.rectangle"
         case .permissions: return "lock.shield"
         case .settings: return "gearshape"
         }
@@ -44,7 +46,7 @@ private enum SidebarGroup: String, CaseIterable {
         switch self {
         case .top: return [.general]
         case .menuBar: return [.calendar, .temperature]
-        case .controls: return [.display, .windows]
+        case .controls: return [.display, .windows, .notch]
         case .system: return [.permissions]
         case .bottom: return [.settings]
         }
@@ -159,7 +161,8 @@ struct SettingsPane: View {
                     WindowSwipeSection()
                     DockGesturesSection()
                     KeyboardShortcutsSection()
-                    NotchMediaSection()
+                case .notch:
+                    NotchSection()
                     NotchRevealSection()
                 case .permissions:
                     PermissionsSection()
@@ -1042,17 +1045,44 @@ private struct DockGesturesSection: View {
     }
 }
 
-// MARK: - Notch media player
+// MARK: - Notch panel
 
-private struct NotchMediaSection: View {
+private struct NotchSection: View {
     @EnvironmentObject var env: AppEnvironment
+    @State private var installed = false
+
     var body: some View {
         let s = env.settingsStore
-        Section("Notch") {
-            Toggle("Show a media player when you hover the notch", isOn: s.binding(\.notchMediaEnabled))
-            Text("Move the pointer to the notch to see what's playing and control it. Built-in display only.")
+        Section("Notch panel") {
+            Toggle("Show the media player in the notch", isOn: s.binding(\.notchMediaEnabled))
+            Text("Hover the notch to see the current track and control playback.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            Toggle("Show Claude Code agents in the notch", isOn: s.binding(\.notchAgentsEnabled))
+            Text("Live status of your Claude Code sessions: which agents are working, which need you, and your usage limits.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            if s.settings.notchAgentsEnabled {
+                HStack {
+                    if installed {
+                        Text("Claude integration installed.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        Button("Remove") {
+                            env.removeClaudeIntegration()
+                            installed = env.claudeIntegrationInstalled()
+                        }
+                    } else {
+                        Text("Needs hooks in ~/.claude/settings.json to see your agents.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Enable Claude integration") {
+                            env.installClaudeIntegration()
+                            installed = env.claudeIntegrationInstalled()
+                        }
+                    }
+                }
+            }
         }
+        .onAppear { installed = env.claudeIntegrationInstalled() }
     }
 }
 
