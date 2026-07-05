@@ -4,9 +4,10 @@ import QuackKit
 
 /// Drives Time Awareness: a 1 Hz tick reads system idle time and the frontmost
 /// app, feeds the pure `ActivityTracker`, updates the status item, and shows
-/// break-reminder toasts. Sleep and screen-lock force the idle signal so time
-/// away from an open lid still counts as rest. Zero permissions — idle comes
-/// from `CGEventSource.secondsSinceLastEventType`, no event taps.
+/// break-reminder toasts. Sleep and screen-lock stop accumulation immediately,
+/// but the K-minute reset threshold is still only crossed after K real
+/// minutes away — see `tickNow()`. Zero permissions — idle comes from
+/// `CGEventSource.secondsSinceLastEventType`, no event taps.
 @MainActor
 final class TimeAwarenessService: ManagedService {
     /// Set by AppEnvironment after construction (opens the Settings window).
@@ -18,7 +19,7 @@ final class TimeAwarenessService: ManagedService {
     private let statusItem = TimeAwarenessStatusItem()
 
     private var timer: Timer?
-    private var forcedIdle = false
+    private var forcedIdleSince: Date?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var distributedObservers: [NSObjectProtocol] = []
     private var lastRenderedMinute = -1
@@ -45,8 +46,9 @@ final class TimeAwarenessService: ManagedService {
         statusItem.show()
         render(force: true)
 
-        // Sleep / screen-lock => forced idle (counts toward the rest threshold
-        // immediately; the delta clamp keeps the gap from counting as active).
+        // Sleep / screen-lock => forced idle since first observed (see tickNow()
+        // for how this is turned into an idle reading; the delta clamp keeps
+        // the gap itself from ever counting as active).
         let wnc = NSWorkspace.shared.notificationCenter
         let sleepOn: [Notification.Name] = [NSWorkspace.willSleepNotification,
                                             NSWorkspace.screensDidSleepNotification]
@@ -54,25 +56,34 @@ final class TimeAwarenessService: ManagedService {
                                              NSWorkspace.screensDidWakeNotification]
         for name in sleepOn {
             workspaceObservers.append(wnc.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { [weak self] in self?.forcedIdle = true }
+                MainActor.assumeIsolated { [weak self] in
+                    guard let self else { return }
+                    self.forcedIdleSince = self.forcedIdleSince ?? Date()
+                }
             })
         }
         for name in sleepOff {
             workspaceObservers.append(wnc.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { [weak self] in self?.forcedIdle = false }
+                MainActor.assumeIsolated { [weak self] in self?.forcedIdleSince = nil }
             })
         }
         let dnc = DistributedNotificationCenter.default()
         distributedObservers.append(dnc.addObserver(
             forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main
-        ) { _ in MainActor.assumeIsolated { [weak self] in self?.forcedIdle = true } })
+        ) { _ in
+            MainActor.assumeIsolated { [weak self] in
+                guard let self else { return }
+                self.forcedIdleSince = self.forcedIdleSince ?? Date()
+            }
+        })
         distributedObservers.append(dnc.addObserver(
             forName: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main
-        ) { _ in MainActor.assumeIsolated { [weak self] in self?.forcedIdle = false } })
+        ) { _ in MainActor.assumeIsolated { [weak self] in self?.forcedIdleSince = nil } })
 
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tickNow() }
         }
+        timer.tolerance = 0.3
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -89,7 +100,7 @@ final class TimeAwarenessService: ManagedService {
         distributedObservers = []
         statusItem.hide()
         tracker.reset()
-        forcedIdle = false
+        forcedIdleSince = nil
         lastRenderedMinute = -1
     }
 
@@ -101,7 +112,12 @@ final class TimeAwarenessService: ManagedService {
             idleResetMinutes: s.activityIdleResetMinutes,
             remindersEnabled: s.restRemindersEnabled
         )
-        let idle = forcedIdle ? Double.infinity : Self.systemIdleSeconds()
+        // Lock/sleep counts as idle immediately (>= the 60 s activity grace,
+        // so accumulation stops on the first locked tick), but the K-minute
+        // reset threshold is still only crossed after K real minutes away —
+        // report idle as at-least (time since lock + grace), never infinity.
+        let idle = forcedIdleSince.map { max(Self.systemIdleSeconds(), Date().timeIntervalSince($0) + 60) }
+            ?? Self.systemIdleSeconds()
         let front = NSWorkspace.shared.frontmostApplication
         let events = tracker.tick(now: Date(),
                                   idleSeconds: idle,

@@ -109,10 +109,13 @@ Transition rules (config read per tick, so settings changes apply live):
   reaches K minutes (tracked via `idleSeconds` itself — the system counter is
   already continuous) and the timer was nonzero → emit `.restCompleted` once
   and reset total, per-app, and reminder bookkeeping.
-- **Forced idle** (sleep/lock): the service passes `idleSeconds = .infinity`;
-  treated as idle. The wall-clock gap across sleep also exceeds K, so waking
-  after ≥K minutes resets (the 0…5 s delta clamp guarantees the sleep gap
-  itself never counts as activity).
+- **Forced idle** (sleep/lock): the service reports idle as at-least
+  (time since lock/sleep began + the 60 s activity grace), never infinity —
+  so accumulation stops on the very first locked tick (past the grace
+  immediately), but the K-minute reset threshold is still only crossed after
+  K real minutes away. Stepping away briefly and unlocking before K minutes
+  no longer erases the session (the 0…5 s delta clamp still guarantees the
+  gap itself never counts as activity).
 - **Reminders** (`config.remindersEnabled`): when `activeSeconds` crosses
   N minutes → emit `.reminderDue` once; while activity continues without a
   rest, re-emit each further M minutes (N, N+M, N+2M…). Reset clears the
@@ -129,10 +132,13 @@ Transition rules (config read per tick, so settings changes apply live):
   `.common` mode (same pattern as `AppEnvironment`'s countdown clock);
   subscribe to `NSWorkspace.willSleepNotification`,
   `NSWorkspace.screensDidSleepNotification` and the
-  `"com.apple.screenIsLocked"` distributed notification (set a `forcedIdle`
-  flag; cleared on the wake/unlock counterparts).
-- Each tick: `idle = forcedIdle ? .infinity :
-  CGEventSource.secondsSinceLastEventType(.combinedSessionState,
+  `"com.apple.screenIsLocked"` distributed notification (record
+  `forcedIdleSince = forcedIdleSince ?? Date()` on lock/sleep — don't restart
+  the clock if already set; cleared to `nil` on the wake/unlock counterparts).
+- Each tick: `idle = forcedIdleSince.map { max(systemIdleSeconds(),
+  Date().timeIntervalSince($0) + 60) } ?? systemIdleSeconds()`, where
+  `systemIdleSeconds()` reads
+  `CGEventSource.secondsSinceLastEventType(.combinedSessionState,
   eventType: kCGAnyInputEventType-equivalent)`, frontmost from
   `NSWorkspace.shared.frontmostApplication` (bundleID + localizedName), call
   `tracker.tick`, then:

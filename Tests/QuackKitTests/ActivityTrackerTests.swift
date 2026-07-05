@@ -69,11 +69,11 @@ import Testing
         #expect(a.topApps(5).isEmpty)
     }
 
-    @Test func forcedIdleInfinityResets() {
+    @Test func idleBeyondKResets() {
         var a = ActivityTracker()
         _ = a.tick(now: t0, idleSeconds: 0, frontmostBundleID: nil, frontmostName: nil, config: cfg)
         _ = run(&a, from: t0, seconds: 120)
-        let events = a.tick(now: t0.addingTimeInterval(121), idleSeconds: .infinity,
+        let events = a.tick(now: t0.addingTimeInterval(121), idleSeconds: 100_000,
                             frontmostBundleID: nil, frontmostName: nil, config: cfg)
         #expect(events == [.restCompleted])
         #expect(a.activeSeconds == 0)

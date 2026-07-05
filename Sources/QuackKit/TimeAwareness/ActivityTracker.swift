@@ -75,7 +75,7 @@ public struct ActivityTracker: Sendable {
         var events: [Event] = []
         if idleSeconds < Self.activityGraceSeconds {
             activeSeconds += delta
-            if let id = frontmostBundleID {
+            if delta > 0, let id = frontmostBundleID {
                 perAppSeconds[id, default: 0] += delta
                 if let name = frontmostName { appNames[id] = name }
             }
@@ -92,7 +92,7 @@ public struct ActivityTracker: Sendable {
                 }
             }
         } else if idleSeconds >= TimeInterval(config.idleResetMinutes * 60),
-                  activeSeconds > 0 || !perAppSeconds.isEmpty {
+                  activeSeconds > 0 {
             events.append(.restCompleted)
             reset()
         }
@@ -108,16 +108,15 @@ public struct ActivityTracker: Sendable {
         lastReminderAt = nil
     }
 
-    /// Top `n` apps by active time, ties broken by name.
+    /// Top `n` apps by active time, ties broken by name then bundleID.
     public func topApps(_ n: Int) -> [AppSlice] {
         let slices = perAppSeconds.map { (id: String, seconds: TimeInterval) -> AppSlice in
             AppSlice(bundleID: id, name: appNames[id] ?? id, seconds: seconds)
         }
         let sorted = slices.sorted { (a: AppSlice, b: AppSlice) -> Bool in
-            if a.seconds == b.seconds {
-                return a.name < b.name
-            }
-            return a.seconds > b.seconds
+            if a.seconds != b.seconds { return a.seconds > b.seconds }
+            if a.name != b.name { return a.name < b.name }
+            return a.bundleID < b.bundleID
         }
         return Array(sorted.prefix(n))
     }
