@@ -39,6 +39,7 @@ final class AppEnvironment: ObservableObject {
     private let dockPinchService: DockPinchMonitor
     private let temperatureService: TemperatureStatusItem
     private let notchService: NotchService
+    private let mouseService: MouseService
     let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
@@ -73,6 +74,7 @@ final class AppEnvironment: ObservableObject {
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.notchService = NotchService(settings: settings, permissions: permissions, installer: claudeInstaller)
+        self.mouseService = MouseService(settings: settings, permissions: permissions)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -84,6 +86,7 @@ final class AppEnvironment: ObservableObject {
             .dockPinch: dockPinchService,
             .temperature: temperatureService,
             .notch: notchService,
+            .mouse: mouseService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .temperature) }
@@ -263,6 +266,9 @@ final class AppEnvironment: ObservableObject {
         settingsStore.update { $0.displayBrightness[display.id] = fraction }
         brightnessController.apply(fraction: fraction, to: display)
     }
+
+    /// The pointer-sensitivity unit (settings UI reads `liveApplyAvailable`).
+    var mouseSensitivity: MouseSensitivityService { mouseService.sensitivity }
 
     /// Claude Code integration state/actions for the settings pane. Returns
     /// success; failures are logged, never fatal (the panel degrades quietly).
