@@ -16,10 +16,10 @@ final class ScrollSmootherService {
     /// Applied via the emitting `CGEventSource`'s `userData` (the Mos
     /// technique — the field is stamped onto every event the source posts)
     /// AND set directly on the event, belt and suspenders.
-    private static let magicUserData: Int64 = 0x0051_ACC5
+    nonisolated private static let magicUserData: Int64 = 0x0051_ACC5
 
-    private static let pixelsPerLine = 40.0
-    private static let frameInterval = DispatchTimeInterval.milliseconds(16)  // ~60 Hz
+    nonisolated private static let pixelsPerLine = 40.0
+    nonisolated private static let frameInterval = DispatchTimeInterval.milliseconds(16)  // ~60 Hz
 
     private let settings: SettingsStore
     private let permissions: PermissionsManager
@@ -74,7 +74,10 @@ final class ScrollSmootherService {
         tap?.stop()
         tap = nil
         emitQueue.async { [weak self] in self?.cancelTimerOnQueue() }
-        animLock.lock(); animator = ScrollAnimator(); animLock.unlock()
+        animLock.lock()
+        animator = ScrollAnimator()
+        timerRunning = false
+        animLock.unlock()
     }
 
     private func reinstallTap() {
@@ -157,11 +160,13 @@ final class ScrollSmootherService {
             src?.userData = Self.magicUserData
             emitSource = src
         }
+        let wheel1 = Int32(min(max(dy.rounded(), -10_000), 10_000))
+        let wheel2 = Int32(min(max(dx.rounded(), -10_000), 10_000))
         guard let ev = CGEvent(scrollWheelEvent2Source: emitSource,
                                units: .pixel,
                                wheelCount: 2,
-                               wheel1: Int32(dy.rounded()),
-                               wheel2: Int32(dx.rounded()),
+                               wheel1: wheel1,
+                               wheel2: wheel2,
                                wheel3: 0) else { return }
         ev.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         ev.setIntegerValueField(.eventSourceUserData, value: Self.magicUserData)
