@@ -4,7 +4,7 @@ import QuackKit
 /// The feature groups shown in the left sidebar. `general` is the schedule
 /// (agenda) view; `settings` holds the app-level preferences.
 enum SettingsTab: String, CaseIterable {
-    case general, calendar, temperature, display, windows, notch, settings
+    case general, calendar, temperature, display, windows, mouse, notch, settings
 
     var title: String {
         switch self {
@@ -13,6 +13,7 @@ enum SettingsTab: String, CaseIterable {
         case .display: return "Display"
         case .temperature: return "CPU"
         case .windows: return "Windows"
+        case .mouse: return "Mouse"
         case .notch: return "Notch"
         case .settings: return "Settings"
         }
@@ -25,6 +26,7 @@ enum SettingsTab: String, CaseIterable {
         case .display: return "sun.max"
         case .temperature: return "thermometer.medium"
         case .windows: return "macwindow.on.rectangle"
+        case .mouse: return "computermouse"
         case .notch: return "menubar.rectangle"
         case .settings: return "gearshape"
         }
@@ -43,7 +45,7 @@ private enum SidebarGroup: String, CaseIterable {
         switch self {
         case .top: return [.general]
         case .menuBar: return [.calendar, .temperature]
-        case .controls: return [.display, .windows, .notch]
+        case .controls: return [.display, .windows, .mouse, .notch]
         case .bottom: return [.settings]
         }
     }
@@ -157,6 +159,10 @@ struct SettingsPane: View {
                     WindowSwipeSection()
                     DockGesturesSection()
                     KeyboardShortcutsSection()
+                case .mouse:
+                    MousePointerSection()
+                    MouseScrollSection()
+                    MouseButtonsSection()
                 case .notch:
                     NotchSection()
                 case .settings:
@@ -1082,6 +1088,141 @@ private struct DockGesturesSection: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Mouse
+
+private struct MousePointerSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Pointer") {
+            Toggle("Override tracking speed", isOn: s.binding(\.mouseSensitivityEnabled))
+            Text("Sets the system-wide pointer speed. Turning this off restores the speed you had before.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            if s.settings.mouseSensitivityEnabled {
+                HStack {
+                    Image(systemName: "tortoise").foregroundStyle(.secondary)
+                    Slider(value: s.binding(\.mouseSensitivity), in: 0...3)
+                    Image(systemName: "hare").foregroundStyle(.secondary)
+                }
+                if !env.mouseSensitivity.liveApplyAvailable {
+                    Text("Live apply unavailable on this macOS — changes take effect after replugging the mouse or logging in again.")
+                        .font(.system(size: 12)).foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+}
+
+private struct MouseScrollSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Scrolling") {
+            Toggle("Smooth scrolling", isOn: s.binding(\.smoothScrollEnabled))
+            Text("Animates scroll-wheel ticks into smooth motion, like a trackpad. Trackpads and Magic Mouse are unaffected.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            if s.settings.smoothScrollEnabled,
+               env.permissions.status(for: .accessibility) != .granted {
+                HStack {
+                    Text("Requires Accessibility permission.")
+                        .font(.system(size: 12)).foregroundStyle(.orange)
+                    Button("Grant") { env.permissions.requestAccessibilityAccess() }
+                }
+            }
+        }
+    }
+}
+
+private struct MouseButtonsSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        let anyRemapped = s.settings.mouseButton4Action != MouseButtonAction.default_.rawValue
+            || s.settings.mouseButton5Action != MouseButtonAction.default_.rawValue
+        Section("Extra buttons") {
+            buttonRow(label: "Button 4",
+                      action: \.mouseButton4Action, shortcut: \.mouseButton4Shortcut)
+            buttonRow(label: "Button 5",
+                      action: \.mouseButton5Action, shortcut: \.mouseButton5Shortcut)
+            Text("Buttons 4 and 5 are the side (back/forward) buttons on most mice.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            if anyRemapped, env.permissions.status(for: .accessibility) != .granted {
+                HStack {
+                    Text("Requires Accessibility permission.")
+                        .font(.system(size: 12)).foregroundStyle(.orange)
+                    Button("Grant") { env.permissions.requestAccessibilityAccess() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func buttonRow(label: String,
+                           action: WritableKeyPath<QuackSettings, String>,
+                           shortcut: WritableKeyPath<QuackSettings, MouseShortcut?>) -> some View {
+        let s = env.settingsStore
+        let actionBinding = Binding<MouseButtonAction>(
+            get: { MouseButtonAction.from(s.settings[keyPath: action]) },
+            set: { new in s.update { $0[keyPath: action] = new.rawValue } }
+        )
+        Picker(label, selection: actionBinding) {
+            ForEach(MouseButtonAction.allCases, id: \.self) { a in
+                Text(a.title).tag(a)
+            }
+        }
+        if actionBinding.wrappedValue == .customShortcut {
+            ShortcutRecorderField(shortcut: s.binding(shortcut))
+        }
+    }
+}
+
+/// Click-to-record keyboard shortcut field. Recording uses a local NSEvent
+/// monitor (only sees keys while Quack's settings window is focused) — no
+/// event tap, no extra permissions. Esc cancels.
+private struct ShortcutRecorderField: View {
+    @Binding var shortcut: MouseShortcut?
+    @State private var recording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        HStack {
+            Text("Shortcut")
+            Spacer()
+            Button {
+                recording ? stopRecording() : startRecording()
+            } label: {
+                Text(recording ? "Press keys… (⎋ cancels)" : (shortcut?.display ?? "Record Shortcut"))
+                    .frame(minWidth: 140)
+            }
+        }
+        .onDisappear { stopRecording() }
+    }
+
+    private func startRecording() {
+        recording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            defer { stopRecording() }
+            if event.keyCode == 53 { return nil }   // Esc — cancel, keep old value
+            var mask = 0
+            if event.modifierFlags.contains(.command) { mask |= 0b0001 }
+            if event.modifierFlags.contains(.option) { mask |= 0b0010 }
+            if event.modifierFlags.contains(.control) { mask |= 0b0100 }
+            if event.modifierFlags.contains(.shift) { mask |= 0b1000 }
+            shortcut = MouseShortcut(keyCode: Int(event.keyCode), modifiers: mask)
+            return nil   // consume — don't let the combo trigger anything
+        }
+    }
+
+    private func stopRecording() {
+        recording = false
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 }
 
