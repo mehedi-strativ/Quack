@@ -26,16 +26,22 @@ struct NotchContentView: View {
 
     private var expanded: some View {
         VStack(spacing: 0) {
+            Spacer().frame(height: model.contentTopInset)
+            if !model.hiddenIcons.isEmpty {
+                hiddenIconsRow
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+            }
             if model.agentsEnabled {
                 VStack(alignment: .leading, spacing: 10) {
                     NotchHeaderView(model: model)
                     agentsZone
                 }
                 .padding(.horizontal, 14)
-                .padding(.top, model.contentTopInset + 10)
+                .padding(.top, 10)
                 .padding(.bottom, 10)
             } else {
-                Spacer().frame(height: model.contentTopInset + 6)
+                Spacer().frame(height: 6)
             }
             Spacer(minLength: 0)
             if model.mediaEnabled {
@@ -46,6 +52,22 @@ struct NotchContentView: View {
         .background(NotchTheme.panel)
         .clipShape(NotchShape())
         .foregroundStyle(.white)
+    }
+
+    /// The menu-bar icons the notch is hiding, mirrored live. Tap forwards the
+    /// click to the real (crushed) status item.
+    private var hiddenIconsRow: some View {
+        HStack(spacing: 10) {
+            ForEach(model.hiddenIcons) { item in
+                Image(nsImage: item.image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 18)
+                    .onTapGesture { model.onHiddenIconTap?(item.source) }
+                    .help("Reveal hidden menu bar item")
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder

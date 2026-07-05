@@ -14,6 +14,8 @@ final class NotchContentViewModel: ObservableObject {
     @Published var mediaEnabled = false
     @Published var agentsEnabled = false
     @Published var integrationInstalled = false
+    /// Menu-bar icons the notch is hiding, mirrored live; shown above the agents.
+    @Published var hiddenIcons: [NotchItem] = []
     /// Real notch height for this screen; view pads content below the cutout.
     @Published var contentTopInset: CGFloat = 0
 
@@ -22,6 +24,7 @@ final class NotchContentViewModel: ObservableObject {
     var onNext: (() -> Void)?
     var onPrevious: (() -> Void)?
     var onAgentTap: ((AgentSnapshot) -> Void)?
+    var onHiddenIconTap: ((StatusItemFrame) -> Void)?
 
     var needsYouCount: Int { agents.filter { $0.status == .needsYou }.count }
     var activeCount: Int { agents.filter { $0.status != .idle }.count }

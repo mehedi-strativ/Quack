@@ -12,6 +12,7 @@ import QuackKit
 @MainActor
 final class NotchService: NSObject, ManagedService {
     private let settings: SettingsStore
+    private let permissions: PermissionsManager
     private let reader = NotchScreenReader()
     private let model = NotchContentViewModel()
     private let nowPlaying = NowPlayingService()
@@ -22,12 +23,19 @@ final class NotchService: NSObject, ManagedService {
     private var mediaRunning = false
     private var agentsRunning = false
 
+    /// Guards `requestScreenRecording()` (a TCC prompt) so it fires at most
+    /// once per service lifetime, not on every hover-in while ungranted.
+    private var hasRequestedScreenRecording = false
+
     private let hoverMargin: CGFloat = 24
     private let expandedWidth: CGFloat = 420
     private let mediaOnlyContentHeight: CGFloat = 58
+    /// Height of the hidden-icons row (18pt icons + top padding).
+    private let hiddenIconsRowHeight: CGFloat = 26
 
-    init(settings: SettingsStore, installer: ClaudeConfigInstaller) {
+    init(settings: SettingsStore, permissions: PermissionsManager, installer: ClaudeConfigInstaller) {
         self.settings = settings
+        self.permissions = permissions
         self.agentsService = ClaudeAgentsService(installer: installer)
     }
 
@@ -53,6 +61,7 @@ final class NotchService: NSObject, ManagedService {
         model.isOpen = false
         model.track = nil
         model.agents = []
+        model.hiddenIcons = []
     }
 
     private func wireIfNeeded() {
@@ -63,6 +72,7 @@ final class NotchService: NSObject, ManagedService {
         model.onNext = { [weak self] in self?.nowPlaying.next() }
         model.onPrevious = { [weak self] in self?.nowPlaying.previous() }
         model.onAgentTap = { [weak self] agent in self?.focusAgent(agent) }
+        model.onHiddenIconTap = { [weak self] item in self?.forwardHiddenIconTap(item) }
 
         nowPlaying.$track
             .sink { [weak self] t in self?.model.track = t }
@@ -170,6 +180,7 @@ final class NotchService: NSObject, ManagedService {
     /// tuned on hardware in Task 12.
     private func expandedHeight() -> CGFloat {
         var h: CGFloat = 10                                     // top padding
+        if !model.hiddenIcons.isEmpty { h += hiddenIconsRowHeight }
         if model.agentsEnabled {
             h += 30                                             // header row
             if !model.integrationInstalled || model.agents.isEmpty {
@@ -188,8 +199,52 @@ final class NotchService: NSObject, ManagedService {
 
     private func handleHover(_ hovering: Bool) {
         model.isOpen = hovering
-        if hovering { refreshTokensToday() }
+        if hovering {
+            refreshTokensToday()
+            refreshHiddenIcons()
+        } else {
+            model.hiddenIcons = []
+        }
         reposition()
+    }
+
+    /// Mirrors the menu-bar icons the notch is hiding into the top of the
+    /// panel. Same flow as `NotchIconRevealService.handleHover`: the notch
+    /// layout is read here on the main actor; the window-list scan and
+    /// per-item pixel captures run on a background queue (thread-safe system
+    /// reads) so the expand animation doesn't hitch. The pixel mirror needs
+    /// Screen Recording; prompt for it at most once per service lifetime.
+    private func refreshHiddenIcons() {
+        permissions.refreshScreenRecording()
+        if permissions.status(for: .screenRecording) != .granted, !hasRequestedScreenRecording {
+            hasRequestedScreenRecording = true
+            _ = permissions.requestScreenRecording()
+        }
+
+        guard let layout = reader.currentLayout() else {
+            model.hiddenIcons = []
+            return
+        }
+        let notch = layout.span
+        let screenXRange = layout.screen.frame.minX...layout.screen.frame.maxX
+        DispatchQueue.global(qos: .userInitiated).async {
+            let items = NotchIconCapture.scanAndMirror(notch: notch, screenXRange: screenXRange)
+            DispatchQueue.main.async { [weak self] in
+                // Drop late results if the pointer already left the notch.
+                guard let self, self.model.isOpen else { return }
+                self.model.hiddenIcons = items
+                self.reposition()
+            }
+        }
+    }
+
+    /// Click-through to the real (crushed) status item; needs Accessibility.
+    private func forwardHiddenIconTap(_ item: StatusItemFrame) {
+        guard permissions.status(for: .accessibility) == .granted else {
+            permissions.requestAccessibilityAccess()
+            return
+        }
+        StatusItemForwarder.forward(to: item)
     }
 
     /// Click-to-focus: activate the app hosting the agent's session; fall back

@@ -142,30 +142,13 @@ final class NotchIconRevealService: NSObject, ManagedService {
         let notch = layout.span
         let screenXRange = layout.screen.frame.minX...layout.screen.frame.maxX
         DispatchQueue.global(qos: .userInitiated).async {
-            let items = Self.scanAndMirror(notch: notch, screenXRange: screenXRange)
+            let items = NotchIconCapture.scanAndMirror(notch: notch, screenXRange: screenXRange)
             DispatchQueue.main.async { [weak self] in
                 // Drop late results if the pointer already left the notch.
                 guard let self, self.model.isOpen else { return }
                 self.model.items = items
                 self.reposition()
             }
-        }
-    }
-
-    /// Scans for crushed status items and captures a live pixel snapshot of each.
-    /// Runs off the main actor: `CGWindowListCopyWindowInfo` /
-    /// `CGWindowListCreateImage` are thread-safe and touch no main-actor state, so
-    /// the caller runs this on a background queue to keep the hover-in expand
-    /// animation smooth. `notch` / `screenXRange` are captured from
-    /// `NotchScreenReader.currentLayout()` on the main actor before dispatch.
-    private nonisolated static func scanAndMirror(
-        notch: NotchGeometry.NotchSpan,
-        screenXRange: ClosedRange<CGFloat>
-    ) -> [NotchItem] {
-        let crushed = StatusItemScanner.scan(notch: notch, screenXRange: screenXRange)
-        return crushed.compactMap { item in
-            guard let image = StatusItemMirror.snapshot(of: item) else { return nil }
-            return NotchItem(id: item.windowID, image: image, source: item)
         }
     }
 

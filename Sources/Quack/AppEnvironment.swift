@@ -74,7 +74,7 @@ final class AppEnvironment: ObservableObject {
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.notchRevealService = NotchIconRevealService(settings: settings, permissions: permissions)
-        self.notchService = NotchService(settings: settings, installer: claudeInstaller)
+        self.notchService = NotchService(settings: settings, permissions: permissions, installer: claudeInstaller)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
