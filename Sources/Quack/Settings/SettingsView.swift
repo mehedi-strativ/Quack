@@ -4,17 +4,16 @@ import QuackKit
 /// The feature groups shown in the left sidebar. `general` is the schedule
 /// (agenda) view; `settings` holds the app-level preferences.
 enum SettingsTab: String, CaseIterable {
-    case general, calendar, temperature, display, windows, notch, permissions, settings
+    case general, calendar, temperature, display, windows, notch, settings
 
     var title: String {
         switch self {
         case .general: return "Dashboard"
-        case .calendar: return "Calendar"
+        case .calendar: return "Agenda"
         case .display: return "Display"
         case .temperature: return "CPU"
         case .windows: return "Windows"
         case .notch: return "Notch"
-        case .permissions: return "Permissions"
         case .settings: return "Settings"
         }
     }
@@ -27,7 +26,6 @@ enum SettingsTab: String, CaseIterable {
         case .temperature: return "thermometer.medium"
         case .windows: return "macwindow.on.rectangle"
         case .notch: return "menubar.rectangle"
-        case .permissions: return "lock.shield"
         case .settings: return "gearshape"
         }
     }
@@ -39,7 +37,6 @@ private enum SidebarGroup: String, CaseIterable {
     case top = ""
     case menuBar = "Menu Bar"
     case controls = "Controls"
-    case system = "System"
     case bottom = " "
 
     var tabs: [SettingsTab] {
@@ -47,7 +44,6 @@ private enum SidebarGroup: String, CaseIterable {
         case .top: return [.general]
         case .menuBar: return [.calendar, .temperature]
         case .controls: return [.display, .windows, .notch]
-        case .system: return [.permissions]
         case .bottom: return [.settings]
         }
     }
@@ -164,13 +160,12 @@ struct SettingsPane: View {
                 case .notch:
                     NotchSection()
                     NotchRevealSection()
-                case .permissions:
-                    PermissionsSection()
-                    StatusSection()
                 case .settings:
                     SettingsSection()
                     CalendarSection()
                     RemindersSection()
+                    PermissionsSection()
+                    StatusSection()
                 case .general, .calendar:
                     EmptyView()
                 }
@@ -258,7 +253,7 @@ private struct DashboardView: View {
                     DashCard(tab: .temperature) { cpuSummary }
                     DashCard(tab: .display) { displaySummary }
                     DashCard(tab: .windows) { windowsSummary }
-                    DashCard(tab: .permissions) { permissionsSummary }
+                    DashCard(tab: .settings, title: "Permissions", icon: "lock.shield") { permissionsSummary }
                 }
             }
             .padding(20)
@@ -401,6 +396,8 @@ private struct DashboardView: View {
 private struct DashCard<Content: View>: View {
     @EnvironmentObject var env: AppEnvironment
     let tab: SettingsTab
+    var title: String?
+    var icon: String?
     @ViewBuilder var content: () -> Content
     @State private var hovering = false
 
@@ -408,10 +405,10 @@ private struct DashCard<Content: View>: View {
         Button { withAnimation(.easeInOut(duration: 0.15)) { env.settingsTab = tab } } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Image(systemName: tab.icon)
+                    Image(systemName: icon ?? tab.icon)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.accentColor).frame(width: 20)
-                    Text(tab.title).font(.system(size: 15, weight: .semibold))
+                    Text(title ?? tab.title).font(.system(size: 15, weight: .semibold))
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
@@ -524,10 +521,19 @@ private struct CalendarAgendaView: View {
     }
 
     private func dayRow(_ section: DaySection) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        // On today's row, a red "now" line sits between what's over and what's
+        // next (after all-day events, which have no time of their own).
+        let nowIndex: Int? = cal.isDateInToday(section.dayStart)
+            ? section.events.firstIndex { !$0.isAllDay && $0.start > env.now } ?? section.events.count
+            : nil
+        return HStack(alignment: .top, spacing: 8) {
             dayColumn(section.dayStart)
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(section.events) { AgendaEventRow(event: $0, now: env.now) }
+                ForEach(Array(section.events.enumerated()), id: \.element.id) { i, event in
+                    if i == nowIndex { NowLine(now: env.now) }
+                    AgendaEventRow(event: event, now: env.now)
+                }
+                if nowIndex == section.events.count { NowLine(now: env.now) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 8)
@@ -565,15 +571,25 @@ private struct CalendarAgendaView: View {
 
     /// Events grouped into day buckets (all events in the month, including past
     /// ones, so navigating back shows history). All-day events sort first.
+    /// In the current month, today always gets a section (even with no events)
+    /// so the "now" line has somewhere to live.
     private var sections: [DaySection] {
         let grouped = Dictionary(grouping: events) { cal.startOfDay(for: $0.start) }
-        return grouped
+        var result = grouped
             .map { day, evs in
                 DaySection(dayStart: day, events: evs.sorted { a, b in
                     a.isAllDay != b.isAllDay ? a.isAllDay : a.start < b.start
                 })
             }
             .sorted { $0.dayStart < $1.dayStart }
+        if isCurrentMonth {
+            let today = cal.startOfDay(for: env.now)
+            if !result.contains(where: { $0.dayStart == today }) {
+                result.append(DaySection(dayStart: today, events: []))
+                result.sort { $0.dayStart < $1.dayStart }
+            }
+        }
+        return result
     }
 
     private func load() async {
@@ -587,6 +603,31 @@ private struct CalendarAgendaView: View {
     }()
     private static let dayLabel: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "MMM, EEE"; return f
+    }()
+}
+
+/// The red "now" marker on today's agenda row: date-and-time stamp, a dot, and
+/// a rule across the remaining width. Rides `env.now` so it moves on its own.
+private struct NowLine: View {
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(Self.stamp.string(from: now))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.red)
+            Circle().fill(.red).frame(width: 6, height: 6)
+            Rectangle().fill(.red).frame(height: 1.5)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .accessibilityLabel("Now: \(Self.stamp.string(from: now))")
+    }
+
+    private static let stamp: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("MMM d, j:mm")
+        return f
     }()
 }
 
