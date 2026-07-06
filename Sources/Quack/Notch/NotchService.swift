@@ -11,6 +11,8 @@ import QuackKit
 /// content hangs DOWN, never behind the physical cutout.
 @MainActor
 final class NotchService: NSObject, ManagedService {
+    /// Set by AppEnvironment after construction (opens the Settings window).
+    var onOpenSettings: (() -> Void)?
     private let settings: SettingsStore
     private let permissions: PermissionsManager
     private let reader = NotchScreenReader()
@@ -73,6 +75,7 @@ final class NotchService: NSObject, ManagedService {
         model.onPrevious = { [weak self] in self?.nowPlaying.previous() }
         model.onAgentTap = { [weak self] agent in self?.focusAgent(agent) }
         model.onHiddenIconTap = { [weak self] item in self?.forwardHiddenIconTap(item) }
+        model.onOpenQuack = { [weak self] in self?.onOpenSettings?() }
 
         nowPlaying.$track
             .sink { [weak self] t in self?.model.track = t }

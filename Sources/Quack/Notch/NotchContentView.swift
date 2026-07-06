@@ -58,16 +58,16 @@ struct NotchContentView: View {
     /// Placeholder when nothing is hidden, so the row is always visible.
     @ViewBuilder
     private var hiddenIconsRow: some View {
-        if model.hiddenIcons.isEmpty {
-            Text(model.axTrusted
-                 ? "No icons hidden behind the notch"
-                 : "Grant Accessibility to show hidden icons")
-                .font(.system(size: 10))
-                .foregroundStyle(model.axTrusted ? NotchTheme.textMuted : NotchTheme.orange)
-                .frame(maxWidth: .infinity)
-                .frame(height: 18)
-        } else {
-            HStack(spacing: 10) {
+        HStack(spacing: 10) {
+            if model.hiddenIcons.isEmpty {
+                Text(model.axTrusted
+                     ? "No icons hidden behind the notch"
+                     : "Grant Accessibility to show hidden icons")
+                    .font(.system(size: 10))
+                    .foregroundStyle(model.axTrusted ? NotchTheme.textMuted : NotchTheme.orange)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Spacer(minLength: 0)
                 ForEach(model.hiddenIcons) { item in
                     Group {
                         if let icon = item.icon {
@@ -80,9 +80,20 @@ struct NotchContentView: View {
                     .onTapGesture { model.onHiddenIconTap?(item) }
                     .help("\(item.appName): \(item.title)")
                 }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
+            Divider().frame(height: 14)
+            // Quack's own items are excluded from the scan (self-AXPress
+            // crashes off-main), so the duck gets a real button instead —
+            // plain SwiftUI tap on the main thread.
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable().aspectRatio(contentMode: .fit)
+                .frame(width: 18, height: 18)
+                .onTapGesture { model.onOpenQuack?() }
+                .help("Open Quack")
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 18)
     }
 
     @ViewBuilder
