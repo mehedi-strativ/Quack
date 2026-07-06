@@ -55,6 +55,12 @@ enum AXStatusItemScanner {
         notch: NotchGeometry.NotchSpan,
         menuBarBandY: ClosedRange<CGFloat>
     ) -> [(frame: CGRect, item: HiddenStatusItem)] {
+        // Never list Quack's own items: they'd all render as identical duck
+        // app-icons, and AXPress on an own-process element runs the button's
+        // action synchronously ON THE CALLING (background) THREAD — main-only
+        // AppKit then traps (see crash: openSettings → makeKeyAndOrderFront
+        // off-main). Same self-targeting class as the window-shortcuts crash.
+        guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return [] }
         let ax = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(ax, 0.25)
         guard let bar = element(attr(ax, "AXExtrasMenuBar")),
