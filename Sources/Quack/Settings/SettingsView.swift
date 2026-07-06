@@ -1286,6 +1286,8 @@ private struct MouseButtonsSection: View {
         if actionBinding.wrappedValue == .customShortcut {
             ShortcutRecorderField(shortcut: s.binding(shortcut),
                                    recorderID: id, activeRecorder: $activeRecorder)
+            Text("System shortcuts like ⌃+Arrow or ⌘Space can't be recorded here — use the action list above if there's a match.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
         }
     }
 }
