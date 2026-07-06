@@ -21,6 +21,12 @@ import Testing
     @Test func titlesNonEmpty() {
         for action in MouseButtonAction.allCases { #expect(!action.title.isEmpty) }
     }
+    @Test func desktopNavigationCases() {
+        #expect(MouseButtonAction.desktopNext.title == "Desktop Next")
+        #expect(MouseButtonAction.desktopPrevious.title == "Desktop Previous")
+        #expect(MouseButtonAction.desktopNext.rawValue == "desktopNext")
+        #expect(MouseButtonAction.desktopPrevious.rawValue == "desktopPrevious")
+    }
 }
 
 @Suite struct MouseShortcutTests {

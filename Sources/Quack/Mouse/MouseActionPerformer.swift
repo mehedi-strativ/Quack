@@ -16,6 +16,10 @@ enum MouseActionPerformer {
             postKeystroke(keyCode: 125, flags: .maskControl)          // ⌃↓
         case .showDesktop:
             postKeystroke(keyCode: 103, flags: [])                    // F11 (default binding)
+        case .desktopNext:
+            postKeystroke(keyCode: 124, flags: .maskControl)          // ⌃→
+        case .desktopPrevious:
+            postKeystroke(keyCode: 123, flags: .maskControl)          // ⌃←
         case .playPause:
             postMediaKey(16)    // NX_KEYTYPE_PLAY
         case .nextTrack:

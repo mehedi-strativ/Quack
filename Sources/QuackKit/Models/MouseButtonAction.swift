@@ -7,6 +7,8 @@ public enum MouseButtonAction: String, CaseIterable, Codable, Sendable {
     case missionControl
     case appExpose
     case showDesktop
+    case desktopNext
+    case desktopPrevious
     case playPause
     case nextTrack
     case previousTrack
@@ -26,6 +28,8 @@ public enum MouseButtonAction: String, CaseIterable, Codable, Sendable {
         case .missionControl: return "Mission Control"
         case .appExpose: return "Application Windows"
         case .showDesktop: return "Show Desktop"
+        case .desktopNext: return "Desktop Next"
+        case .desktopPrevious: return "Desktop Previous"
         case .playPause: return "Play / Pause"
         case .nextTrack: return "Next Track"
         case .previousTrack: return "Previous Track"
