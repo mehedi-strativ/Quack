@@ -71,14 +71,15 @@ enum MouseActionPerformer {
         }
     }
 
-    /// Same bitmask convention as `windowShortcutModifiers` / `MouseShortcut`:
-    /// bit0 ⌘, bit1 ⌥, bit2 ⌃, bit3 ⇧.
+    /// Same bitmask convention as `MouseShortcut`: bit0 ⌘, bit1 ⌥, bit2 ⌃,
+    /// bit3 ⇧, bit4 fn.
     private static func flags(from mask: Int) -> CGEventFlags {
         var flags = CGEventFlags()
         if mask & 0b0001 != 0 { flags.insert(.maskCommand) }
         if mask & 0b0010 != 0 { flags.insert(.maskAlternate) }
         if mask & 0b0100 != 0 { flags.insert(.maskControl) }
         if mask & 0b1000 != 0 { flags.insert(.maskShift) }
+        if mask & 0b10000 != 0 { flags.insert(.maskSecondaryFn) }
         return flags
     }
 }

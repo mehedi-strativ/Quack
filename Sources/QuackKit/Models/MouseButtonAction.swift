@@ -28,8 +28,8 @@ public enum MouseButtonAction: String, CaseIterable, Codable, Sendable {
         case .missionControl: return "Mission Control"
         case .appExpose: return "Application Windows"
         case .showDesktop: return "Show Desktop"
-        case .desktopNext: return "Desktop Next"
-        case .desktopPrevious: return "Desktop Previous"
+        case .desktopNext: return "Next Space"
+        case .desktopPrevious: return "Previous Space"
         case .playPause: return "Play / Pause"
         case .nextTrack: return "Next Track"
         case .previousTrack: return "Previous Track"
@@ -43,8 +43,9 @@ public enum MouseButtonAction: String, CaseIterable, Codable, Sendable {
 }
 
 /// A recorded keyboard shortcut for `MouseButtonAction.customShortcut`.
-/// `modifiers` uses the same bitmask convention as `windowShortcutModifiers`:
-/// bit0 ⌘, bit1 ⌥, bit2 ⌃, bit3 ⇧.
+/// `modifiers` uses the same bitmask convention as `windowShortcutModifiers`
+/// for the first four bits (bit0 ⌘, bit1 ⌥, bit2 ⌃, bit3 ⇧), plus bit4 for fn
+/// — added so mouse shortcuts can compose Fn-modified combos.
 public struct MouseShortcut: Codable, Equatable, Sendable {
     public var keyCode: Int
     public var modifiers: Int
@@ -54,9 +55,10 @@ public struct MouseShortcut: Codable, Equatable, Sendable {
         self.modifiers = modifiers
     }
 
-    /// Human-readable form, e.g. "⌘⇧K". Symbol order matches macOS: ⌃⌥⇧⌘.
+    /// Human-readable form, e.g. "⌘⇧K". Symbol order matches macOS: fn⌃⌥⇧⌘.
     public var display: String {
         var s = ""
+        if modifiers & 0b10000 != 0 { s += "fn" }
         if modifiers & 0b0100 != 0 { s += "⌃" }
         if modifiers & 0b0010 != 0 { s += "⌥" }
         if modifiers & 0b1000 != 0 { s += "⇧" }

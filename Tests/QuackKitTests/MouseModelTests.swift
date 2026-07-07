@@ -22,8 +22,8 @@ import Testing
         for action in MouseButtonAction.allCases { #expect(!action.title.isEmpty) }
     }
     @Test func desktopNavigationCases() {
-        #expect(MouseButtonAction.desktopNext.title == "Desktop Next")
-        #expect(MouseButtonAction.desktopPrevious.title == "Desktop Previous")
+        #expect(MouseButtonAction.desktopNext.title == "Next Space")
+        #expect(MouseButtonAction.desktopPrevious.title == "Previous Space")
         #expect(MouseButtonAction.desktopNext.rawValue == "desktopNext")
         #expect(MouseButtonAction.desktopPrevious.rawValue == "desktopPrevious")
     }
@@ -42,6 +42,12 @@ import Testing
     }
     @Test func displayFallsBackForUnknownKey() {
         #expect(MouseShortcut(keyCode: 999, modifiers: 0b0001).display == "⌘key999")
+    }
+    @Test func displayIncludesFnModifier() {
+        // fn is bit4 — renders leading the rest, before ⌃⌥⇧⌘, matching the
+        // physical key row order (fn is bottom-left of every modifier).
+        #expect(MouseShortcut(keyCode: 123, modifiers: 0b10100).display == "fn⌃←")
+        #expect(MouseShortcut(keyCode: 124, modifiers: 0b10000).display == "fn→")
     }
 }
 

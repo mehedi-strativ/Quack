@@ -1286,40 +1286,78 @@ private struct MouseButtonsSection: View {
         if actionBinding.wrappedValue == .customShortcut {
             ShortcutRecorderField(shortcut: s.binding(shortcut),
                                    recorderID: id, activeRecorder: $activeRecorder)
-            Text("System shortcuts like ⌃+Arrow or ⌘Space can't be recorded here — use the action list above if there's a match.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
         }
     }
 }
 
-/// Click-to-record keyboard shortcut field. Recording uses a local NSEvent
-/// monitor (only sees keys while Quack's settings window is focused) — no
-/// event tap, no extra permissions. Esc cancels.
+/// Composes a keyboard shortcut from modifier toggle chips + a recorded plain
+/// key, instead of requiring the user to physically press the whole combo.
 ///
-/// `activeRecorder` is shared across sibling fields (see `MouseButtonsSection`):
-/// AppKit delivers a keydown to every registered local monitor regardless of
-/// what any one of them returns, so without this, recording on two fields at
-/// once would silently map both buttons to the same keypress.
+/// That's not a UX nicety — it's the only way to produce OS-reserved combos
+/// (⌃→, ⌘Space, …) at all: the global Symbolic Hotkey handler consumes those
+/// combos before any app's local `NSEvent` monitor ever sees them, so the old
+/// "press the combo" recorder could never capture them. Toggling ⌃ on and
+/// recording a bare `→` (never intercepted, since Control isn't held) sidesteps
+/// that entirely.
+///
+/// Recording uses a local NSEvent monitor (only sees keys while Quack's
+/// settings window is focused) — no event tap, no extra permissions. Esc
+/// cancels. `activeRecorder` is shared across sibling fields (see
+/// `MouseButtonsSection`): AppKit delivers a keydown to every registered local
+/// monitor regardless of what any one of them returns, so without this,
+/// recording on two fields at once would silently map both buttons to the
+/// same keypress.
 private struct ShortcutRecorderField: View {
     @Binding var shortcut: MouseShortcut?
     let recorderID: Int
     @Binding var activeRecorder: Int?
     @State private var recording = false
     @State private var monitor: Any?
+    @State private var modifierMask = 0
+
+    private static let chips: [(bit: Int, label: String)] = [
+        (0b10000, "fn"), (0b0100, "⌃"), (0b0010, "⌥"), (0b1000, "⇧"), (0b0001, "⌘"),
+    ]
 
     var body: some View {
-        HStack {
-            Text("Shortcut")
-            Spacer()
-            Button {
-                recording ? stopRecording() : startRecording()
-            } label: {
-                Text(recording ? "Press keys… (⎋ cancels)" : (shortcut?.display ?? "Record Shortcut"))
-                    .frame(minWidth: 140)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Modifiers")
+                Spacer()
+                ForEach(Self.chips, id: \.bit) { chip in
+                    Toggle(chip.label, isOn: chipBinding(chip.bit))
+                        .toggleStyle(.button)
+                        .controlSize(.small)
+                }
             }
-            .disabled(activeRecorder != nil && activeRecorder != recorderID)
+            HStack {
+                Text("Key")
+                Spacer()
+                Button {
+                    recording ? stopRecording() : startRecording()
+                } label: {
+                    Text(recording ? "Press a key… (⎋ cancels)" : (shortcut?.display ?? "Record Key"))
+                        .frame(minWidth: 140)
+                }
+                .disabled(activeRecorder != nil && activeRecorder != recorderID)
+            }
         }
+        .onAppear { modifierMask = shortcut?.modifiers ?? 0 }
         .onDisappear { stopRecording() }
+    }
+
+    /// Toggling a chip updates the pending mask immediately; if a key is
+    /// already recorded, it re-applies live with no need to re-record.
+    private func chipBinding(_ bit: Int) -> Binding<Bool> {
+        Binding(
+            get: { modifierMask & bit != 0 },
+            set: { on in
+                modifierMask = on ? (modifierMask | bit) : (modifierMask & ~bit)
+                if let existing = shortcut {
+                    shortcut = MouseShortcut(keyCode: existing.keyCode, modifiers: modifierMask)
+                }
+            }
+        )
     }
 
     private func startRecording() {
@@ -1329,13 +1367,10 @@ private struct ShortcutRecorderField: View {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             defer { stopRecording() }
             if event.keyCode == 53 { return nil }   // Esc — cancel, keep old value
-            var mask = 0
-            if event.modifierFlags.contains(.command) { mask |= 0b0001 }
-            if event.modifierFlags.contains(.option) { mask |= 0b0010 }
-            if event.modifierFlags.contains(.control) { mask |= 0b0100 }
-            if event.modifierFlags.contains(.shift) { mask |= 0b1000 }
-            shortcut = MouseShortcut(keyCode: Int(event.keyCode), modifiers: mask)
-            return nil   // consume — don't let the combo trigger anything
+            // Modifiers come from the chips, not the physical keypress — a
+            // held Control here would mean the OS already ate the combo.
+            shortcut = MouseShortcut(keyCode: Int(event.keyCode), modifiers: modifierMask)
+            return nil   // consume — don't let the key trigger anything
         }
     }
 
