@@ -187,11 +187,29 @@ accordingly.
 - Automatic item movement / checklist config — manual ⌘-drag only.
 - "Show when updated" per-item reveal rules.
 
+## Task 0 spike result (2026-07-13, macOS 26.5.1, 14" MBP)
+
+Run on hardware before building. Two findings:
+
+- **On-screen capture works.** `CGWindowListCreateImage(windowID)` returns
+  non-black images for other apps' menu-bar item windows (layer 25) with Screen
+  Recording granted.
+- **Off-screen capture FAILS.** Items pushed to negative X by the divider trick
+  still appear in the all-windows list (`CGWindowListCopyWindowInfo` without
+  `.optionOnScreenOnly`) but `CGWindowListCreateImage` returns **nil** for them —
+  the window server keeps no capturable backing for off-screen windows. The
+  zero-flicker Ice-style off-screen capture does **not** work on this machine.
+- **Architecture note:** menu-bar status-item windows (ours and third-party) are
+  owned by **Control Center**, not the originating app, in the window list.
+  Enumerate by layer 25 across all owners, not by pid.
+
+**Consequence:** real-glyph rendering requires the items to be on-screen at
+capture time. See the reveal-rendering decision below (temp-show-to-capture vs.
+AX app-icons); the pure off-screen-capture panel is not viable here.
+
 ## Verification approach
 
-- **Spike first:** confirm `CGWindowListCreateImage` captures an off-screen
-  (negative-X) status-item window with Screen Recording granted. Gate the rest of
-  the build on this.
+- **Spike (done):** see the Task 0 result above.
 - Manual: hide several real apps' icons via ⌘-drag; confirm collapse, hover
   reveal with correct glyphs, click opens each app's real menu, re-collapse.
 - Confirm no input freeze on toggling Accessibility / Screen Recording (regression
