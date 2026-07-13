@@ -92,6 +92,12 @@ enum AXStatusItemScanner {
         AXUIElementPerformAction(item.element, kAXPressAction as CFString)
     }
 
+    /// Press a status item by its AX element directly (hidden-bar click-forward:
+    /// we already hold the element from the scan). Call off the main actor.
+    static func press(element: AXUIElement) {
+        AXUIElementPerformAction(element, kAXPressAction as CFString)
+    }
+
     // MARK: - AX plumbing
 
     private static func attr(_ el: AXUIElement, _ name: String) -> CFTypeRef? {

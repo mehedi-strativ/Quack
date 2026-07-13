@@ -41,6 +41,7 @@ final class AppEnvironment: ObservableObject {
     private let notchService: NotchService
     private let mouseService: MouseService
     private let timeAwarenessService: TimeAwarenessService
+    private let hiddenBarService: HiddenBarService
     let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
@@ -77,6 +78,7 @@ final class AppEnvironment: ObservableObject {
         self.notchService = NotchService(settings: settings, permissions: permissions, installer: claudeInstaller)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
         self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
+        self.hiddenBarService = HiddenBarService(settings: settings, permissions: permissions)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -90,6 +92,7 @@ final class AppEnvironment: ObservableObject {
             .notch: notchService,
             .mouse: mouseService,
             .timeAwareness: timeAwarenessService,
+            .hiddenBar: hiddenBarService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .temperature) }
