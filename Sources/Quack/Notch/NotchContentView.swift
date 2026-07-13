@@ -39,7 +39,7 @@ struct NotchContentView: View {
                 Spacer().frame(height: 6)
             }
             Spacer(minLength: 0)
-            hiddenIconsRow
+            quackFooterRow
                 .padding(.horizontal, 14)
                 .padding(.vertical, 4)
             if model.mediaEnabled {
@@ -52,40 +52,12 @@ struct NotchContentView: View {
         .foregroundStyle(.white)
     }
 
-    /// The menu-bar status items the notch is hiding, shown as their apps'
-    /// icons (the window server unmaps crushed items, so there are no live
-    /// pixels to mirror). Tap asks the owning app to press the item via AX.
-    /// Placeholder when nothing is hidden, so the row is always visible.
+    /// Footer with the duck button that opens Quack's Settings. (The old
+    /// hidden-icons row was superseded by the Bartender-style hidden bar.)
     @ViewBuilder
-    private var hiddenIconsRow: some View {
+    private var quackFooterRow: some View {
         HStack(spacing: 10) {
-            if model.hiddenIcons.isEmpty {
-                Text(model.axTrusted
-                     ? "No icons hidden behind the notch"
-                     : "Grant Accessibility to show hidden icons")
-                    .font(.system(size: 10))
-                    .foregroundStyle(model.axTrusted ? NotchTheme.textMuted : NotchTheme.orange)
-                    .frame(maxWidth: .infinity)
-            } else {
-                Spacer(minLength: 0)
-                ForEach(model.hiddenIcons) { item in
-                    Group {
-                        if let icon = item.icon {
-                            Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
-                        } else {
-                            Image(systemName: "app.dashed")
-                        }
-                    }
-                    .frame(width: 18, height: 18)
-                    .onTapGesture { model.onHiddenIconTap?(item) }
-                    .help("\(item.appName): \(item.title)")
-                }
-                Spacer(minLength: 0)
-            }
-            Divider().frame(height: 14)
-            // Quack's own items are excluded from the scan (self-AXPress
-            // crashes off-main), so the duck gets a real button instead —
-            // plain SwiftUI tap on the main thread.
+            Spacer(minLength: 0)
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable().aspectRatio(contentMode: .fit)
                 .frame(width: 18, height: 18)

@@ -14,11 +14,6 @@ final class NotchContentViewModel: ObservableObject {
     @Published var mediaEnabled = false
     @Published var agentsEnabled = false
     @Published var integrationInstalled = false
-    /// Menu-bar status items the notch is hiding; shown above the media strip.
-    @Published var hiddenIcons: [HiddenStatusItem] = []
-    /// Whether the AX scan behind `hiddenIcons` can work at all; drives the
-    /// row's placeholder ("grant Accessibility" vs "nothing hidden").
-    @Published var axTrusted = true
     /// Real notch height for this screen; view pads content below the cutout.
     @Published var contentTopInset: CGFloat = 0
 
@@ -27,8 +22,7 @@ final class NotchContentViewModel: ObservableObject {
     var onNext: (() -> Void)?
     var onPrevious: (() -> Void)?
     var onAgentTap: ((AgentSnapshot) -> Void)?
-    var onHiddenIconTap: ((HiddenStatusItem) -> Void)?
-    /// Opens Quack's Settings window (the duck button beside the hidden icons).
+    /// Opens Quack's Settings window (the duck button in the notch header).
     var onOpenQuack: (() -> Void)?
 
     var needsYouCount: Int { agents.filter { $0.status == .needsYou }.count }

@@ -116,7 +116,7 @@ final class HiddenBarService: ManagedService {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self else { return }
             DispatchQueue.global(qos: .userInitiated).async {
-                AXStatusItemScanner.press(element: item.element)
+                MenuBarAXScanner.press(element: item.element)
             }
             self.armCollapseAfterMenu()
         }

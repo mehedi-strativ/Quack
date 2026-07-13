@@ -24,17 +24,14 @@ final class NotchService: NSObject, ManagedService {
     private var wired = false
     private var mediaRunning = false
     private var agentsRunning = false
-    /// Last completed hidden-icon scan; shown instantly on the next hover-in
-    /// while a fresh scan runs behind it.
-    private var hiddenIconsCache: [HiddenStatusItem] = []
 
     /// Collapsed hover strip height, hanging below the notch. Kept small so it
     /// doesn't catch hover/clicks over app content beneath the notch.
     private let hoverMargin: CGFloat = 8
     private let expandedWidth: CGFloat = 420
     private let mediaOnlyContentHeight: CGFloat = 58
-    /// Height of the hidden-icons row (18pt icons + top padding).
-    private let hiddenIconsRowHeight: CGFloat = 26
+    /// Height of the Quack footer row (duck button + padding).
+    private let footerRowHeight: CGFloat = 26
 
     init(settings: SettingsStore, permissions: PermissionsManager, installer: ClaudeConfigInstaller) {
         self.settings = settings
@@ -50,7 +47,6 @@ final class NotchService: NSObject, ManagedService {
         buildPanelIfNeeded()
         wireIfNeeded()
         reposition()
-        refreshHiddenIcons()   // warm the cache so the first hover shows icons
     }
 
     func stop() {
@@ -65,7 +61,6 @@ final class NotchService: NSObject, ManagedService {
         model.isOpen = false
         model.track = nil
         model.agents = []
-        model.hiddenIcons = []
     }
 
     private func wireIfNeeded() {
@@ -76,7 +71,6 @@ final class NotchService: NSObject, ManagedService {
         model.onNext = { [weak self] in self?.nowPlaying.next() }
         model.onPrevious = { [weak self] in self?.nowPlaying.previous() }
         model.onAgentTap = { [weak self] agent in self?.focusAgent(agent) }
-        model.onHiddenIconTap = { [weak self] item in self?.forwardHiddenIconTap(item) }
         model.onOpenQuack = { [weak self] in self?.onOpenSettings?() }
 
         nowPlaying.$track
@@ -185,7 +179,7 @@ final class NotchService: NSObject, ManagedService {
     /// tuned on hardware in Task 12.
     private func expandedHeight() -> CGFloat {
         var h: CGFloat = 10                                     // top padding
-        h += hiddenIconsRowHeight                               // icons row or its placeholder
+        h += footerRowHeight                                    // Quack footer (duck button)
         if model.agentsEnabled {
             h += 30                                             // header row
             if !model.integrationInstalled || model.agents.isEmpty {
@@ -207,56 +201,8 @@ final class NotchService: NSObject, ManagedService {
         if hovering {
             Log.notch.notice("hover-in: agents=\(self.model.agentsEnabled) media=\(self.model.mediaEnabled)")
             refreshTokensToday()
-            refreshHiddenIcons()
-        } else {
-            model.hiddenIcons = []
         }
         reposition()
-    }
-
-    /// Finds the menu-bar status items the notch is hiding, for the row above
-    /// the media strip. The notch layout is read here on the main actor; the
-    /// AX sweep across running apps (blocking IPC) runs on a background queue
-    /// so the expand animation doesn't hitch. Needs Accessibility — the scan
-    /// quietly returns nothing without it, and the row shows its placeholder.
-    private func refreshHiddenIcons() {
-        model.axTrusted = permissions.status(for: .accessibility) == .granted
-        guard let layout = reader.currentLayout() else {
-            Log.notch.notice("hidden-icon scan skipped: no notch layout")
-            model.hiddenIcons = []
-            return
-        }
-        Log.notch.notice("hidden-icon scan starting: axTrusted=\(self.model.axTrusted)")
-        model.hiddenIcons = hiddenIconsCache   // last known, instantly; refresh below
-        let notch = layout.span
-        // AX frames are global Quartz (top-left origin); the built-in menu-bar
-        // band is the top ~40pt of that screen. Cocoa maxY → Quartz top.
-        let primaryTop = NSScreen.screens.first?.frame.maxY ?? layout.screen.frame.maxY
-        let quartzTop = primaryTop - layout.screen.frame.maxY
-        let band = quartzTop...(quartzTop + 40)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let items = AXStatusItemScanner.scan(notch: notch, menuBarBandY: band)
-            Log.notch.notice("hidden-icon scan: \(items.count) item(s) in notch \(notch.minX, format: .fixed(precision: 0))–\(notch.maxX, format: .fixed(precision: 0)), band \(band.lowerBound, format: .fixed(precision: 0))–\(band.upperBound, format: .fixed(precision: 0)): \(items.map(\.appName).joined(separator: ", "), privacy: .public)")
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.hiddenIconsCache = items   // remember even if the pointer left
-                guard self.model.isOpen else { return }
-                self.model.hiddenIcons = items
-                self.reposition()
-            }
-        }
-    }
-
-    /// Clicking a hidden item: AXPress via its owning app (the crushed item
-    /// has no window of its own to click). Needs Accessibility.
-    private func forwardHiddenIconTap(_ item: HiddenStatusItem) {
-        guard permissions.status(for: .accessibility) == .granted else {
-            permissions.requestAccessibilityAccess()
-            return
-        }
-        DispatchQueue.global(qos: .userInitiated).async {
-            AXStatusItemScanner.press(item)
-        }
     }
 
     /// Click-to-focus: activate the app hosting the agent's session; fall back

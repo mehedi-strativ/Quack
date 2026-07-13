@@ -56,6 +56,12 @@ enum MenuBarAXScanner {
         return out
     }
 
+    /// Press a status item by its AX element (hidden-bar click-forward: we
+    /// already hold the element from the scan). Call off the main actor.
+    static func press(element: AXUIElement) {
+        AXUIElementPerformAction(element, kAXPressAction as CFString)
+    }
+
     private static func frame(of el: AXUIElement) -> CGRect? {
         var posVal: CFTypeRef?, sizeVal: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &posVal) == .success,
