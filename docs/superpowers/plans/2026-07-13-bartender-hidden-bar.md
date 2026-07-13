@@ -15,6 +15,7 @@
 - **No synthesized `CGEvent` mouse/drag injection.** Click-forward uses `AXPress`, not fake clicks. (Auto-move via synthesized ⌘-drag is Tahoe-broken — see spec.)
 - Item arrangement is manual ⌘-drag by the user; Quack never moves other apps' items.
 - Pure, testable logic → `Sources/QuackKit/`, tested in `Tests/QuackKitTests/`. System/AppKit code → `Sources/Quack/`.
+- **Tests use swift-testing, not XCTest** (repo convention — all 20 existing files use `import Testing` / `@Suite struct` / `@Test func` / `#expect(...)`). The XCTest snippets in Tasks 2–4 below are illustrative — translate to swift-testing (an XCTest file silently runs alone and the swift-testing suite drops to 0 discovered).
 - Build/run the real app with `./Scripts/install.sh`; `swift build` only makes the dev binary. Unit tests run with `swift test`.
 - Screen Recording permission is **already** wired in `PermissionsManager` (`.screenRecording`, `requestScreenRecording()`, `refreshScreenRecording()`); reuse it, do not add a new permission file.
 - Reuse `AXStatusItemScanner.press(_:)` for click-forward; do not reintroduce notch `isHiddenByNotch` scanning for this feature.
