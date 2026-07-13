@@ -12,7 +12,7 @@
 
 - Target platform: macOS 26 (Tahoe), notched MacBook Pro. Package floor `.macOS(.v13)`.
 - **No new `CGEvent` tap anywhere.** Reveal uses `NSStatusItem` button tracking + the panel's own mouse events. (CLAUDE.md: input taps freeze the Mac; the only safe path is adding none here.)
-- **No synthesized `CGEvent` mouse/drag injection.** Click-forward uses `AXPress`, not fake clicks. (Auto-move via synthesized ⌘-drag is Tahoe-broken — see spec.)
+- **No synthesized ⌘-drag / auto-move** (that path is Tahoe-broken — see spec). Click-forward DOES post a single synthesized left-click at the item's on-screen point — verified necessary during Task 12: `AXPress` reports success but does not open most third-party popovers (TickTick, Notion Calendar), so a real click is required (the Ice/Bartender approach). Posting a click is safe — the freeze rule is about event *taps*, not posting.
 - Item arrangement is manual ⌘-drag by the user; Quack never moves other apps' items.
 - Pure, testable logic → `Sources/QuackKit/`, tested in `Tests/QuackKitTests/`. System/AppKit code → `Sources/Quack/`.
 - **Tests use swift-testing, not XCTest** (repo convention — all 20 existing files use `import Testing` / `@Suite struct` / `@Test func` / `#expect(...)`). The XCTest snippets in Tasks 2–4 below are illustrative — translate to swift-testing (an XCTest file silently runs alone and the swift-testing suite drops to 0 discovered).

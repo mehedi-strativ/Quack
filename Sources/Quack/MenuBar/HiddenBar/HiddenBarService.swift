@@ -19,6 +19,7 @@ final class HiddenBarService: ManagedService {
     private var graceTimer: Timer?
     private var mouseUpMonitor: Any?
     private var activeObserver: NSObjectProtocol?
+    private var warmAttempts = 0
 
     init(settings: SettingsStore, permissions: PermissionsManager) {
         self.settings = settings
@@ -55,7 +56,19 @@ final class HiddenBarService: ManagedService {
     private func warmAndCollapse() {
         guard let control else { return }
         control.expand()
-        guard let chevronMinX = control.chevronMinX else { control.collapse(); return }
+        // The chevron's status-item window isn't positioned for ~1s after
+        // creation (frame reads (0, -22) then jumps to its real spot). Classifying
+        // against minX=0 hides nothing, so wait for a valid frame before scanning.
+        guard let chevronMinX = control.chevronMinX, chevronMinX > 0 else {
+            warmAttempts += 1
+            if warmAttempts <= 20 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.warmAndCollapse() }
+            } else {
+                control.collapse()
+            }
+            return
+        }
+        warmAttempts = 0
         if let notch = NotchProbe.current(), !ChevronPlacement.isSafe(chevronMinX: chevronMinX, notch: notch) {
             Log.notch.notice("hidden bar: chevron left of notch — ⌘-drag it right of the notch")
         }
@@ -111,14 +124,22 @@ final class HiddenBarService: ManagedService {
     }
 
     private func forwardClick(_ item: MenuBarAXItem) {
-        control?.expand()          // real item snaps on-screen; menu will open here
+        control?.expand()          // real item snaps on-screen; menu opens there
         panel.hide()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self else { return }
             DispatchQueue.global(qos: .userInitiated).async {
-                MenuBarAXScanner.press(element: item.element)
+                // Synthesize a real click at the item's LIVE on-screen frame (it
+                // just snapped back via expand()). AXPress reports success but
+                // doesn't open most third-party popovers — a real click does.
+                let frame = MenuBarAXScanner.elementFrame(item.element) ?? item.frame
+                SynthClick.left(at: CGPoint(x: frame.midX, y: frame.midY))
             }
-            self.armCollapseAfterMenu()
+            // Arm collapse-on-next-mouseUp AFTER the synth click's own mouseUp has
+            // passed, so we don't immediately dismiss the menu we just opened.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.armCollapseAfterMenu()
+            }
         }
     }
 

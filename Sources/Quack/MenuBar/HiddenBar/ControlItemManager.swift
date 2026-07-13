@@ -16,12 +16,19 @@ final class ControlItemManager {
          onChevronExit: @escaping () -> Void,
          onChevronClick: @escaping () -> Void) {
         self.onChevronClick = onChevronClick
-        // Start expanded (items visible) so the service can warm-capture glyphs
-        // while items are on-screen before its first collapse() (Task 9).
-        hiddenDivider = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // ORDER MATTERS: a later-created status item is laid out to the LEFT of an
+        // earlier one (verified by the Task 0 spike). We need [divider][chevron]
+        // (chevron to the RIGHT of the divider) so that collapsing the divider
+        // (length 10_000) pushes items to ITS left off-screen while the chevron
+        // stays visible. So create the chevron FIRST (rightmost), divider SECOND.
+        // Both start at variableLength (items visible) so the service can
+        // warm-capture glyphs before its first collapse() (Task 9).
         chevron = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        hiddenDivider.autosaveName = "quack.hiddenDivider"
-        chevron.autosaveName = "quack.chevron"
+        hiddenDivider = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // v2 names: the earlier build saved a stale (buggy) ordering under the
+        // old names; fresh names let creation order place them correctly.
+        chevron.autosaveName = "quack.hiddenbar.chevron.v2"
+        hiddenDivider.autosaveName = "quack.hiddenbar.divider.v2"
         hiddenDivider.button?.title = ""
         hiddenDivider.button?.setAccessibilityLabel("Quack hidden items divider")
 

@@ -106,15 +106,18 @@ When the user clicks an icon in the secondary bar:
 
 1. **Temp-show** — set `hiddenDivider.length = variableLength`, so the real item
    snaps back on-screen just left of the chevron (public API).
-2. **AXPress** the item via the existing `AXStatusItemScanner.press`. Its real
-   menu opens at the now-correct on-screen location.
-3. **Re-collapse** — restore `hiddenDivider.length = 10_000` once the opened
-   menu dismisses.
+2. **Synthesize a left-click** at the item's live on-screen frame center. Its
+   real menu opens at the correct location. (Task 12 finding: `AXPress` reports
+   success but does NOT open most third-party popovers — TickTick, Notion
+   Calendar — so a real posted click is required, as Ice/Bartender do. Posting a
+   click is safe; the CLAUDE.md freeze rule is about event *taps*, not posting.)
+3. **Re-collapse** — restore `hiddenDivider.length = 10_000` on the next real
+   mouse-up after the menu (armed after the synth-click's own mouse-up passes),
+   with a 5s fallback.
 
 The menu drops from the real menu-bar row (top of screen), exactly as
 Bartender/Ice behave — the secondary bar is a replica strip plus a launcher, not
-a live menu host. Click-forwarding uses AXPress (already proven in Quack, run
-off-main as IPC), not fragile CGEvent click synthesis.
+a live menu host.
 
 ## Components / module layout
 
