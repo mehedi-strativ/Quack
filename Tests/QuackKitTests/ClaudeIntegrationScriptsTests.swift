@@ -38,6 +38,16 @@ import Testing
     }
 
     @Test func hookEventsList() {
-        #expect(ClaudeIntegrationScripts.hookEvents == ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"])
+        #expect(ClaudeIntegrationScripts.hookEvents == ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "PermissionRequest", "Stop", "SessionEnd"])
+    }
+
+    @Test func hookHandlesBlockingToolsAndPermission() {
+        let s = ClaudeIntegrationScripts.hookScript
+        // Blocking, user-facing tools flip to needs_you on PreToolUse (PostToolUse
+        // won't fire until the user answers).
+        #expect(s.contains("AskUserQuestion"))
+        #expect(s.contains("ExitPlanMode"))
+        #expect(s.contains("PermissionRequest"))
+        #expect(s.contains("PreToolUse|PostToolUse"))
     }
 }

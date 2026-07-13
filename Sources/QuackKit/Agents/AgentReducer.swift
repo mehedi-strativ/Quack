@@ -122,7 +122,14 @@ public enum AgentReducer {
         case .working:
             return toolPhrase(tool: nonEmpty(state.last_tool), target: nonEmpty(state.last_tool_target)) ?? "Working…"
         case .needsYou:
-            if state.event == "Notification", let m = nonEmpty(state.notification_message) { return m }
+            // notification_message is freshly set by the Notification,
+            // PermissionRequest, and blocking-tool (AskUserQuestion/ExitPlanMode
+            // via PreToolUse) hooks. Trust it only for those events — the merged
+            // state file retains a stale message across later events (e.g. Stop),
+            // which should fall back to the fresh last assistant line instead.
+            let messageEvents: Set<String> = ["Notification", "PermissionRequest", "PreToolUse"]
+            if let ev = state.event, messageEvents.contains(ev),
+               let m = nonEmpty(state.notification_message) { return m }
             return nonEmpty(state.last_assistant_line) ?? "Waiting for you"
         case .idle:
             return nonEmpty(state.last_assistant_line)

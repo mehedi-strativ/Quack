@@ -26,6 +26,16 @@ public enum ClaudeSettingsEditor {
         }
     }
 
+    /// True only when EVERY `expected` hook event carries our entry. Lets the
+    /// app detect an install predating a newly added event and re-apply.
+    public static func integrationEventsComplete(in json: Data, expected: [String]) -> Bool {
+        guard let root = decode(json), let hooks = root["hooks"] as? [String: Any] else { return false }
+        return expected.allSatisfy { event in
+            guard let entries = hooks[event] as? [Any] else { return false }
+            return entries.contains { ($0 as? [String: Any]).map(isOurs) ?? false }
+        }
+    }
+
     /// Throws `.malformedSettings` rather than silently discarding user data
     /// when the input can't be safely merged into: non-empty input that isn't
     /// parseable JSON, a top-level value that isn't an object, a `hooks` value

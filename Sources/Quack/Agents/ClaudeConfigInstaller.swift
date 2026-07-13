@@ -3,8 +3,9 @@ import QuackKit
 
 /// Installs/removes Quack's Claude Code integration: writes the hook +
 /// statusLine wrapper scripts under ~/.claude/quack/ and registers them in
-/// ~/.claude/settings.json via the pure ClaudeSettingsEditor. Only ever runs
-/// from an explicit user action in Settings — never automatically.
+/// ~/.claude/settings.json via the pure ClaudeSettingsEditor. install/uninstall
+/// run only from an explicit user action in Settings; `migrateIfNeeded` also
+/// re-applies automatically on launch when an older install is detected.
 /// Not sandbox/App-Store compatible (writes another app's config; fine for
 /// Quack's direct-distribution model).
 @MainActor
@@ -49,6 +50,22 @@ final class ClaudeConfigInstaller {
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapperFile.path)
 
         try updated.write(to: settingsFile, options: .atomic)
+    }
+
+    /// Re-applies the integration when an older install is detected — the hook
+    /// script content drifted from the shipped one, or a newly added hook event
+    /// isn't registered in settings.json yet. Safe on launch: `addingIntegration`
+    /// is idempotent (only adds missing events) and we only write on real drift.
+    func migrateIfNeeded() {
+        guard isInstalled() else { return }
+        let hookStale = (try? String(contentsOf: hookFile, encoding: .utf8)) != ClaudeIntegrationScripts.hookScript
+        let eventsStale: Bool = {
+            guard let data = try? Data(contentsOf: settingsFile) else { return true }
+            return !ClaudeSettingsEditor.integrationEventsComplete(
+                in: data, expected: ClaudeIntegrationScripts.hookEvents)
+        }()
+        guard hookStale || eventsStale else { return }
+        try? install()
     }
 
     func uninstall() throws {

@@ -24,6 +24,7 @@ final class ClaudeAgentsService: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        installer.migrateIfNeeded()   // pick up new hook events for older installs
         integrationInstalled = installer.isInstalled()
         watcher.onChange = { [weak self] in self?.refreshNow() }
         watcher.start(directory: installer.sessionsDirectory)

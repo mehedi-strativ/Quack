@@ -41,6 +41,27 @@ import Foundation
                 == "Claude needs your permission to use Bash")
     }
 
+    @Test func needsYouFromBlockingToolUsesQuestionMessage() throws {
+        // AskUserQuestion/ExitPlanMode flip to needs_you via PreToolUse and set
+        // notification_message; the card should surface that question text.
+        let f = files(try state(["status": "needs_you", "event": "PreToolUse",
+                                 "notification_message": "Which library should we use?",
+                                 "last_assistant_line": "old text"]))
+        let snap = AgentReducer.snapshots(from: [f], now: now, staleAfter: 900)[0]
+        #expect(snap.status == .needsYou)
+        #expect(snap.statusMessage == "Which library should we use?")
+    }
+
+    @Test func needsYouFromStopIgnoresStaleNotificationMessage() throws {
+        // The merged state file retains a stale notification_message from an
+        // earlier blocking tool; a later Stop must fall back to the fresh line.
+        let f = files(try state(["status": "needs_you", "event": "Stop",
+                                 "notification_message": "Which library should we use?",
+                                 "last_assistant_line": "Landing page shipped."]))
+        #expect(AgentReducer.snapshots(from: [f], now: now, staleAfter: 900)[0].statusMessage
+                == "Landing page shipped.")
+    }
+
     @Test func progressPrefersTodosOverContext() throws {
         let status = try JSONDecoder().decode(StatusFileRaw.self,
             from: Data(#"{"context_window":{"used_percentage":50}}"#.utf8))

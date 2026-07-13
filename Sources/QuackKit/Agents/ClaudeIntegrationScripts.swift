@@ -6,7 +6,7 @@ import Foundation
 /// so a broken script can never block Claude Code itself.
 public enum ClaudeIntegrationScripts {
     /// Hook events Quack registers. One shared script, event name as $1.
-    public static let hookEvents = ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"]
+    public static let hookEvents = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "PermissionRequest", "Stop", "SessionEnd"]
 
     public static let hookScript = #"""
     #!/bin/bash
@@ -28,12 +28,32 @@ public enum ClaudeIntegrationScripts {
     STATUS=""
     case "$EVENT" in
       SessionStart) STATUS="idle" ;;
-      UserPromptSubmit|PostToolUse) STATUS="working" ;;
-      Stop|Notification) STATUS="needs_you" ;;
+      UserPromptSubmit|PreToolUse|PostToolUse) STATUS="working" ;;
+      Stop|Notification|PermissionRequest) STATUS="needs_you" ;;
       SessionEnd) STATUS="ended" ;;
     esac
 
     EXTRA='{}'
+    # A blocking, user-facing tool means Claude has stopped and is waiting on
+    # YOU — PostToolUse won't fire until you answer, so PreToolUse is the only
+    # signal. Flip to needs_you and surface the question text.
+    if [ "$EVENT" = "PreToolUse" ]; then
+      TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+      case "$TOOL" in
+        AskUserQuestion)
+          STATUS="needs_you"
+          MSG=$(printf '%s' "$INPUT" | jq -r '(.tool_input.questions // [])[0].question // empty' 2>/dev/null | head -1 | cut -c1-200)
+          [ -z "$MSG" ] && MSG="Waiting for your answer"
+          EXTRA=$(jq -n --arg m "$MSG" '{notification_message:$m}') ;;
+        ExitPlanMode)
+          STATUS="needs_you"
+          EXTRA=$(jq -n '{notification_message:"Waiting for plan approval"}') ;;
+      esac
+    fi
+    if [ "$EVENT" = "PermissionRequest" ]; then
+      TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+      [ -n "$TOOL" ] && EXTRA=$(jq -n --arg t "$TOOL" '{notification_message:("Needs permission: " + $t)}')
+    fi
     if [ "$EVENT" = "PostToolUse" ]; then
       TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
       TARGET=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.command // .tool_input.pattern // empty' 2>/dev/null | head -1 | cut -c1-200)
