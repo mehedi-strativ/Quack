@@ -31,8 +31,20 @@ enum MenuBarAXScanner {
         return found.sorted { $0.frame.minX < $1.frame.minX }
     }
 
+    /// System menu-extra hosts the user can't ⌘-drag and that render as blank
+    /// glyphs — excluded so the strip shows only real apps the user hid.
+    private static let systemDenylist: Set<String> = [
+        "com.apple.systemuiserver",
+        "com.apple.TextInputMenuAgent",
+        "com.apple.controlcenter",
+        "com.apple.Spotlight",
+        "com.apple.Siri",
+        "com.apple.wifi.WiFiAgent",
+    ]
+
     private static func scanApp(_ app: NSRunningApplication,
                                 menuBarBandY: ClosedRange<CGFloat>) -> [MenuBarAXItem] {
+        if let bid = app.bundleIdentifier, systemDenylist.contains(bid) { return [] }
         let ax = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(ax, 0.25)
         var barVal: CFTypeRef?

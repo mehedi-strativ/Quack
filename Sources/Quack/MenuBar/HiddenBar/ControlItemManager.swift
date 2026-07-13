@@ -55,6 +55,13 @@ final class ControlItemManager {
         return window.frame
     }
 
+    var dividerFrameOnScreen: CGRect? {
+        guard let window = hiddenDivider.button?.window else { return nil }
+        return window.frame
+    }
+
+    var dividerMinX: CGFloat? { dividerFrameOnScreen?.minX }
+
     var chevronMinX: CGFloat? { chevronFrameOnScreen?.minX }
 
     func collapse() { hiddenDivider.length = Length.expanded }

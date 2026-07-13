@@ -16,13 +16,20 @@ enum MenuBarBand {
 /// click lands where the item actually is.
 enum SynthClick {
     /// `point` is in global Quartz coordinates (top-left origin), matching AX frames.
+    /// Restores the cursor to where it was so the click doesn't leave the pointer
+    /// parked in the menu bar.
     static func left(at point: CGPoint) {
+        let restore = CGEvent(source: nil)?.location   // current cursor, global top-left
         CGWarpMouseCursorPosition(point)
         let src = CGEventSource(stateID: .combinedSessionState)
         let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
         let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+        if let restore {
+            usleep(60_000)   // let the target app process the click first
+            CGWarpMouseCursorPosition(restore)
+        }
     }
 }
 

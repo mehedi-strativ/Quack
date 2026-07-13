@@ -72,10 +72,13 @@ final class HiddenBarService: ManagedService {
         if let notch = NotchProbe.current(), !ChevronPlacement.isSafe(chevronMinX: chevronMinX, notch: notch) {
             Log.notch.notice("hidden bar: chevron left of notch — ⌘-drag it right of the notch")
         }
+        // Classify by the DIVIDER, not the chevron: collapse() only pushes items
+        // left of the divider off-screen, so the panel must show exactly those.
+        let boundaryX = control.dividerMinX ?? chevronMinX
         let band = MenuBarBand.current()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
-            let hidden = items.filter { $0.frame.minX < chevronMinX }
+            let hidden = items.filter { $0.frame.minX < boundaryX }
             let windows = StatusWindowList.onScreen()
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -103,6 +106,10 @@ final class HiddenBarService: ManagedService {
     }
 
     private func reveal() {
+        renderPanel()   // render the set captured at the last warm
+    }
+
+    private func renderPanel() {
         guard let chevronFrame = control?.chevronFrameOnScreen, let screen = NSScreen.main else { return }
         let vms = hiddenItems.map {
             HiddenBarItemVM(id: $0.id, image: imageCache.image(forID: $0.id) ?? $0.appIcon, item: $0)
