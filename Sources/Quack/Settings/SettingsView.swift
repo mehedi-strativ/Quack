@@ -170,6 +170,7 @@ struct SettingsPane: View {
                     MouseButtonsSection()
                 case .notch:
                     NotchSection()
+                    HiddenBarSection()
                 case .settings:
                     SettingsSection()
                     CalendarSection()
@@ -1419,19 +1420,41 @@ private struct NotchSection: View {
                 }
             }
 
-            // The panel also lists menu-bar icons hidden behind the notch;
-            // finding and clicking them both go through Accessibility.
-            if s.settings.notchMediaEnabled || s.settings.notchAgentsEnabled {
+        }
+        .onAppear { installed = env.claudeIntegrationInstalled() }
+    }
+}
+
+private struct HiddenBarSection: View {
+    @EnvironmentObject var env: AppEnvironment
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Hidden menu bar") {
+            Toggle("Hidden menu bar", isOn: s.binding(\.hiddenBarEnabled))
+            Text("⌘-drag menu bar icons to the left of Quack's chevron (‹) to hide them, to the right to keep them shown. Hover the chevron to reveal the hidden ones.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            if s.settings.hiddenBarEnabled {
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
-                        Text("Needs Accessibility to show and click menu bar icons hidden behind the notch.")
+                        Text("Needs Accessibility to click hidden items.")
                             .font(.system(size: 12)).foregroundStyle(.orange)
                         Button("Grant") { env.permissions.requestAccessibilityAccess() }
                     }
                 }
+                if env.permissions.status(for: .screenRecording) != .granted {
+                    HStack {
+                        Text("Needs Screen Recording to show real icon glyphs (app icons are used otherwise).")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Grant") {
+                            env.permissions.requestScreenRecording()
+                            env.permissions.openSystemSettings(for: .screenRecording)
+                        }
+                    }
+                }
             }
         }
-        .onAppear { installed = env.claudeIntegrationInstalled() }
     }
 }
 
