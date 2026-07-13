@@ -80,10 +80,20 @@ the real bar). The items stay hidden off-screen; the secondary bar renders
 - **`HiddenBarPanel`** — a borderless, non-activating `NSPanel` at window level
   `.mainMenu + 1`, positioned flush under the main menu bar, spanning from the
   chevron leftward. Hosts SwiftUI via `NSHostingView`.
-- **Capture** — `CGWindowListCreateImage` per hidden item's window ID (window
-  IDs and frames enumerated via CGS, as Ice does). Cached by item identity,
-  refreshed on reveal and periodically while revealed. Requires Screen
-  Recording; without it capture returns black (fallback below).
+- **Capture (capture-at-hide + cache)** — because off-screen items capture as nil
+  (Task 0), real glyphs are grabbed **while the items are on-screen** and cached:
+  - Enumerate hidden-zone items **while they are still on-screen** (before the
+    first collapse, and after each re-arrangement) and `CGWindowListCreateImage`
+    each by window ID (layer-25 windows, any owner — they belong to Control
+    Center, not the app). Cache by window ID, then collapse.
+  - Reveal renders **from cache** — flicker-free, no per-reveal temp-show.
+  - Cache warming that must expand the divider to bring items on-screen causes one
+    brief flash; do it rarely (startup if items already hidden, and on detected
+    re-arrangement), never on every reveal.
+  - **Staleness:** a glyph that changes while hidden (battery %, clock) stays as
+    last captured until the next on-screen moment. Accepted tradeoff.
+  - **Fallback:** any item with no cached capture yet (or Screen Recording denied)
+    renders as its **application icon + title** (AX style). Feature always works.
 - **Trigger** — hover the chevron reveals the panel; moving the pointer into the
   panel keeps it open; leaving hides it after a short grace delay. Clicking the
   chevron pins it open. Hover is detected via the `NSStatusItem` button's
@@ -113,25 +123,27 @@ New module `Sources/Quack/MenuBar/HiddenBar/`:
 | File | Responsibility |
 |------|----------------|
 | `ControlItemManager.swift` | Owns the `chevron` + `hiddenDivider` `NSStatusItem`s; length toggle; autosave position; hover detection on the chevron button. |
-| `StatusItemEnumerator.swift` | Enumerates the hidden-zone third-party status items — window IDs, frames, owning pid — via CGS (`CGSGetProcessMenuBarWindowList` and friends). |
-| `MenuBarItemImageCache.swift` | Captures each hidden item image via `CGWindowListCreateImage(windowID)`; caches by item identity; scales by `backingScaleFactor`; periodic refresh while revealed. |
+| `MenuBarAXScanner.swift` | AX-tree scan of every app's `AXExtrasMenuBar` — real app, icon, AX element, frame. The identity source (window pid is Control Center's, so pid is unusable). |
+| `StatusWindowList.swift` | On-screen layer-25 window `(id, frame)` list, used only to match a windowID to an AX item by X so its glyph can be captured. |
+| `MenuBarItemImageCache.swift` | Captures each item's glyph via `CGWindowListCreateImage(windowID)` **while on-screen only** (off-screen returns nil); caches keyed by AX item id; scales by `backingScaleFactor`. |
+| `HiddenBarGeometry.swift` | `MenuBarBand` (AX scan Y band) and `NotchProbe` (main-display notch span) helpers. |
 | `HiddenBarPanel.swift` | The `NSPanel`, its geometry under the menu bar, and the hover-in/hover-out lifecycle with grace delay + pin-on-click. |
-| `HiddenBarView.swift` | SwiftUI replica strip: row of captured images, click targets, permission-missing banner. |
-| `HiddenBarService.swift` | Orchestrator: reveal, temp-show → AXPress → re-collapse, menu-dismiss detection, cache warming, permission gating. |
+| `HiddenBarView.swift` | SwiftUI replica strip: row of glyphs (or app-icon fallback), click targets, permission-missing banner. |
+| `HiddenBarService.swift` | Orchestrator: warm-at-hide capture of the hidden set, cache render on reveal, `expand → AXPress(element) → collapse` click-forward, permission gating. |
 
-In `Sources/Quack/Permissions/`:
+**Screen Recording permission** is already wired in `PermissionsManager`
+(`.screenRecording`, `refreshScreenRecording()` via `CGPreflightScreenCaptureAccess`,
+`requestScreenRecording()` via `CGRequestScreenCaptureAccess`) — reuse it; no new
+permission file.
 
-| File | Responsibility |
-|------|----------------|
-| `ScreenRecordingPermission.swift` | Status check (`CGPreflightScreenCaptureAccess`) and request (`SCShareableContent.getWithCompletionHandler` on macOS 15+, `CGRequestScreenCaptureAccess()` below), wired into Quack's existing permission model. |
-
-**Reused / repurposed:** `AXStatusItemScanner` stays — its `.press` powers the
-click-forward step. Item discovery moves to CGS window enumeration; the notch
+**Reused / repurposed:** `AXStatusItemScanner` stays — extended with a
+`press(element:)` for click-forward. Item discovery is AX-based; the notch
 `isHiddenByNotch` scanning path is retired.
 
-**CGS private APIs** are read-only enumeration (window lists and frames), less
-fragile than event injection, and are isolated behind a single shim file
-alongside the existing bridging code.
+**No private APIs.** Public `CGWindowListCopyWindowInfo` supplies window IDs and
+frames; AX supplies identity; `NSStatusItem` length supplies hiding. No CGS/CGES
+enumeration or event injection is needed (Task 0 confirmed the public list is
+sufficient).
 
 ## Removal (replacing the old notch row)
 
@@ -164,10 +176,9 @@ accordingly.
   to the right of the notch so hidden items push off the left edge rather than
   behind the notch (behind the notch = unmapped = uncapturable). If the user
   drags the chevron left of the notch, warn and/or auto-nudge it back.
-- **Capture of off-screen (negative-X) windows** is the **highest-risk
-  assumption**. Ice relies on it working, but validate with an early spike before
-  building the full panel. If it fails, the fallback is a brief on-screen
-  temp-show to capture, then re-collapse (flickers).
+- **Off-screen capture returns nil (confirmed, Task 0)** — resolved by the
+  capture-at-hide + cache design above; do not attempt to capture items while they
+  are off-screen.
 - **Temp-show flicker:** real items flash into the bar during the AXPress click
   flow. Ice accepts this; minimize with tight collapse-after-dismiss timing.
 - **Menu-dismiss detection:** need to know when the opened menu closes to
@@ -176,8 +187,8 @@ accordingly.
 - **Retina:** scale captures by `backingScaleFactor`.
 - **Live glyph updates:** items whose glyph changes (battery %, clock) need
   periodic re-capture while the bar is revealed.
-- **CGS API fragility:** private, may shift between OS releases; isolate behind
-  one shim and fail soft (empty hidden list → empty bar, no crash).
+- **Fail soft:** if the AX scan or window list returns nothing (permission not
+  yet granted, transient), render an empty bar — never crash.
 
 ## Out of scope (v1)
 

@@ -4,9 +4,9 @@
 
 **Goal:** Let the user hide chosen menu-bar icons off-screen and reveal them in a secondary bar (under the main menu bar) that shows their real glyphs and opens their real menus on click — replacing Quack's notch hidden-icons row.
 
-**Architecture:** A visible chevron `NSStatusItem` plus an empty divider `NSStatusItem`; collapsing the divider to length `10_000` shoves everything to its left off the screen's left edge (public API, no event injection). Hovering the chevron shows a borderless `NSPanel` that renders `CGWindowListCreateImage` captures of the hidden items; clicking one temporarily un-collapses the divider and `AXPress`es the real item so its menu opens at the top. Pure geometry/state logic lives in `QuackKit` (unit-tested); AppKit/CGS/CG live in the `Quack` app target (build + manual verification, mirroring how `NotchService` is untested but `NotchGeometry` is).
+**Architecture:** A visible chevron `NSStatusItem` plus an empty divider `NSStatusItem`; collapsing the divider to length `10_000` shoves everything to its left off the screen's left edge (public API, no event injection). Hovering the chevron shows a borderless `NSPanel` that renders `CGWindowListCreateImage` captures of the hidden items; clicking one temporarily un-collapses the divider and `AXPress`es the real item so its menu opens at the top. Pure geometry/state logic lives in `QuackKit` (unit-tested); AppKit/CG/AX live in the `Quack` app target (build + manual verification, mirroring how `NotchService` is untested but `NotchGeometry` is).
 
-**Tech Stack:** Swift 5.9, SwiftPM (no Xcode project), AppKit `NSStatusItem`/`NSPanel`, SwiftUI via `NSHostingView`, CoreGraphics `CGWindowListCreateImage`, private CoreGraphics-Services (CGS) window enumeration, ApplicationServices (AX), XCTest in `QuackKitTests`.
+**Tech Stack:** Swift 5.9, SwiftPM (no Xcode project), AppKit `NSStatusItem`/`NSPanel`, SwiftUI via `NSHostingView`, CoreGraphics `CGWindowListCreateImage` / `CGWindowListCopyWindowInfo` (public), ApplicationServices (AX `AXExtrasMenuBar`/`AXPress`), XCTest in `QuackKitTests`. No private APIs.
 
 ## Global Constraints
 
@@ -18,6 +18,8 @@
 - Build/run the real app with `./Scripts/install.sh`; `swift build` only makes the dev binary. Unit tests run with `swift test`.
 - Screen Recording permission is **already** wired in `PermissionsManager` (`.screenRecording`, `requestScreenRecording()`, `refreshScreenRecording()`); reuse it, do not add a new permission file.
 - Reuse `AXStatusItemScanner.press(_:)` for click-forward; do not reintroduce notch `isHiddenByNotch` scanning for this feature.
+- **Identity is AX, not pid (Task 0 finding).** Menu-bar item windows are owned by **Control Center** in the window list, so `kCGWindowOwnerPID` does NOT identify the owning app. The owning app, its icon, its AX element (for clicking), and item frames all come from the **AX tree** (`AXExtrasMenuBar`, as the existing scanner does). Window capture supplies **only** the glyph image, associated to an AX item by matching X frame while the item is on-screen.
+- **Capture only on-screen (Task 0 finding).** Off-screen items capture as nil. Capture and classify the hidden set at **warm time** (items on-screen); render that remembered set at reveal. Never enumerate/capture off-screen frames.
 
 ---
 
@@ -30,12 +32,13 @@
 
 **New — `Sources/Quack/MenuBar/HiddenBar/` (app target):**
 - `ControlItemManager.swift` — owns `chevron` + `hiddenDivider` `NSStatusItem`s; length toggle; hover callbacks.
-- `StatusItemEnumerator.swift` — CGS enumeration of third-party status-item windows (id, frame, pid).
-- `MenuBarItemImageCache.swift` — `CGWindowListCreateImage` capture + cache, scaled by backing factor.
+- `MenuBarAXScanner.swift` — AX-tree scan of all apps' `AXExtrasMenuBar` (real app/icon/element/frame); the identity source.
+- `StatusWindowList.swift` — on-screen layer-25 window `(id, frame)` list, for matching a windowID to an AX item by X during capture.
+- `MenuBarItemImageCache.swift` — `CGWindowListCreateImage` glyph capture (on-screen only), keyed by AX id, scaled by backing factor.
+- `HiddenBarGeometry.swift` — `MenuBarBand` and `NotchProbe` helpers.
 - `HiddenBarPanel.swift` — the `NSPanel`, geometry, hover lifecycle, pin-on-click.
 - `HiddenBarView.swift` — SwiftUI replica strip + permission-missing banner.
-- `HiddenBarService.swift` — `ManagedService` orchestrator: reveal, temp-show → AXPress → re-collapse, cache warming, permission gating.
-- `CGSMenuBarBridging.swift` — isolated shim for the private CGS window-list calls.
+- `HiddenBarService.swift` — `ManagedService` orchestrator: warm-at-hide capture, cache render, AXPress click-forward, permission gating.
 
 **Modified:**
 - `Sources/QuackKit/Models/QuackSettings.swift` — add `hiddenBarEnabled`.
@@ -46,7 +49,11 @@
 
 ---
 
-## Task 0: Spike — prove off-screen window capture (GATE)
+## Task 0: Spike — capture feasibility (GATE) — ✅ DONE 2026-07-13
+
+**Result (macOS 26.5.1, 14" MBP):** On-screen menu-bar item capture works; **off-screen (negative-X) capture returns nil**. Menu-bar item windows are owned by Control Center (layer 25), not the app. Decision taken: **capture-at-hide + cache** (grab glyphs while on-screen, cache, render cache; app-icon fallback). Tasks 7 and 9 below reflect this — there is no off-screen capture anywhere. Spike code was removed; no further action needed for this task.
+
+<details><summary>Original spike (for reference)</summary>
 
 This validates the plan's highest-risk assumption before any real building. It is throwaway code; do not commit it to a permanent file.
 
@@ -100,6 +107,8 @@ Expected: at least one candidate at negative X returns a non-nil `CGImage` of no
 - [ ] **Step 4: Remove the spike**
 
 Delete `_CaptureSpike.swift` and the `_CaptureSpike.run()` call. Do not commit the spike. Commit nothing for this task (or commit only a one-line note in the spec's Verification section recording the result).
+
+</details>
 
 ---
 
@@ -160,7 +169,9 @@ git commit -m "feat(hiddenbar): add hiddenBarEnabled setting + Feature case"
 
 ---
 
-## Task 2: HiddenBarLayout — zone classification + panel geometry
+## Task 2: HiddenBarLayout — panel geometry
+
+Zone classification (hidden = `minX < chevronMinX`) is a one-liner applied to `MenuBarAXItem` directly in the service (Task 9); it needs no separate type. This task provides only the panel-frame geometry.
 
 **Files:**
 - Create: `Sources/QuackKit/HiddenBar/HiddenBarLayout.swift`
@@ -168,9 +179,7 @@ git commit -m "feat(hiddenbar): add hiddenBarEnabled setting + Feature case"
 
 **Interfaces:**
 - Produces:
-  - `struct MenuBarItemFrame: Equatable, Sendable { let windowID: UInt32; let minX: CGFloat; let width: CGFloat }`
-  - `HiddenBarLayout.hiddenItems(items:chevronMinX:) -> [MenuBarItemFrame]` — items whose `minX < chevronMinX`, sorted left→right by `minX`.
-  - `HiddenBarLayout.panelFrame(itemCount:itemWidth:spacing:padding:height:chevronMidX:menuBarBottomY:screenMinX:screenMaxX:) -> CGRect` — the secondary-bar rect, right-aligned under the chevron, clamped within screen bounds.
+  - `HiddenBarLayout.panelFrame(itemCount:itemWidth:spacing:padding:height:chevronMidX:menuBarBottomY:screenMinX:screenMaxX:) -> CGRect` — the secondary-bar rect, centered under the chevron, clamped within screen bounds, hanging below the menu bar.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -179,16 +188,6 @@ import XCTest
 @testable import QuackKit
 
 final class HiddenBarLayoutTests: XCTestCase {
-    func testHiddenItemsAreThoseLeftOfChevronSortedByX() {
-        let items = [
-            MenuBarItemFrame(windowID: 1, minX: 900, width: 24), // shown (right of chevron)
-            MenuBarItemFrame(windowID: 2, minX: 300, width: 24), // hidden
-            MenuBarItemFrame(windowID: 3, minX: 100, width: 24), // hidden
-        ]
-        let hidden = HiddenBarLayout.hiddenItems(items: items, chevronMinX: 800)
-        XCTAssertEqual(hidden.map(\.windowID), [3, 2])
-    }
-
     func testPanelFrameRightAlignedUnderChevronAndClamped() {
         // 3 items * 24 + 2*8 spacing + 2*6 padding = 100 wide, 26 tall.
         let f = HiddenBarLayout.panelFrame(
@@ -214,31 +213,16 @@ final class HiddenBarLayoutTests: XCTestCase {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter HiddenBarLayoutTests`
-Expected: FAIL — no such type `HiddenBarLayout` / `MenuBarItemFrame`.
+Expected: FAIL — no such type `HiddenBarLayout`.
 
 - [ ] **Step 3: Implement**
 
 ```swift
 import CoreGraphics
 
-public struct MenuBarItemFrame: Equatable, Sendable {
-    public let windowID: UInt32
-    public let minX: CGFloat
-    public let width: CGFloat
-    public init(windowID: UInt32, minX: CGFloat, width: CGFloat) {
-        self.windowID = windowID; self.minX = minX; self.width = width
-    }
-}
-
-/// Pure geometry for the hidden bar. Coordinate space is the caller's; the panel
-/// helper works in a Y-up space where `menuBarBottomY` is the menu bar's lower
-/// edge and the panel hangs below it.
+/// Pure geometry for the hidden bar. Works in a Y-up space where
+/// `menuBarBottomY` is the menu bar's lower edge and the panel hangs below it.
 public enum HiddenBarLayout {
-
-    /// Items the user parked left of the chevron (the hidden zone), left→right.
-    public static func hiddenItems(items: [MenuBarItemFrame], chevronMinX: CGFloat) -> [MenuBarItemFrame] {
-        items.filter { $0.minX < chevronMinX }.sorted { $0.minX < $1.minX }
-    }
 
     /// The secondary-bar rect: centered under the chevron, clamped within screen.
     public static func panelFrame(
@@ -260,13 +244,13 @@ public enum HiddenBarLayout {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `swift test --filter HiddenBarLayoutTests`
-Expected: PASS (3 tests).
+Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add Sources/QuackKit/HiddenBar/HiddenBarLayout.swift Tests/QuackKitTests/HiddenBarLayoutTests.swift
-git commit -m "feat(hiddenbar): pure zone classification + panel geometry"
+git commit -m "feat(hiddenbar): pure panel geometry"
 ```
 
 ---
@@ -469,7 +453,9 @@ final class ControlItemManager {
          onChevronExit: @escaping () -> Void,
          onChevronClick: @escaping () -> Void) {
         self.onChevronClick = onChevronClick
-        hiddenDivider = NSStatusBar.system.statusItem(withLength: Length.expanded)
+        // Start expanded (items visible) so the service can warm-capture glyphs
+        // while items are on-screen before its first collapse() (Task 9).
+        hiddenDivider = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         chevron = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         hiddenDivider.autosaveName = "quack.hiddenDivider"
         chevron.autosaveName = "quack.chevron"
@@ -538,77 +524,133 @@ git commit -m "feat(hiddenbar): control items (chevron + collapsing divider)"
 
 ---
 
-## Task 6: CGS bridging + StatusItemEnumerator
+## Task 6: AX item scan + status-window frame list
+
+Per the Task 0 finding, identity comes from AX (real app/icon/element/frame), and the window list supplies only `(windowID, frame)` for glyph-capture matching (its pid is Control Center's, so it is NOT used for identity).
 
 **Files:**
-- Create: `Sources/Quack/MenuBar/HiddenBar/CGSMenuBarBridging.swift`
-- Create: `Sources/Quack/MenuBar/HiddenBar/StatusItemEnumerator.swift`
+- Create: `Sources/Quack/MenuBar/HiddenBar/MenuBarAXScanner.swift`
+- Create: `Sources/Quack/MenuBar/HiddenBar/StatusWindowList.swift`
 
 **Interfaces:**
 - Produces:
-  - `struct EnumeratedItem { let windowID: UInt32; let pid: pid_t; let frame: CGRect }`
-  - `StatusItemEnumerator.currentItems() -> [EnumeratedItem]` — all third-party menu-bar status-item windows (layer 25), excluding Quack's own pid, in global Quartz coords, including off-screen (negative-X) ones.
+  - `struct MenuBarAXItem { let id: String; let pid: pid_t; let appName: String; let appIcon: NSImage?; let element: AXUIElement; let frame: CGRect }` — `id` is `"pid:index"`.
+  - `MenuBarAXScanner.scanAll(menuBarBandY: ClosedRange<CGFloat>) -> [MenuBarAXItem]` — every app's `AXExtrasMenuBar` children whose frame midY is in the menu-bar band, sorted by `frame.minX`. (Generalizes the existing notch scanner: no notch filter.)
+  - `struct StatusWindow { let windowID: UInt32; let frame: CGRect }`
+  - `StatusWindowList.onScreen() -> [StatusWindow]` — layer-25 windows (any owner), on-screen only, for frame-matching during capture.
 
-Uses `CGWindowListCopyWindowInfo` (public) as the primary source — it lists off-screen windows too when `.optionOnScreenOnly` is omitted. The CGS shim file is a placeholder for private calls only if the public list proves insufficient in Task 0/7; keep it minimal.
-
-- [ ] **Step 1: Implement the enumerator (public API first)**
+- [ ] **Step 1: Implement the AX scanner**
 
 ```swift
 import AppKit
-import CoreGraphics
+import ApplicationServices
 
-struct EnumeratedItem: Equatable {
-    let windowID: UInt32
+struct MenuBarAXItem {
+    let id: String
     let pid: pid_t
-    let frame: CGRect   // global Quartz (Y-down)
+    let appName: String
+    let appIcon: NSImage?
+    let element: AXUIElement
+    let frame: CGRect
 }
 
-/// Lists third-party status-item windows (menu-bar layer 25), including items
-/// pushed off-screen-left by the divider. Public `CGWindowListCopyWindowInfo`
-/// includes off-screen windows when `.optionOnScreenOnly` is omitted.
-enum StatusItemEnumerator {
-    static func currentItems() -> [EnumeratedItem] {
+/// Walks every running app's AXExtrasMenuBar and returns all menu-bar status
+/// items with real frames. Identity/app/icon/element come from AX because the
+/// window list attributes menu-bar windows to Control Center (Task 0). Call off
+/// the main actor: AX is blocking IPC. Needs the Accessibility grant.
+enum MenuBarAXScanner {
+    static func scanAll(menuBarBandY: ClosedRange<CGFloat>) -> [MenuBarAXItem] {
+        let apps = NSWorkspace.shared.runningApplications
         let ownPID = ProcessInfo.processInfo.processIdentifier
-        let opts: CGWindowListOption = [.excludeDesktopElements]
-        guard let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else { return [] }
-        var out: [EnumeratedItem] = []
-        for w in info {
-            guard let layer = w[kCGWindowLayer as String] as? Int, layer == 25,
-                  let pid = w[kCGWindowOwnerPID as String] as? pid_t, pid != ownPID,
-                  let wid = w[kCGWindowNumber as String] as? UInt32,
-                  let b = w[kCGWindowBounds as String] as? [String: CGFloat],
-                  let x = b["X"], let y = b["Y"], let ww = b["Width"], let hh = b["Height"]
-            else { continue }
-            out.append(EnumeratedItem(windowID: wid, pid: pid,
-                                      frame: CGRect(x: x, y: y, width: ww, height: hh)))
+        let lock = NSLock()
+        var found: [MenuBarAXItem] = []
+        DispatchQueue.concurrentPerform(iterations: apps.count) { i in
+            let app = apps[i]
+            guard app.processIdentifier != ownPID else { return }
+            let hits = scanApp(app, menuBarBandY: menuBarBandY)
+            guard !hits.isEmpty else { return }
+            lock.lock(); found.append(contentsOf: hits); lock.unlock()
         }
-        return out.sorted { $0.frame.minX < $1.frame.minX }
+        return found.sorted { $0.frame.minX < $1.frame.minX }
+    }
+
+    private static func scanApp(_ app: NSRunningApplication, menuBarBandY: ClosedRange<CGFloat>) -> [MenuBarAXItem] {
+        let ax = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(ax, 0.25)
+        var barVal: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(ax, "AXExtrasMenuBar" as CFString, &barVal) == .success,
+              let bar = barVal, CFGetTypeID(bar) == AXUIElementGetTypeID() else { return [] }
+        var childrenVal: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(bar as! AXUIElement, kAXChildrenAttribute as CFString, &childrenVal) == .success,
+              let children = childrenVal as? [AXUIElement] else { return [] }
+        var out: [MenuBarAXItem] = []
+        for (index, child) in children.enumerated() {
+            guard let frame = frame(of: child), frame.width > 0,
+                  menuBarBandY.contains(frame.midY) else { continue }
+            out.append(MenuBarAXItem(
+                id: "\(app.processIdentifier):\(index)",
+                pid: app.processIdentifier,
+                appName: app.localizedName ?? "?",
+                appIcon: app.icon,
+                element: child,
+                frame: frame))
+        }
+        return out
+    }
+
+    private static func frame(of el: AXUIElement) -> CGRect? {
+        var posVal: CFTypeRef?, sizeVal: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &posVal) == .success,
+              AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &sizeVal) == .success
+        else { return nil }
+        var origin = CGPoint.zero, size = CGSize.zero
+        guard AXValueGetValue(posVal as! AXValue, .cgPoint, &origin),
+              AXValueGetValue(sizeVal as! AXValue, .cgSize, &size) else { return nil }
+        return CGRect(origin: origin, size: size)
     }
 }
 ```
 
+- [ ] **Step 2: Implement the window frame list**
+
 ```swift
-// CGSMenuBarBridging.swift — reserved for private CGS calls if the public
-// window list proves insufficient (e.g. windows disappearing when far off-screen).
-// Left intentionally minimal until a concrete need surfaces in manual testing.
 import CoreGraphics
-enum CGSMenuBarBridging {}
+
+struct StatusWindow {
+    let windowID: UInt32
+    let frame: CGRect   // global Quartz
+}
+
+/// On-screen layer-25 (menu-bar) windows, any owner. Used only to match a
+/// windowID to an AX item by X so the glyph can be captured while on-screen.
+enum StatusWindowList {
+    static func onScreen() -> [StatusWindow] {
+        let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else { return [] }
+        var out: [StatusWindow] = []
+        for w in info {
+            guard let layer = w[kCGWindowLayer as String] as? Int, layer == 25,
+                  let wid = w[kCGWindowNumber as String] as? UInt32,
+                  let b = w[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = b["X"], let y = b["Y"], let ww = b["Width"], let hh = b["Height"], ww > 0
+            else { continue }
+            out.append(StatusWindow(windowID: wid, frame: CGRect(x: x, y: y, width: ww, height: hh)))
+        }
+        return out
+    }
+}
 ```
 
-- [ ] **Step 2: Build**
+- [ ] **Step 3: Build**
 
 Run: `swift build`
 Expected: clean.
 
-- [ ] **Step 3: Manual verify enumeration**
-
-Temporarily log `StatusItemEnumerator.currentItems()` from `AppEnvironment.init()`; `./Scripts/install.sh`; with the divider expanded (after Task 5 is wired, or by reusing the Task-0 divider), confirm off-screen items appear with negative X. Remove the log.
-
 - [ ] **Step 4: Commit**
 
 ```bash
-git add Sources/Quack/MenuBar/HiddenBar/StatusItemEnumerator.swift Sources/Quack/MenuBar/HiddenBar/CGSMenuBarBridging.swift
-git commit -m "feat(hiddenbar): enumerate third-party status-item windows"
+git add Sources/Quack/MenuBar/HiddenBar/MenuBarAXScanner.swift Sources/Quack/MenuBar/HiddenBar/StatusWindowList.swift
+git commit -m "feat(hiddenbar): AX item scan + status-window frame list"
 ```
 
 ---
@@ -619,12 +661,14 @@ git commit -m "feat(hiddenbar): enumerate third-party status-item windows"
 - Create: `Sources/Quack/MenuBar/HiddenBar/MenuBarItemImageCache.swift`
 
 **Interfaces:**
-- Consumes: `EnumeratedItem` (Task 6).
+- Consumes: `MenuBarAXItem`, `StatusWindow` (Task 6).
 - Produces:
   - `@MainActor final class MenuBarItemImageCache`
-  - `func image(for item: EnumeratedItem) -> NSImage?` — cached capture, keyed by `windowID`
-  - `func refresh(_ items: [EnumeratedItem])` — recapture all; drops stale keys
+  - `func image(forID id: String) -> NSImage?` — cached glyph, keyed by AX item id
+  - `func captureOnScreen(items: [MenuBarAXItem], windows: [StatusWindow])` — for each **on-screen** AX item, match the layer-25 window at the same X and capture it; store keyed by the AX item's `id`. Merges (keeps prior captures for items not on-screen now).
   - `var hasScreenRecording: Bool` (mirror of `CGPreflightScreenCaptureAccess()`)
+
+> **Task 0 constraints:** off-screen (negative-X) items capture as nil, so only on-screen items (`frame.minX >= 0`) are attempted. Window pid is Control Center's, so the AX item ↔ window association is by **X-frame match**, not pid. Cache is keyed by the AX `id` (stable across collapse), not windowID.
 
 - [ ] **Step 1: Implement**
 
@@ -632,27 +676,30 @@ git commit -m "feat(hiddenbar): enumerate third-party status-item windows"
 import AppKit
 import CoreGraphics
 
-/// Captures each hidden status item's pixels via CGWindowListCreateImage,
-/// keyed by window id. Returns nil without Screen Recording (image is black).
+/// Caches real-glyph captures keyed by AX item id. Captures ONLY on-screen
+/// items (off-screen capture returns nil on macOS 26 — Task 0). The glyph for an
+/// AX item is the capture of the layer-25 window sitting at the same X.
 @MainActor
 final class MenuBarItemImageCache {
-    private var cache: [UInt32: NSImage] = [:]
+    private var cache: [String: NSImage] = [:]
 
     var hasScreenRecording: Bool { CGPreflightScreenCaptureAccess() }
 
-    func image(for item: EnumeratedItem) -> NSImage? { cache[item.windowID] }
+    func image(forID id: String) -> NSImage? { cache[id] }
 
-    func refresh(_ items: [EnumeratedItem]) {
-        guard hasScreenRecording else { cache.removeAll(); return }
-        var next: [UInt32: NSImage] = [:]
-        for item in items {
+    func captureOnScreen(items: [MenuBarAXItem], windows: [StatusWindow], tolerance: CGFloat = 6) {
+        guard hasScreenRecording else { return }
+        for item in items where item.frame.minX >= 0 {
+            guard let win = windows.min(by: {
+                abs($0.frame.minX - item.frame.minX) < abs($1.frame.minX - item.frame.minX)
+            }), abs(win.frame.minX - item.frame.minX) <= tolerance else { continue }
             guard let cg = CGWindowListCreateImage(
-                .null, .optionIncludingWindow, item.windowID,
+                .null, .optionIncludingWindow, win.windowID,
                 [.boundsIgnoreFraming, .bestResolution]),
                 cg.width > 1, cg.height > 1 else { continue }
-            next[item.windowID] = NSImage(cgImage: cg, size: NSSize(width: item.frame.width, height: item.frame.height))
+            cache[item.id] = NSImage(cgImage: cg,
+                size: NSSize(width: item.frame.width, height: item.frame.height))
         }
-        cache = next
     }
 }
 ```
@@ -666,7 +713,7 @@ Expected: clean.
 
 ```bash
 git add Sources/Quack/MenuBar/HiddenBar/MenuBarItemImageCache.swift
-git commit -m "feat(hiddenbar): capture hidden item images via CGWindowListCreateImage"
+git commit -m "feat(hiddenbar): glyph cache keyed by AX id, frame-matched capture"
 ```
 
 ---
@@ -678,11 +725,11 @@ git commit -m "feat(hiddenbar): capture hidden item images via CGWindowListCreat
 - Create: `Sources/Quack/MenuBar/HiddenBar/HiddenBarPanel.swift`
 
 **Interfaces:**
-- Consumes: `EnumeratedItem`, `MenuBarItemImageCache`.
+- Consumes: `MenuBarAXItem`, `MenuBarItemImageCache`.
 - Produces:
-  - `struct HiddenBarItemVM: Identifiable { let id: UInt32; let image: NSImage?; let item: EnumeratedItem }`
-  - `HiddenBarView(items:onClick:showPermissionBanner:onGrant:)`
-  - `@MainActor final class HiddenBarPanel` with `func show(items:frame:)`, `func hide()`, `var isVisible: Bool`, and hover callbacks `onPanelHover`/`onPanelExit`.
+  - `struct HiddenBarItemVM: Identifiable { let id: String; let image: NSImage?; let item: MenuBarAXItem }` — `image` is the glyph capture already resolved to `glyph ?? appIcon` by the service.
+  - `HiddenBarView(items: [HiddenBarItemVM], onClick: (MenuBarAXItem) -> Void, showPermissionBanner: Bool, onGrant: () -> Void)`
+  - `@MainActor final class HiddenBarPanel` with `func show(view:frame:)`, `func hide()`, `var isVisible: Bool`, and hover callbacks `onPanelHover`/`onPanelExit`.
 
 - [ ] **Step 1: Implement the view**
 
@@ -691,14 +738,14 @@ import SwiftUI
 import AppKit
 
 struct HiddenBarItemVM: Identifiable {
-    let id: UInt32
+    let id: String
     let image: NSImage?
-    let item: EnumeratedItem
+    let item: MenuBarAXItem
 }
 
 struct HiddenBarView: View {
     let items: [HiddenBarItemVM]
-    let onClick: (EnumeratedItem) -> Void
+    let onClick: (MenuBarAXItem) -> Void
     let showPermissionBanner: Bool
     let onGrant: () -> Void
 
@@ -818,21 +865,64 @@ git commit -m "feat(hiddenbar): secondary bar panel + SwiftUI replica strip"
 - Modify: `Sources/Quack/AppEnvironment.swift` (construct + register under `.hiddenBar`)
 
 **Interfaces:**
-- Consumes: everything above; `SettingsStore`, `PermissionsManager`, `AXStatusItemScanner.press`, `HiddenBarLayout`, `HiddenBarReveal`, `ChevronPlacement`, `NotchGeometry`.
+- Consumes: `ControlItemManager`, `MenuBarAXScanner`, `StatusWindowList`, `MenuBarItemImageCache`, `HiddenBarPanel`, `HiddenBarView`, `HiddenBarItemVM`, `HiddenBarLayout`, `HiddenBarReveal`, `ChevronPlacement`, `MenuBarBand`, `NotchProbe`, `SettingsStore`, `PermissionsManager`.
 - Produces: `@MainActor final class HiddenBarService: ManagedService` with `start()` / `stop()`.
 
-Behavior:
-- `start()`: create `ControlItemManager` (collapsed), warm the image cache.
-- Reveal: on `hoverChevron`, drive the `HiddenBarReveal` machine; on entering `.revealed`, enumerate items, classify with `HiddenBarLayout.hiddenItems`, refresh cache, build VMs, compute `panelFrame`, show the panel.
-- Grace: when `startsGraceTimer` is true, arm a `Timer` (~0.25s) that fires `.graceElapsed`; cancel on any hover.
-- Click-forward: on item click → `controlItems.expand()`; after a short layout delay (~120ms) run `AXStatusItemScanner.press` for the matching AX element on a background queue; re-enumerate to detect the menu dismissing (mouse-up global monitor with timeout) → `controlItems.collapse()`. Map `EnumeratedItem.pid` → the AX element via a per-click `AXStatusItemScanner`-style lookup keyed by pid (reuse the scanner's `AXExtrasMenuBar` walk; press the child whose on-screen frame matches after expand).
-- Placement guard: if `ChevronPlacement.isSafe` is false (chevron left of notch), show a one-time toast/log advising the user to ⌘-drag the chevron right of the notch. (Do not auto-move — no event injection.)
+Behavior (AX identity + capture-at-hide, per Task 0):
+- `start()`: create `ControlItemManager` **expanded** (items still on-screen), then `warmAndCollapse()` — one natural disappearance, no extra flash.
+- `warmAndCollapse()`: off-main AX scan → classify hidden set (`frame.minX < chevronMinX`; X is coordinate-system-agnostic) → on main, capture glyphs from the on-screen window list → remember `hiddenItems` → `collapse()`. Re-run on `didBecomeActive` (user likely just re-arranged) and after each click's expand (cheap glyph refresh).
+- Reveal: render the remembered `hiddenItems` from cache (`glyph ?? appIcon`); no enumeration/capture at reveal (items are off-screen and uncapturable). Compute `panelFrame`, show panel.
+- Grace: arm a 0.25s `Timer` when `startsGraceTimer` is true; cancel on any hover.
+- Click-forward: `expand()` → after ~150ms layout delay, `AXUIElementPerformAction(item.element, kAXPressAction)` off-main (we hold the element directly — no pid lookup) → real menu opens on-screen → collapse on the next global mouse-up (with a 5s fallback). Also refresh that item's glyph while on-screen.
+- Placement guard: if `ChevronPlacement.isSafe(chevronMinX:notch:)` is false, log once advising the user to ⌘-drag the chevron right of the notch (no auto-move).
 
-- [ ] **Step 1: Implement the service**
+- [ ] **Step 1: Add small helpers (band, notch probe, AX press)**
+
+Create `Sources/Quack/MenuBar/HiddenBar/HiddenBarGeometry.swift`:
+
+```swift
+import AppKit
+import QuackKit
+
+/// Menu-bar Y band in AX/Quartz global (top-left origin) for the main display.
+enum MenuBarBand {
+    static func current() -> ClosedRange<CGFloat> {
+        let thickness = NSStatusBar.system.thickness   // ~24pt
+        return -5 ... (thickness + 12)                 // generous; main display top
+    }
+}
+
+/// Notch span of the main display, or nil if not notched. Uses the auxiliary
+/// top areas that flank the camera housing.
+enum NotchProbe {
+    static func current() -> NotchGeometry.NotchSpan? {
+        guard let screen = NSScreen.main else { return nil }
+        let left = screen.auxiliaryTopLeftArea?.width ?? 0
+        let right = screen.auxiliaryTopRightArea?.width ?? 0
+        return NotchGeometry.notchSpan(
+            screenMinX: screen.frame.minX, screenWidth: screen.frame.width,
+            leftAuxWidth: left, rightAuxWidth: right)
+    }
+}
+```
+
+Extend `Sources/Quack/MenuBar/Overflow/AXStatusItemScanner.swift` with a direct-element press (we already have the element from the scan — no pid walk needed):
+
+```swift
+extension AXStatusItemScanner {
+    /// Press a status item by its AX element. Call off the main actor (blocking IPC).
+    static func press(element: AXUIElement) {
+        AXUIElementPerformAction(element, kAXPressAction as CFString)
+    }
+}
+```
+
+- [ ] **Step 2: Implement the service**
 
 ```swift
 import AppKit
 import Combine
+import ApplicationServices
 import QuackKit
 
 @MainActor
@@ -842,9 +932,11 @@ final class HiddenBarService: ManagedService {
     private var control: ControlItemManager?
     private let panel = HiddenBarPanel()
     private let imageCache = MenuBarItemImageCache()
+    private var hiddenItems: [MenuBarAXItem] = []   // remembered set, captured on-screen
     private var state: RevealState = .hidden
     private var graceTimer: Timer?
     private var mouseUpMonitor: Any?
+    private var activeObserver: NSObjectProtocol?
 
     init(settings: SettingsStore, permissions: PermissionsManager) {
         self.settings = settings
@@ -857,18 +949,46 @@ final class HiddenBarService: ManagedService {
             onChevronHover: { [weak self] in self?.handle(.hoverChevron) },
             onChevronExit:  { [weak self] in self?.handle(.exitAll) },
             onChevronClick: { [weak self] in self?.handle(.clickChevron) })
-        c.collapse()
         control = c
         panel.onPanelHover = { [weak self] in self?.handle(.hoverPanel) }
         panel.onPanelExit  = { [weak self] in self?.handle(.exitAll) }
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.warmAndCollapse() } }
+        // Items are still on-screen (divider expanded): capture, then collapse.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.warmAndCollapse() }
     }
 
     func stop() {
         graceTimer?.invalidate(); graceTimer = nil
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
+        if let o = activeObserver { NotificationCenter.default.removeObserver(o); activeObserver = nil }
         panel.hide()
         control?.teardown(); control = nil
+        hiddenItems = []
         state = .hidden
+    }
+
+    /// Capture glyphs for the currently-on-screen hidden set, then collapse.
+    private func warmAndCollapse() {
+        guard let control else { return }
+        control.expand()
+        guard let chevronMinX = control.chevronMinX else { control.collapse(); return }
+        if let notch = NotchProbe.current(), !ChevronPlacement.isSafe(chevronMinX: chevronMinX, notch: notch) {
+            Log.notch.notice("hidden bar: chevron left of notch — ⌘-drag it right of the notch")
+        }
+        let band = MenuBarBand.current()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
+            let hidden = items.filter { $0.frame.minX < chevronMinX }
+            let windows = StatusWindowList.onScreen()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.imageCache.captureOnScreen(items: hidden, windows: windows)
+                self.hiddenItems = hidden
+                self.control?.collapse()
+            }
+        }
     }
 
     private func handle(_ event: RevealEvent) {
@@ -888,38 +1008,33 @@ final class HiddenBarService: ManagedService {
     }
 
     private func reveal() {
-        guard let chevronMinX = control?.chevronMinX,
-              let chevronFrame = control?.chevronFrameOnScreen else { return }
-        let all = StatusItemEnumerator.currentItems().map {
-            MenuBarItemFrame(windowID: $0.windowID, minX: $0.frame.minX, width: $0.frame.width)
+        guard let chevronFrame = control?.chevronFrameOnScreen, let screen = NSScreen.main else { return }
+        let vms = hiddenItems.map {
+            HiddenBarItemVM(id: $0.id, image: imageCache.image(forID: $0.id) ?? $0.appIcon, item: $0)
         }
-        let hiddenFrames = HiddenBarLayout.hiddenItems(items: all, chevronMinX: chevronMinX)
-        let hiddenSet = Set(hiddenFrames.map(\.windowID))
-        let items = StatusItemEnumerator.currentItems().filter { hiddenSet.contains($0.windowID) }
-        imageCache.refresh(items)
-        let vms = items.map { HiddenBarItemVM(id: $0.windowID, image: imageCache.image(for: $0), item: $0) }
-        guard let screen = NSScreen.main else { return }
         let frame = HiddenBarLayout.panelFrame(
             itemCount: vms.count, itemWidth: 24, spacing: 8, padding: 6, height: 26,
             chevronMidX: chevronFrame.midX,
-            menuBarBottomY: screen.frame.maxY - (screen.frame.maxY - screen.visibleFrame.maxY),
+            menuBarBottomY: screen.frame.maxY - NSStatusBar.system.thickness,
             screenMinX: screen.frame.minX, screenMaxX: screen.frame.maxX)
         let view = HiddenBarView(
             items: vms,
             onClick: { [weak self] in self?.forwardClick($0) },
             showPermissionBanner: !imageCache.hasScreenRecording,
-            onGrant: { [weak self] in self?.permissions.requestScreenRecording()
-                                       self?.permissions.openSystemSettings(for: .screenRecording) })
+            onGrant: { [weak self] in
+                self?.permissions.requestScreenRecording()
+                self?.permissions.openSystemSettings(for: .screenRecording)
+            })
         panel.show(view: view, frame: frame)
     }
 
-    private func forwardClick(_ item: EnumeratedItem) {
-        control?.expand()                                  // real item snaps on-screen
+    private func forwardClick(_ item: MenuBarAXItem) {
+        control?.expand()          // real item snaps on-screen; menu will open here
         panel.hide()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self else { return }
             DispatchQueue.global(qos: .userInitiated).async {
-                AXStatusItemPress.pressItem(pid: item.pid, onScreenFrame: item.frame)
+                AXStatusItemScanner.press(element: item.element)
             }
             self.armCollapseAfterMenu()
         }
@@ -933,39 +1048,7 @@ final class HiddenBarService: ManagedService {
                 if let m = self?.mouseUpMonitor { NSEvent.removeMonitor(m); self?.mouseUpMonitor = nil }
             }
         }
-        // Fallback: collapse after 5s even if no mouse-up seen.
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.control?.collapse() }
-    }
-}
-```
-
-- [ ] **Step 2: Add the AX press-by-pid helper**
-
-Extend the existing scanner file `Sources/Quack/MenuBar/Overflow/AXStatusItemScanner.swift` with a small helper that walks one pid's `AXExtrasMenuBar` and presses the child whose on-screen frame matches (after `expand()` the item has a real frame):
-
-```swift
-enum AXStatusItemPress {
-    /// Presses the status item of `pid` whose AX frame matches `onScreenFrame`
-    /// (matched on midX within tolerance). Call off the main actor.
-    static func pressItem(pid: pid_t, onScreenFrame: CGRect, tolerance: CGFloat = 8) {
-        let ax = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(ax, 0.25)
-        var barVal: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(ax, "AXExtrasMenuBar" as CFString, &barVal) == .success,
-              let bar = barVal, CFGetTypeID(bar) == AXUIElementGetTypeID() else { return }
-        var childrenVal: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(bar as! AXUIElement, kAXChildrenAttribute as CFString, &childrenVal) == .success,
-              let children = childrenVal as? [AXUIElement] else { return }
-        for child in children {
-            var posVal: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(child, kAXPositionAttribute as CFString, &posVal) == .success else { continue }
-            var origin = CGPoint.zero
-            guard AXValueGetValue(posVal as! AXValue, .cgPoint, &origin) else { continue }
-            if abs(origin.x - onScreenFrame.minX) <= tolerance {
-                AXUIElementPerformAction(child, kAXPressAction as CFString)
-                return
-            }
-        }
     }
 }
 ```
@@ -981,13 +1064,13 @@ Expected: clean.
 
 - [ ] **Step 5: Manual end-to-end verify**
 
-`./Scripts/install.sh`. Enable the feature (Task 11 toggle, or temporarily force `hiddenBarEnabled = true`). ⌘-drag two app icons left of the chevron. Verify: they vanish (collapsed); hovering the chevron shows the secondary bar with their real glyphs; clicking one opens that app's real menu at the top; the bar hides on mouse-out after the grace delay; clicking the chevron pins it.
+`./Scripts/install.sh`. Enable the feature (Task 11 toggle, or temporarily force `hiddenBarEnabled = true`). Grant Accessibility + Screen Recording. ⌘-drag two app icons left of the chevron. Verify: they collapse off-screen after warm; hovering the chevron shows the secondary bar with their **real glyphs** (captured at warm); clicking one opens that app's real menu at the top; the bar hides on mouse-out after the grace delay; clicking the chevron pins it. Re-arrange, click Quack's Dock/menu to re-activate → glyph set refreshes.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/Quack/MenuBar/HiddenBar/HiddenBarService.swift Sources/Quack/MenuBar/Overflow/AXStatusItemScanner.swift Sources/Quack/AppEnvironment.swift
-git commit -m "feat(hiddenbar): orchestrate reveal + AXPress click-forward"
+git add Sources/Quack/MenuBar/HiddenBar/HiddenBarService.swift Sources/Quack/MenuBar/HiddenBar/HiddenBarGeometry.swift Sources/Quack/MenuBar/Overflow/AXStatusItemScanner.swift Sources/Quack/AppEnvironment.swift
+git commit -m "feat(hiddenbar): AX-identity orchestration, capture-at-hide, AXPress click-forward"
 ```
 
 ---
@@ -1087,4 +1170,4 @@ git add -A && git commit -m "test(hiddenbar): verify suite + freeze-safety regre
 - **Spec coverage:** hide mechanism (Tasks 5), arrangement (manual, Task 11 instructions), secondary bar (Tasks 7–8), capture + Screen Recording + fallback (Tasks 0,7,9), click-forward full fidelity (Task 9), two-zone classification (Task 2), chevron trigger + hover machine (Tasks 3,5,9), notch placement rule (Tasks 4,9,12), removal of notch row (Task 10), permissions reuse (Task 9/11). All spec sections map to a task.
 - **Out-of-scope (v1)** honored: no third zone, no auto-move, main-display-only (`NSScreen.main` in Task 9).
 - **Highest risk** (off-screen capture) is gated by Task 0 before any real work.
-- **Type consistency:** `EnumeratedItem`, `MenuBarItemFrame`, `HiddenBarItemVM`, `RevealState`/`RevealEvent`, `ChevronPlacement.isSafe`, `AXStatusItemPress.pressItem` used consistently across producing and consuming tasks.
+- **Type consistency:** `MenuBarAXItem` (identity), `StatusWindow` (capture matching), `HiddenBarItemVM`, `RevealState`/`RevealEvent`, `ChevronPlacement.isSafe`, `HiddenBarLayout.panelFrame`, `AXStatusItemScanner.press(element:)` used consistently across producing and consuming tasks. No pid-based identity anywhere (Task 0: windows owned by Control Center).
