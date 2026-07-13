@@ -28,7 +28,9 @@ final class NotchService: NSObject, ManagedService {
     /// while a fresh scan runs behind it.
     private var hiddenIconsCache: [HiddenStatusItem] = []
 
-    private let hoverMargin: CGFloat = 24
+    /// Collapsed hover strip height, hanging below the notch. Kept small so it
+    /// doesn't catch hover/clicks over app content beneath the notch.
+    private let hoverMargin: CGFloat = 8
     private let expandedWidth: CGFloat = 420
     private let mediaOnlyContentHeight: CGFloat = 58
     /// Height of the hidden-icons row (18pt icons + top padding).
