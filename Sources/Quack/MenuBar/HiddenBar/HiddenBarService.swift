@@ -87,8 +87,13 @@ final class HiddenBarService: ManagedService {
     }
 
     /// Capture glyphs for the currently-on-screen hidden set, then collapse.
-    private func warmAndCollapse() {
+    private func warmAndCollapse(isRetry: Bool = false) {
         guard let control, !isArranging else { return }   // don't collapse mid-arrange
+        // Reset the retry budget on every FRESH trigger (startup, display change,
+        // app-activate). Otherwise the counter accumulates across 1.5s timer ticks
+        // and, once it passes the cap, every later call gives up immediately —
+        // the feature then never recovers without a relaunch.
+        if !isRetry { warmAttempts = 0 }
         control.expand()
         // A hidden chevron (isVisible=false) reports a (0,0) frame, which would
         // fail the on-screen gate below forever. Make it visible first so its
@@ -109,9 +114,7 @@ final class HiddenBarService: ManagedService {
               dividerFrame.minX <= chevronFrame.minX else {
             warmAttempts += 1
             if warmAttempts <= 25 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.warmAndCollapse() }
-            } else {
-                control.collapse()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.warmAndCollapse(isRetry: true) }
             }
             return
         }
