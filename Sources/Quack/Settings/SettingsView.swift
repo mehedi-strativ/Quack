@@ -1444,6 +1444,11 @@ private struct HiddenBarSection: View {
                 Text("On external monitors there's no notch crushing icons, so nothing is hidden there.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
 
+                Toggle("Reveal hidden icons while on battery", isOn: s.binding(\.hiddenBarRevealOnBattery))
+                Toggle("Reveal hidden icons while Wi-Fi is off", isOn: s.binding(\.hiddenBarRevealOnWifiOff))
+                Text("Auto-shows the hidden icons when the condition holds, and re-hides them when it clears.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+
                 // Arrange mode: expands the real bar with a visible boundary.
                 HStack {
                     Button(env.isArrangingHiddenBar ? "Done" : "Arrange…") {

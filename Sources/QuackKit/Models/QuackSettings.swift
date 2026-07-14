@@ -32,6 +32,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     /// On displays without a notch (external monitors), show every icon instead
     /// of hiding — the notch isn't crushing anything there.
     public var hiddenBarShowAllOnExternal: Bool
+    /// Auto-reveal the hidden icons while running on battery power.
+    public var hiddenBarRevealOnBattery: Bool
+    /// Auto-reveal the hidden icons while Wi-Fi is not connected.
+    public var hiddenBarRevealOnWifiOff: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
     /// Fire a "join now" reminder at the meeting's start time.
@@ -115,6 +119,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         notchAgentsEnabled: Bool = false,
         hiddenBarEnabled: Bool = false,
         hiddenBarShowAllOnExternal: Bool = true,
+        hiddenBarRevealOnBattery: Bool = false,
+        hiddenBarRevealOnWifiOff: Bool = false,
         hideDuckIcon: Bool = false,
         remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
@@ -159,6 +165,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.notchAgentsEnabled = notchAgentsEnabled
         self.hiddenBarEnabled = hiddenBarEnabled
         self.hiddenBarShowAllOnExternal = hiddenBarShowAllOnExternal
+        self.hiddenBarRevealOnBattery = hiddenBarRevealOnBattery
+        self.hiddenBarRevealOnWifiOff = hiddenBarRevealOnWifiOff
         self.hideDuckIcon = hideDuckIcon
         self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
@@ -216,6 +224,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
         hiddenBarEnabled = v(.hiddenBarEnabled, d.hiddenBarEnabled)
         hiddenBarShowAllOnExternal = v(.hiddenBarShowAllOnExternal, d.hiddenBarShowAllOnExternal)
+        hiddenBarRevealOnBattery = v(.hiddenBarRevealOnBattery, d.hiddenBarRevealOnBattery)
+        hiddenBarRevealOnWifiOff = v(.hiddenBarRevealOnWifiOff, d.hiddenBarRevealOnWifiOff)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)

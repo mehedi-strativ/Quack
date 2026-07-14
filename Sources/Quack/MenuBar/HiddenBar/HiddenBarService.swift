@@ -26,6 +26,9 @@ final class HiddenBarService: ManagedService {
     /// True when the current display is non-notched and we're showing every icon
     /// (no hiding) per `hiddenBarShowAllOnExternal`.
     private var showingAll = false
+    private let conditionMonitor = HiddenBarConditionMonitor()
+    /// True while a system condition (on battery / Wi-Fi off) is forcing reveal.
+    private var conditionReveal = false
 
     struct HiddenPreviewItem: Identifiable { let id: String; let name: String; let icon: NSImage? }
     /// Called (main) whenever the hidden set changes — drives the Settings preview.
@@ -58,6 +61,8 @@ final class HiddenBarService: ManagedService {
         }
         RunLoop.main.add(timer, forMode: .common)
         policyTimer = timer
+        conditionMonitor.onChange = { [weak self] c in self?.evaluateConditions(c) }
+        conditionMonitor.start()
         // Items are still on-screen (divider expanded): capture, then collapse.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.warmAndCollapse() }
     }
@@ -65,6 +70,8 @@ final class HiddenBarService: ManagedService {
     func stop() {
         graceTimer?.invalidate(); graceTimer = nil
         policyTimer?.invalidate(); policyTimer = nil
+        conditionMonitor.stop()
+        conditionReveal = false
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
         if let o = activeObserver { NotificationCenter.default.removeObserver(o); activeObserver = nil }
         if let o = screenObserver { NotificationCenter.default.removeObserver(o); screenObserver = nil }
@@ -179,6 +186,25 @@ final class HiddenBarService: ManagedService {
         } else if !hide && !showingAll {
             warmAndCollapse()          // moved onto a non-notched display → show all
         }
+        evaluateConditions(conditionMonitor.conditions)   // also picks up setting changes
+    }
+
+    /// Auto-reveal the hidden panel while a system condition holds (on battery /
+    /// Wi-Fi off), and auto-hide when it clears.
+    private func evaluateConditions(_ c: HiddenBarConditions) {
+        guard control != nil, !showingAll, !isArranging else {
+            conditionReveal = false
+            return
+        }
+        let want = (c.onBattery && settings.settings.hiddenBarRevealOnBattery)
+                || (!c.wifiConnected && settings.settings.hiddenBarRevealOnWifiOff)
+        if want && !conditionReveal {
+            conditionReveal = true
+            renderPanel()
+        } else if !want && conditionReveal {
+            conditionReveal = false
+            if state == .hidden { panel.hide() }
+        }
     }
 
     private func handle(_ event: RevealEvent) {
@@ -194,7 +220,7 @@ final class HiddenBarService: ManagedService {
         state = new
         switch new {
         case .revealed, .pinned: reveal()
-        case .hidden:            panel.hide()
+        case .hidden:            if conditionReveal { renderPanel() } else { panel.hide() }
         }
     }
 
