@@ -38,6 +38,10 @@ enum SynthClick {
 enum NotchProbe {
     static func current() -> NotchGeometry.NotchSpan? {
         guard let screen = NSScreen.main else { return nil }
+        return span(for: screen)
+    }
+
+    static func span(for screen: NSScreen) -> NotchGeometry.NotchSpan? {
         let left = screen.auxiliaryTopLeftArea?.width ?? 0
         let right = screen.auxiliaryTopRightArea?.width ?? 0
         return NotchGeometry.notchSpan(

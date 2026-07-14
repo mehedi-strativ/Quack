@@ -29,6 +29,9 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var notchAgentsEnabled: Bool
     /// Bartender-style hidden menu bar (chevron + collapsing divider).
     public var hiddenBarEnabled: Bool
+    /// On displays without a notch (external monitors), show every icon instead
+    /// of hiding — the notch isn't crushing anything there.
+    public var hiddenBarShowAllOnExternal: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
     /// Fire a "join now" reminder at the meeting's start time.
@@ -111,6 +114,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         notchMediaEnabled: Bool = false,
         notchAgentsEnabled: Bool = false,
         hiddenBarEnabled: Bool = false,
+        hiddenBarShowAllOnExternal: Bool = true,
         hideDuckIcon: Bool = false,
         remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
@@ -154,6 +158,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.notchMediaEnabled = notchMediaEnabled
         self.notchAgentsEnabled = notchAgentsEnabled
         self.hiddenBarEnabled = hiddenBarEnabled
+        self.hiddenBarShowAllOnExternal = hiddenBarShowAllOnExternal
         self.hideDuckIcon = hideDuckIcon
         self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
@@ -210,6 +215,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         notchMediaEnabled = v(.notchMediaEnabled, d.notchMediaEnabled)
         notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
         hiddenBarEnabled = v(.hiddenBarEnabled, d.hiddenBarEnabled)
+        hiddenBarShowAllOnExternal = v(.hiddenBarShowAllOnExternal, d.hiddenBarShowAllOnExternal)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)

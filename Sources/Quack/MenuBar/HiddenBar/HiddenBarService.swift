@@ -19,8 +19,13 @@ final class HiddenBarService: ManagedService {
     private var graceTimer: Timer?
     private var mouseUpMonitor: Any?
     private var activeObserver: NSObjectProtocol?
+    private var screenObserver: NSObjectProtocol?
+    private var policyTimer: Timer?
     private var warmAttempts = 0
     private(set) var isArranging = false
+    /// True when the current display is non-notched and we're showing every icon
+    /// (no hiding) per `hiddenBarShowAllOnExternal`.
+    private var showingAll = false
 
     struct HiddenPreviewItem: Identifiable { let id: String; let name: String; let icon: NSImage? }
     /// Called (main) whenever the hidden set changes — drives the Settings preview.
@@ -43,20 +48,33 @@ final class HiddenBarService: ManagedService {
         activeObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in Task { @MainActor in self?.warmAndCollapse() } }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.applyDisplayPolicy() } }
+        // The menu bar (and our status item) follows the active display; poll to
+        // notice when it moves between a notched and a non-notched display.
+        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.applyDisplayPolicy() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        policyTimer = timer
         // Items are still on-screen (divider expanded): capture, then collapse.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.warmAndCollapse() }
     }
 
     func stop() {
         graceTimer?.invalidate(); graceTimer = nil
+        policyTimer?.invalidate(); policyTimer = nil
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
         if let o = activeObserver { NotificationCenter.default.removeObserver(o); activeObserver = nil }
+        if let o = screenObserver { NotificationCenter.default.removeObserver(o); screenObserver = nil }
         panel.hide()
         control?.setDividerVisible(false)
         control?.teardown(); control = nil
         hiddenItems = []
         state = .hidden
         isArranging = false
+        showingAll = false
     }
 
     /// Capture glyphs for the currently-on-screen hidden set, then collapse.
@@ -79,6 +97,18 @@ final class HiddenBarService: ManagedService {
             return
         }
         warmAttempts = 0
+        // Non-notched display + "show all" setting → don't hide anything here.
+        guard shouldHideOnCurrentDisplay() else {
+            showingAll = true
+            control.expand()
+            control.setDividerVisible(false)
+            panel.hide()
+            state = .hidden
+            hiddenItems = []
+            onHiddenSetChanged?([])
+            return
+        }
+        showingAll = false
         if let notch = NotchProbe.current(), !ChevronPlacement.isSafe(chevronMinX: chevronMinX, notch: notch) {
             Log.notch.notice("hidden bar: chevron left of notch — ⌘-drag it right of the notch")
         }
@@ -91,7 +121,7 @@ final class HiddenBarService: ManagedService {
             let hidden = items.filter { $0.frame.minX < boundaryX }
             let windows = StatusWindowList.onScreen()
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, !self.showingAll else { return }
                 self.imageCache.captureOnScreen(items: hidden, windows: windows)
                 self.hiddenItems = hidden
                 self.control?.collapse()
@@ -121,8 +151,38 @@ final class HiddenBarService: ManagedService {
         warmAndCollapse()
     }
 
+    /// Whether hiding should be active on the display currently hosting the menu
+    /// bar: always on a notched display; on a non-notched one only if the user
+    /// hasn't opted to show everything there.
+    private func shouldHideOnCurrentDisplay() -> Bool {
+        if !settings.settings.hiddenBarShowAllOnExternal { return true }
+        return currentDisplayHasNotch()
+    }
+
+    private func currentDisplayHasNotch() -> Bool {
+        let screen: NSScreen?
+        if let f = control?.chevronFrameOnScreen {
+            screen = NSScreen.screens.first { $0.frame.intersects(f) } ?? NSScreen.main
+        } else {
+            screen = NSScreen.main
+        }
+        guard let screen else { return false }
+        return NotchProbe.span(for: screen) != nil
+    }
+
+    /// Re-evaluate hide-vs-show-all when the active display may have changed.
+    private func applyDisplayPolicy() {
+        guard control != nil, !isArranging else { return }
+        let hide = shouldHideOnCurrentDisplay()
+        if hide && showingAll {
+            warmAndCollapse()          // moved onto a notched display → re-hide
+        } else if !hide && !showingAll {
+            warmAndCollapse()          // moved onto a non-notched display → show all
+        }
+    }
+
     private func handle(_ event: RevealEvent) {
-        guard !isArranging else { return }   // no hover-reveal while arranging
+        guard !isArranging, !showingAll else { return }   // no reveal while arranging / showing all
         let old = state
         let new = HiddenBarReveal.next(old, on: event)
         graceTimer?.invalidate(); graceTimer = nil
