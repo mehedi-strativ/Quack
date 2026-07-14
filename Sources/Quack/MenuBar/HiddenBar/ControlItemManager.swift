@@ -1,104 +1,126 @@
 import AppKit
 
-/// Owns Quack's two hidden-bar control items: a visible chevron (trigger +
-/// boundary) and an empty divider whose length collapses items off-screen.
-/// Layout (L→R): [hidden items] [hiddenDivider] [chevron] [shown items].
+/// Owns Quack's two hidden-bar control items. Roles are assigned DYNAMICALLY by
+/// current position rather than creation order: the RIGHTMOST item is the visible
+/// chevron (trigger, must be right of the notch to be seen), the LEFTMOST is the
+/// collapsing divider (expands to push hidden items off-screen). This is robust
+/// to macOS/autosave placing the items in either order — the chevron glyph always
+/// lands on whichever item is visible, and collapse never eats the chevron.
+/// Layout (L→R): [hidden items] [divider] [chevron] [shown items].
 @MainActor
 final class ControlItemManager {
-    private let chevron: NSStatusItem
-    private let hiddenDivider: NSStatusItem
-    private let onChevronClick: () -> Void
-    private var hoverForwarder: HoverForwarder?
+    private let itemA: NSStatusItem
+    private let itemB: NSStatusItem
+    private let onClick: () -> Void
+    private var hoverA: HoverForwarder?
+    private var hoverB: HoverForwarder?
+    private var arranging = false
+    private var chevronHidden = false
 
     enum Length { static let expanded: CGFloat = 10_000 }
 
     init(onChevronHover: @escaping () -> Void,
          onChevronExit: @escaping () -> Void,
          onChevronClick: @escaping () -> Void) {
-        self.onChevronClick = onChevronClick
-        // ORDER MATTERS: a later-created status item is laid out to the LEFT of an
-        // earlier one (verified by the Task 0 spike). We need [divider][chevron]
-        // (chevron to the RIGHT of the divider) so that collapsing the divider
-        // (length 10_000) pushes items to ITS left off-screen while the chevron
-        // stays visible. So create the chevron FIRST (rightmost), divider SECOND.
-        // Both start at variableLength (items visible) so the service can
-        // warm-capture glyphs before its first collapse() (Task 9).
-        chevron = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        hiddenDivider = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        // Deliberately NO autosaveName: persisted positions let macOS restore a
-        // flipped order (divider ending up RIGHT of the chevron), which makes
-        // collapse() shove the chevron off-screen. Without autosave the items
-        // take creation-order placement every launch — chevron created first
-        // (rightmost), divider second (leftmost) → the required [divider][chevron].
-        hiddenDivider.button?.title = ""
-        hiddenDivider.button?.setAccessibilityLabel("Quack hidden items divider")
+        self.onClick = onChevronClick
+        itemA = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        itemB = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Autosave persists position so the user's placement (chevron right of the
+        // notch, items left of the divider) survives relaunches.
+        itemA.autosaveName = "quack.hiddenbar.chevron.v2"
+        itemB.autosaveName = "quack.hiddenbar.divider.v2"
 
-        let forwarder = HoverForwarder(enter: onChevronHover, exit: onChevronExit)
-        hoverForwarder = forwarder
+        hoverA = wire(itemA, enter: onChevronHover, exit: onChevronExit)
+        hoverB = wire(itemB, enter: onChevronHover, exit: onChevronExit)
+        refreshRoles()
+    }
 
-        if let b = chevron.button {
-            b.image = NSImage(systemSymbolName: "chevron.left",
-                              accessibilityDescription: "Show hidden menu bar items")
+    private func wire(_ item: NSStatusItem, enter: @escaping () -> Void, exit: @escaping () -> Void) -> HoverForwarder {
+        let fwd = HoverForwarder(enter: enter, exit: exit)
+        if let b = item.button {
             b.imagePosition = .imageOnly
             b.target = self
-            b.action = #selector(chevronClicked)
-            b.setAccessibilityLabel("Show hidden menu bar items")
-            // Hover tracking — NO CGEvent tap (CLAUDE.md). Button tracking area only.
-            let area = NSTrackingArea(rect: b.bounds,
-                                      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                      owner: forwarder, userInfo: nil)
-            b.addTrackingArea(area)
+            b.action = #selector(clicked)
+            b.addTrackingArea(NSTrackingArea(
+                rect: b.bounds,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: fwd, userInfo: nil))
         }
+        return fwd
     }
 
-    var chevronFrameOnScreen: CGRect? {
-        guard let window = chevron.button?.window else { return nil }
-        return window.frame
+    // MARK: Roles
+
+    private func minX(_ item: NSStatusItem) -> CGFloat {
+        item.button?.window?.frame.minX ?? .greatestFiniteMagnitude
     }
 
-    var dividerFrameOnScreen: CGRect? {
-        guard let window = hiddenDivider.button?.window else { return nil }
-        return window.frame
+    /// Leftmost = divider (collapser); rightmost = chevron (trigger).
+    private var divider: NSStatusItem { minX(itemA) <= minX(itemB) ? itemA : itemB }
+    private var chevron: NSStatusItem { minX(itemA) <= minX(itemB) ? itemB : itemA }
+
+    /// Reassign the chevron glyph to the current rightmost item and the divider
+    /// marker to the leftmost. Call when positions are settled (both on-screen).
+    func refreshRoles() {
+        let ch = chevron, dv = divider
+        ch.button?.image = Self.chevronImage
+        ch.button?.setAccessibilityLabel("Show hidden menu bar items")
+        ch.isVisible = !chevronHidden
+        dv.button?.image = arranging ? Self.dividerImage : nil
+        dv.button?.setAccessibilityLabel("Quack hidden items divider")
+        dv.isVisible = true
     }
 
+    // MARK: Geometry accessors (used by the service)
+
+    var chevronFrameOnScreen: CGRect? { chevron.button?.window?.frame }
+    var dividerFrameOnScreen: CGRect? { divider.button?.window?.frame }
+    var chevronMinX: CGFloat? { chevronFrameOnScreen?.minX }
     var dividerMinX: CGFloat? { dividerFrameOnScreen?.minX }
 
-    var chevronMinX: CGFloat? { chevronFrameOnScreen?.minX }
+    // MARK: Actions
 
-    func collapse() { hiddenDivider.length = Length.expanded }
-    func expand()   { hiddenDivider.length = NSStatusItem.variableLength }
+    func collapse() { divider.length = Length.expanded }
+    func expand()   { divider.length = NSStatusItem.variableLength }
 
-    /// Hide the chevron entirely when there's nothing to reveal (e.g. on an
-    /// external display where nothing is hidden).
-    func setChevronVisible(_ visible: Bool) { chevron.isVisible = visible }
+    /// Hide the chevron entirely when there's nothing to reveal (external show-all).
+    func setChevronVisible(_ visible: Bool) {
+        chevronHidden = !visible
+        chevron.isVisible = visible
+    }
+    var chevronIsVisible: Bool { chevron.isVisible }
 
-    /// Shows/hides a visible boundary marker on the divider so the user has a
-    /// clear target to ⌘-drag icons against during Arrange mode.
+    /// Show/hide the white boundary marker on the divider during Arrange mode.
     func setDividerVisible(_ visible: Bool) {
-        hiddenDivider.button?.image = visible ? Self.dividerImage() : nil
+        arranging = visible
+        divider.button?.image = visible ? Self.dividerImage : nil
     }
 
-    private static func dividerImage() -> NSImage {
+    func teardown() {
+        NSStatusBar.system.removeStatusItem(itemA)
+        NSStatusBar.system.removeStatusItem(itemB)
+        hoverA = nil; hoverB = nil
+    }
+
+    @objc private func clicked() { onClick() }
+
+    // MARK: Images
+
+    private static let chevronImage: NSImage? =
+        NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Show hidden menu bar items")
+
+    private static let dividerImage: NSImage = {
         let img = NSImage(size: NSSize(width: 10, height: 18))
         img.lockFocus()
         NSColor.white.setFill()
         NSBezierPath(roundedRect: NSRect(x: 3, y: 1, width: 5, height: 16), xRadius: 2, yRadius: 2).fill()
         img.unlockFocus()
-        img.isTemplate = false   // keep it white, not tinted by the menu bar
+        img.isTemplate = false
         return img
-    }
-
-    func teardown() {
-        NSStatusBar.system.removeStatusItem(chevron)
-        NSStatusBar.system.removeStatusItem(hiddenDivider)
-        hoverForwarder = nil
-    }
-
-    @objc private func chevronClicked() { onChevronClick() }
+    }()
 }
 
-/// Retains hover callbacks for a tracking area (the area's owner is unretained,
-/// so `ControlItemManager` holds a strong reference to this).
+/// Retains hover callbacks for a tracking area (the area's owner is unretained).
 private final class HoverForwarder: NSResponder {
     private let enter: () -> Void
     private let exit: () -> Void

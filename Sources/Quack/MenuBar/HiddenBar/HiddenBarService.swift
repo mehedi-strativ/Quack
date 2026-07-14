@@ -123,8 +123,9 @@ final class HiddenBarService: ManagedService {
             return
         }
         warmAttempts = 0
-        let chevronMinX = chevronFrame.minX
-        let dividerMinX = dividerFrame.minX
+        control.refreshRoles()   // assign chevron glyph to the rightmost item now
+        let chevronMinX = (control.chevronMinX ?? chevronFrame.minX)
+        let dividerMinX = (control.dividerMinX ?? dividerFrame.minX)
         // Non-notched display + "show all" setting → don't hide anything here.
         guard shouldHideOnCurrentDisplay() else {
             showingAll = true
@@ -141,6 +142,8 @@ final class HiddenBarService: ManagedService {
         if let notch = NotchProbe.current(), !ChevronPlacement.isSafe(chevronMinX: chevronMinX, notch: notch) {
             Log.notch.notice("hidden bar: chevron left of notch — ⌘-drag it right of the notch")
         }
+        // (Divider is by definition the leftmost of the two control items now,
+        // so it's always left of the chevron — no flip possible.)
         // Classify by the DIVIDER, not the chevron: collapse() only pushes items
         // left of the divider off-screen, so the panel must show exactly those.
         let boundaryX = dividerMinX
@@ -154,7 +157,10 @@ final class HiddenBarService: ManagedService {
                 self.imageCache.captureOnScreen(items: hidden, windows: windows)
                 self.hiddenItems = hidden
                 self.control?.collapse()
-                self.control?.setChevronVisible(!hidden.isEmpty)   // hide chevron if nothing hidden
+                // Keep the chevron visible on the hiding (notched) display even
+                // when nothing is hidden yet — it's the control + Arrange anchor.
+                // (It's hidden only in the external show-all path above.)
+                self.control?.setChevronVisible(true)
                 self.onHiddenSetChanged?(hidden.map {
                     .init(id: $0.id, name: $0.appName, icon: self.imageCache.image(forID: $0.id) ?? $0.appIcon)
                 })
