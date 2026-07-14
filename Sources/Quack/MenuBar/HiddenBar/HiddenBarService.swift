@@ -93,10 +93,16 @@ final class HiddenBarService: ManagedService {
         // expand() relayouts asynchronously; the chevron/divider frames aren't
         // valid immediately (chevron reads (0,-22) at launch; the divider still
         // reports its collapsed off-screen X right after expand). Wait until BOTH
-        // are on-screen — divider positive and at/left of the chevron — before
-        // scanning, else the boundary is wrong and nothing classifies as hidden.
-        guard let chevronMinX = control.chevronMinX, chevronMinX > 0,
-              let dividerMinX = control.dividerMinX, dividerMinX > 0, dividerMinX <= chevronMinX else {
+        // sit ON a real screen — this rejects the launch garbage AND the collapsed
+        // divider, while (unlike an X>0 test) still accepting displays at negative
+        // global X, i.e. external monitors positioned left of the built-in.
+        let onScreen: (CGRect?) -> Bool = { r in
+            guard let r else { return false }
+            return NSScreen.screens.contains { $0.frame.intersects(r) }
+        }
+        guard let chevronFrame = control.chevronFrameOnScreen, onScreen(chevronFrame),
+              let dividerFrame = control.dividerFrameOnScreen, onScreen(dividerFrame),
+              dividerFrame.minX <= chevronFrame.minX else {
             warmAttempts += 1
             if warmAttempts <= 25 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.warmAndCollapse() }
@@ -106,6 +112,8 @@ final class HiddenBarService: ManagedService {
             return
         }
         warmAttempts = 0
+        let chevronMinX = chevronFrame.minX
+        let dividerMinX = dividerFrame.minX
         // Non-notched display + "show all" setting → don't hide anything here.
         guard shouldHideOnCurrentDisplay() else {
             showingAll = true
