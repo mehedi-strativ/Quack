@@ -4,7 +4,7 @@ import QuackKit
 /// The feature groups shown in the left sidebar. `general` is the schedule
 /// (agenda) view; `settings` holds the app-level preferences.
 enum SettingsTab: String, CaseIterable {
-    case general, calendar, temperature, timeAwareness, display, windows, mouse, notch, settings
+    case general, calendar, temperature, timeAwareness, menuBar, display, windows, mouse, notch, settings
 
     var title: String {
         switch self {
@@ -13,6 +13,7 @@ enum SettingsTab: String, CaseIterable {
         case .display: return "Display"
         case .temperature: return "CPU"
         case .timeAwareness: return "Time Awareness"
+        case .menuBar: return "Menu Bar"
         case .windows: return "Windows"
         case .mouse: return "Mouse"
         case .notch: return "Notch"
@@ -27,6 +28,7 @@ enum SettingsTab: String, CaseIterable {
         case .display: return "sun.max"
         case .temperature: return "thermometer.medium"
         case .timeAwareness: return "hourglass"
+        case .menuBar: return "menubar.dock.rectangle"
         case .windows: return "macwindow.on.rectangle"
         case .mouse: return "computermouse"
         case .notch: return "menubar.rectangle"
@@ -46,7 +48,7 @@ private enum SidebarGroup: String, CaseIterable {
     var tabs: [SettingsTab] {
         switch self {
         case .top: return [.general]
-        case .menuBar: return [.calendar, .temperature, .timeAwareness]
+        case .menuBar: return [.calendar, .temperature, .timeAwareness, .menuBar]
         case .controls: return [.display, .windows, .mouse, .notch]
         case .bottom: return [.settings]
         }
@@ -168,9 +170,10 @@ struct SettingsPane: View {
                     MousePointerSection()
                     MouseScrollSection()
                     MouseButtonsSection()
+                case .menuBar:
+                    HiddenBarSection()
                 case .notch:
                     NotchSection()
-                    HiddenBarSection()
                 case .settings:
                     SettingsSection()
                     CalendarSection()
@@ -1432,10 +1435,24 @@ private struct HiddenBarSection: View {
         let s = env.settingsStore
         Section("Hidden menu bar") {
             Toggle("Hidden menu bar", isOn: s.binding(\.hiddenBarEnabled))
-            Text("⌘-drag menu bar icons to the left of Quack's chevron (‹) to hide them, to the right to keep them shown. Hover the chevron to reveal the hidden ones.")
+            Text("Hide chosen menu bar icons behind a chevron (‹). Hover the chevron to reveal them; click one to open its menu.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
             if s.settings.hiddenBarEnabled {
+                // Arrange mode: expands the real bar with a visible boundary.
+                HStack {
+                    Button(env.isArrangingHiddenBar ? "Done" : "Arrange…") {
+                        env.setHiddenBarArranging(!env.isArrangingHiddenBar)
+                    }
+                    .controlSize(.small)
+                    Text(env.isArrangingHiddenBar
+                         ? "⌘-drag icons to the LEFT of the accent-colored bar to hide them, then click Done."
+                         : "Click Arrange, then ⌘-drag icons across the accent-colored bar.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+
+                HiddenBarPreview(items: env.hiddenBarItems)
+
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
                         Text("Needs Accessibility to click hidden items.")
@@ -1454,6 +1471,40 @@ private struct HiddenBarSection: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A small mock menu-bar strip showing which icons are currently hidden behind
+/// the chevron, so the user can see the effect of their arrangement.
+private struct HiddenBarPreview: View {
+    let items: [HiddenBarService.HiddenPreviewItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Hidden now").font(.system(size: 11)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                if items.isEmpty {
+                    Text("Nothing hidden yet").font(.system(size: 12)).foregroundStyle(.tertiary)
+                } else {
+                    ForEach(items) { item in
+                        Group {
+                            if let icon = item.icon {
+                                Image(nsImage: icon).resizable().scaledToFit()
+                            } else {
+                                Image(systemName: "app.dashed").resizable().scaledToFit()
+                            }
+                        }
+                        .frame(width: 18, height: 18)
+                        .help(item.name)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }

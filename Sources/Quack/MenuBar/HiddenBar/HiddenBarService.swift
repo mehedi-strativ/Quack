@@ -20,6 +20,11 @@ final class HiddenBarService: ManagedService {
     private var mouseUpMonitor: Any?
     private var activeObserver: NSObjectProtocol?
     private var warmAttempts = 0
+    private(set) var isArranging = false
+
+    struct HiddenPreviewItem: Identifiable { let id: String; let name: String; let icon: NSImage? }
+    /// Called (main) whenever the hidden set changes — drives the Settings preview.
+    var onHiddenSetChanged: (([HiddenPreviewItem]) -> Void)?
 
     init(settings: SettingsStore, permissions: PermissionsManager) {
         self.settings = settings
@@ -47,21 +52,26 @@ final class HiddenBarService: ManagedService {
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
         if let o = activeObserver { NotificationCenter.default.removeObserver(o); activeObserver = nil }
         panel.hide()
+        control?.setDividerVisible(false)
         control?.teardown(); control = nil
         hiddenItems = []
         state = .hidden
+        isArranging = false
     }
 
     /// Capture glyphs for the currently-on-screen hidden set, then collapse.
     private func warmAndCollapse() {
-        guard let control else { return }
+        guard let control, !isArranging else { return }   // don't collapse mid-arrange
         control.expand()
-        // The chevron's status-item window isn't positioned for ~1s after
-        // creation (frame reads (0, -22) then jumps to its real spot). Classifying
-        // against minX=0 hides nothing, so wait for a valid frame before scanning.
-        guard let chevronMinX = control.chevronMinX, chevronMinX > 0 else {
+        // expand() relayouts asynchronously; the chevron/divider frames aren't
+        // valid immediately (chevron reads (0,-22) at launch; the divider still
+        // reports its collapsed off-screen X right after expand). Wait until BOTH
+        // are on-screen — divider positive and at/left of the chevron — before
+        // scanning, else the boundary is wrong and nothing classifies as hidden.
+        guard let chevronMinX = control.chevronMinX, chevronMinX > 0,
+              let dividerMinX = control.dividerMinX, dividerMinX > 0, dividerMinX <= chevronMinX else {
             warmAttempts += 1
-            if warmAttempts <= 20 {
+            if warmAttempts <= 25 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.warmAndCollapse() }
             } else {
                 control.collapse()
@@ -74,7 +84,7 @@ final class HiddenBarService: ManagedService {
         }
         // Classify by the DIVIDER, not the chevron: collapse() only pushes items
         // left of the divider off-screen, so the panel must show exactly those.
-        let boundaryX = control.dividerMinX ?? chevronMinX
+        let boundaryX = dividerMinX
         let band = MenuBarBand.current()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
@@ -85,11 +95,34 @@ final class HiddenBarService: ManagedService {
                 self.imageCache.captureOnScreen(items: hidden, windows: windows)
                 self.hiddenItems = hidden
                 self.control?.collapse()
+                self.onHiddenSetChanged?(hidden.map {
+                    .init(id: $0.id, name: $0.appName, icon: self.imageCache.image(forID: $0.id) ?? $0.appIcon)
+                })
             }
         }
     }
 
+    /// Arrange mode: expand the real bar in place with a visible divider so the
+    /// user can ⌘-drag icons across the boundary. Suppresses hover-reveal.
+    func beginArrange() {
+        guard control != nil else { return }
+        isArranging = true
+        graceTimer?.invalidate(); graceTimer = nil
+        panel.hide()
+        state = .hidden
+        control?.expand()
+        control?.setDividerVisible(true)
+    }
+
+    /// Leave Arrange mode: hide the marker, re-capture glyphs, collapse.
+    func endArrange() {
+        isArranging = false
+        control?.setDividerVisible(false)
+        warmAndCollapse()
+    }
+
     private func handle(_ event: RevealEvent) {
+        guard !isArranging else { return }   // no hover-reveal while arranging
         let old = state
         let new = HiddenBarReveal.next(old, on: event)
         graceTimer?.invalidate(); graceTimer = nil

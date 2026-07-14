@@ -98,6 +98,9 @@ final class AppEnvironment: ObservableObject {
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .temperature) }
         timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .timeAwareness) }
         notchService.onOpenSettings = { [weak self] in self?.showSettings() }
+        hiddenBarService.onHiddenSetChanged = { [weak self] items in
+            Task { @MainActor in self?.hiddenBarItems = items }
+        }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
         // `AppEnvironment` refresh when settings / meetings / permissions change.
@@ -139,6 +142,19 @@ final class AppEnvironment: ObservableObject {
                 self?.refreshCalendarNow()
             }
         }
+    }
+
+    /// Whether the hidden bar is in Arrange mode (real bar expanded for ⌘-drag).
+    @Published var isArrangingHiddenBar = false
+    /// The currently-hidden menu-bar items, for the Settings preview.
+    @Published var hiddenBarItems: [HiddenBarService.HiddenPreviewItem] = []
+
+    /// Enter/leave hidden-bar Arrange mode from Settings. No-op if the feature
+    /// isn't running.
+    func setHiddenBarArranging(_ on: Bool) {
+        guard settingsStore.settings.hiddenBarEnabled else { return }
+        if on { hiddenBarService.beginArrange() } else { hiddenBarService.endArrange() }
+        isArrangingHiddenBar = on
     }
 
     /// Event calendars available for the settings picker (empty if no access).

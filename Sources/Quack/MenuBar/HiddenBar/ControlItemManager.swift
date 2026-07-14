@@ -67,6 +67,22 @@ final class ControlItemManager {
     func collapse() { hiddenDivider.length = Length.expanded }
     func expand()   { hiddenDivider.length = NSStatusItem.variableLength }
 
+    /// Shows/hides a visible boundary marker on the divider so the user has a
+    /// clear target to ⌘-drag icons against during Arrange mode.
+    func setDividerVisible(_ visible: Bool) {
+        hiddenDivider.button?.image = visible ? Self.dividerImage() : nil
+    }
+
+    private static func dividerImage() -> NSImage {
+        let img = NSImage(size: NSSize(width: 10, height: 18))
+        img.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 3, y: 1, width: 5, height: 16), xRadius: 2, yRadius: 2).fill()
+        img.unlockFocus()
+        img.isTemplate = false   // keep it white, not tinted by the menu bar
+        return img
+    }
+
     func teardown() {
         NSStatusBar.system.removeStatusItem(chevron)
         NSStatusBar.system.removeStatusItem(hiddenDivider)
