@@ -90,6 +90,10 @@ final class HiddenBarService: ManagedService {
     private func warmAndCollapse() {
         guard let control, !isArranging else { return }   // don't collapse mid-arrange
         control.expand()
+        // A hidden chevron (isVisible=false) reports a (0,0) frame, which would
+        // fail the on-screen gate below forever. Make it visible first so its
+        // frame is readable; the end of this routine decides final visibility.
+        control.setChevronVisible(true)
         // expand() relayouts asynchronously; the chevron/divider frames aren't
         // valid immediately (chevron reads (0,-22) at launch; the divider still
         // reports its collapsed off-screen X right after expand). Wait until BOTH
