@@ -167,7 +167,7 @@ final class HiddenBarService: ManagedService {
         panel.hide()
         state = .hidden
         control?.expand()
-        control?.setChevronVisible(true)   // ensure the chevron shows while arranging
+        control?.setChevronVisible(false)  // during arrange the white bar is the only marker
         control?.setDividerVisible(true)
     }
 
