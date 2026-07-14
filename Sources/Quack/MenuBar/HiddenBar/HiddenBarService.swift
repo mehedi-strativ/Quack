@@ -111,6 +111,7 @@ final class HiddenBarService: ManagedService {
             showingAll = true
             control.expand()
             control.setDividerVisible(false)
+            control.setChevronVisible(false)   // nothing hidden here → no chevron
             panel.hide()
             state = .hidden
             hiddenItems = []
@@ -134,6 +135,7 @@ final class HiddenBarService: ManagedService {
                 self.imageCache.captureOnScreen(items: hidden, windows: windows)
                 self.hiddenItems = hidden
                 self.control?.collapse()
+                self.control?.setChevronVisible(!hidden.isEmpty)   // hide chevron if nothing hidden
                 self.onHiddenSetChanged?(hidden.map {
                     .init(id: $0.id, name: $0.appName, icon: self.imageCache.image(forID: $0.id) ?? $0.appIcon)
                 })
@@ -150,6 +152,7 @@ final class HiddenBarService: ManagedService {
         panel.hide()
         state = .hidden
         control?.expand()
+        control?.setChevronVisible(true)   // ensure the chevron shows while arranging
         control?.setDividerVisible(true)
     }
 

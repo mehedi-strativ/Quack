@@ -270,6 +270,9 @@ private struct DashboardView: View {
                     if env.settingsStore.settings.timeAwarenessEnabled {
                         DashCard(tab: .timeAwareness, title: "Time", icon: "hourglass") { timeSummary }
                     }
+                    if env.settingsStore.settings.hiddenBarEnabled {
+                        DashCard(tab: .menuBar, title: "Menu Bar", icon: "menubar.dock.rectangle") { hiddenBarSummary }
+                    }
                     DashCard(tab: .settings, title: "Permissions", icon: "lock.shield") { permissionsSummary }
                 }
             }
@@ -401,6 +404,30 @@ private struct DashboardView: View {
         gist("\(granted) of \(kinds.count) granted",
              denied ? "Some access denied" : (all ? "All set" : "Tap to manage"),
              tint: all ? .green : .orange)
+    }
+
+    @ViewBuilder private var hiddenBarSummary: some View {
+        let items = env.hiddenBarItems
+        if items.isEmpty {
+            gist("Nothing hidden", "⌘-drag icons left of the chevron to hide")
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    ForEach(items.prefix(8)) { item in
+                        Group {
+                            if let icon = item.icon {
+                                Image(nsImage: icon).resizable().scaledToFit()
+                            } else {
+                                Image(systemName: "app.dashed").resizable().scaledToFit()
+                            }
+                        }
+                        .frame(width: 18, height: 18)
+                        .help(item.name)
+                    }
+                }
+                Text("\(items.count) hidden").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func gist(_ primary: String, _ secondary: String?, tint: Color = .primary) -> some View {
@@ -1461,8 +1488,6 @@ private struct HiddenBarSection: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
 
-                HiddenBarPreview(items: env.hiddenBarItems)
-
                 if env.permissions.status(for: .accessibility) != .granted {
                     HStack {
                         Text("Needs Accessibility to click hidden items.")
@@ -1481,40 +1506,6 @@ private struct HiddenBarSection: View {
                     }
                 }
             }
-        }
-    }
-}
-
-/// A small mock menu-bar strip showing which icons are currently hidden behind
-/// the chevron, so the user can see the effect of their arrangement.
-private struct HiddenBarPreview: View {
-    let items: [HiddenBarService.HiddenPreviewItem]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Hidden now").font(.system(size: 11)).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                if items.isEmpty {
-                    Text("Nothing hidden yet").font(.system(size: 12)).foregroundStyle(.tertiary)
-                } else {
-                    ForEach(items) { item in
-                        Group {
-                            if let icon = item.icon {
-                                Image(nsImage: icon).resizable().scaledToFit()
-                            } else {
-                                Image(systemName: "app.dashed").resizable().scaledToFit()
-                            }
-                        }
-                        .frame(width: 18, height: 18)
-                        .help(item.name)
-                    }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }

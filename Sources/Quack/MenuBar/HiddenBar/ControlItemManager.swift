@@ -67,6 +67,10 @@ final class ControlItemManager {
     func collapse() { hiddenDivider.length = Length.expanded }
     func expand()   { hiddenDivider.length = NSStatusItem.variableLength }
 
+    /// Hide the chevron entirely when there's nothing to reveal (e.g. on an
+    /// external display where nothing is hidden).
+    func setChevronVisible(_ visible: Bool) { chevron.isVisible = visible }
+
     /// Shows/hides a visible boundary marker on the divider so the user has a
     /// clear target to ⌘-drag icons against during Arrange mode.
     func setDividerVisible(_ visible: Bool) {
