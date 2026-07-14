@@ -25,10 +25,11 @@ final class ControlItemManager {
         // warm-capture glyphs before its first collapse() (Task 9).
         chevron = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         hiddenDivider = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        // v2 names: the earlier build saved a stale (buggy) ordering under the
-        // old names; fresh names let creation order place them correctly.
-        chevron.autosaveName = "quack.hiddenbar.chevron.v2"
-        hiddenDivider.autosaveName = "quack.hiddenbar.divider.v2"
+        // Deliberately NO autosaveName: persisted positions let macOS restore a
+        // flipped order (divider ending up RIGHT of the chevron), which makes
+        // collapse() shove the chevron off-screen. Without autosave the items
+        // take creation-order placement every launch — chevron created first
+        // (rightmost), divider second (leftmost) → the required [divider][chevron].
         hiddenDivider.button?.title = ""
         hiddenDivider.button?.setAccessibilityLabel("Quack hidden items divider")
 

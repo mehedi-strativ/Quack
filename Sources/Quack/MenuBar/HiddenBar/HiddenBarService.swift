@@ -105,13 +105,17 @@ final class HiddenBarService: ManagedService {
         // sit ON a real screen — this rejects the launch garbage AND the collapsed
         // divider, while (unlike an X>0 test) still accepting displays at negative
         // global X, i.e. external monitors positioned left of the built-in.
-        let onScreen: (CGRect?) -> Bool = { r in
-            guard let r else { return false }
-            return NSScreen.screens.contains { $0.frame.intersects(r) }
+        // A settled menu-bar item sits at the TOP edge of the screen it's on
+        // (frame.maxY ≈ that screen's maxY). This rejects the unpositioned garbage
+        // frames we get right after toggling visibility/length — both (0,-22) at
+        // launch and (0,0) after setChevronVisible/expand — while still accepting
+        // valid positions on any display, including external ones at negative X.
+        let settled: (CGRect?) -> Bool = { r in
+            guard let r, let screen = NSScreen.screens.first(where: { $0.frame.intersects(r) }) else { return false }
+            return abs(screen.frame.maxY - r.maxY) < 40
         }
-        guard let chevronFrame = control.chevronFrameOnScreen, onScreen(chevronFrame),
-              let dividerFrame = control.dividerFrameOnScreen, onScreen(dividerFrame),
-              dividerFrame.minX <= chevronFrame.minX else {
+        guard let chevronFrame = control.chevronFrameOnScreen, settled(chevronFrame),
+              let dividerFrame = control.dividerFrameOnScreen, settled(dividerFrame) else {
             warmAttempts += 1
             if warmAttempts <= 25 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.warmAndCollapse(isRetry: true) }
