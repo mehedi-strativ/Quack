@@ -5,6 +5,7 @@ struct MenuBarAXItem {
     let id: String
     let pid: pid_t
     let appName: String
+    let title: String        // AX title/description — identifies Control Center modules
     let appIcon: NSImage?
     let element: AXUIElement
     let frame: CGRect
@@ -36,7 +37,6 @@ enum MenuBarAXScanner {
     private static let systemDenylist: Set<String> = [
         "com.apple.systemuiserver",
         "com.apple.TextInputMenuAgent",
-        "com.apple.controlcenter",
         "com.apple.Spotlight",
         "com.apple.Siri",
         "com.apple.wifi.WiFiAgent",
@@ -57,10 +57,14 @@ enum MenuBarAXScanner {
         for (index, child) in children.enumerated() {
             guard let frame = frame(of: child), frame.width > 0,
                   menuBarBandY.contains(frame.midY) else { continue }
+            let title = (attr(child, kAXTitleAttribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? (attr(child, kAXDescriptionAttribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? ""
             out.append(MenuBarAXItem(
                 id: "\(app.processIdentifier):\(index)",
                 pid: app.processIdentifier,
                 appName: app.localizedName ?? "?",
+                title: title,
                 appIcon: app.icon,
                 element: child,
                 frame: frame))
@@ -71,6 +75,11 @@ enum MenuBarAXScanner {
     /// Live frame of an AX element — used to click the item at its current
     /// on-screen position after it snaps back via expand().
     static func elementFrame(_ el: AXUIElement) -> CGRect? { frame(of: el) }
+
+    private static func attr(_ el: AXUIElement, _ name: String) -> CFTypeRef? {
+        var value: CFTypeRef?
+        return AXUIElementCopyAttributeValue(el, name as CFString, &value) == .success ? value : nil
+    }
 
     private static func frame(of el: AXUIElement) -> CGRect? {
         var posVal: CFTypeRef?, sizeVal: CFTypeRef?

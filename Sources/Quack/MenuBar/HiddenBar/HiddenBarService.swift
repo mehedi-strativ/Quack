@@ -29,6 +29,8 @@ final class HiddenBarService: ManagedService {
     private let conditionMonitor = HiddenBarConditionMonitor()
     /// True while a system condition (on battery / Wi-Fi off) is forcing reveal.
     private var conditionReveal = false
+    /// The specific hidden item(s) a condition is currently surfacing.
+    private var conditionItems: [MenuBarAXItem] = []
 
     struct HiddenPreviewItem: Identifiable { let id: String; let name: String; let icon: NSImage? }
     /// Called (main) whenever the hidden set changes — drives the Settings preview.
@@ -189,22 +191,38 @@ final class HiddenBarService: ManagedService {
         evaluateConditions(conditionMonitor.conditions)   // also picks up setting changes
     }
 
-    /// Auto-reveal the hidden panel while a system condition holds (on battery /
-    /// Wi-Fi off), and auto-hide when it clears.
+    /// Auto-reveal ONLY the specific hidden icon(s) tied to an active system
+    /// condition (Battery when on battery, Wi-Fi when disconnected), and hide
+    /// again when the condition clears. Matches Control Center items by AX title.
     private func evaluateConditions(_ c: HiddenBarConditions) {
         guard control != nil, !showingAll, !isArranging else {
-            conditionReveal = false
+            conditionReveal = false; conditionItems = []
             return
         }
-        let want = (c.onBattery && settings.settings.hiddenBarRevealOnBattery)
-                || (!c.wifiConnected && settings.settings.hiddenBarRevealOnWifiOff)
-        if want && !conditionReveal {
+        var want: [MenuBarAXItem] = []
+        if c.onBattery && settings.settings.hiddenBarRevealOnBattery {
+            want += hiddenItems.filter { Self.isBattery($0.title) }
+        }
+        if !c.wifiConnected && settings.settings.hiddenBarRevealOnWifiOff {
+            want += hiddenItems.filter { Self.isWifi($0.title) }
+        }
+        if !want.isEmpty {
             conditionReveal = true
-            renderPanel()
-        } else if !want && conditionReveal {
-            conditionReveal = false
+            conditionItems = want
+            if state == .hidden { renderPanel(want) }   // don't override a hover showing all
+        } else if conditionReveal {
+            conditionReveal = false; conditionItems = []
             if state == .hidden { panel.hide() }
         }
+    }
+
+    private static func isBattery(_ title: String) -> Bool {
+        title.range(of: "battery", options: .caseInsensitive) != nil
+    }
+    private static func isWifi(_ title: String) -> Bool {
+        // Title is e.g. "Wi‑Fi, connected, 3 bars" (note the non-breaking hyphen).
+        let t = title.lowercased().replacingOccurrences(of: "\u{2011}", with: "").replacingOccurrences(of: "-", with: "")
+        return t.contains("wifi")
     }
 
     private func handle(_ event: RevealEvent) {
@@ -220,17 +238,17 @@ final class HiddenBarService: ManagedService {
         state = new
         switch new {
         case .revealed, .pinned: reveal()
-        case .hidden:            if conditionReveal { renderPanel() } else { panel.hide() }
+        case .hidden:            if conditionReveal { renderPanel(conditionItems) } else { panel.hide() }
         }
     }
 
     private func reveal() {
-        renderPanel()   // render the set captured at the last warm
+        renderPanel(hiddenItems)   // hover shows the full hidden set
     }
 
-    private func renderPanel() {
+    private func renderPanel(_ items: [MenuBarAXItem]) {
         guard let chevronFrame = control?.chevronFrameOnScreen, let screen = NSScreen.main else { return }
-        let vms = hiddenItems.map {
+        let vms = items.map {
             HiddenBarItemVM(id: $0.id, image: imageCache.image(forID: $0.id) ?? $0.appIcon, item: $0)
         }
         let frame = HiddenBarLayout.panelFrame(
