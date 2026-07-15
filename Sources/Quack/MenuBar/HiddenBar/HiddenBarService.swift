@@ -209,7 +209,10 @@ final class HiddenBarService: ManagedService {
 
     /// Re-evaluate hide-vs-show-all when the active display may have changed.
     private func applyDisplayPolicy() {
-        guard control != nil, !isArranging else { return }
+        guard let control, !isArranging else { return }
+        // Keep the chevron glyph on the current rightmost (visible) item every
+        // tick — independent of the AX warm, which can stall on its frame gate.
+        if !showingAll { control.refreshRoles() }
         let hide = shouldHideOnCurrentDisplay()
         if hide && showingAll {
             warmAndCollapse()          // moved onto a notched display → re-hide
