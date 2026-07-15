@@ -1172,12 +1172,12 @@ private struct WindowSwipeSection: View {
         Section("Window swipe") {
             Toggle("Manage windows with a two-finger swipe on the title bar",
                    isOn: s.binding(\.windowSwipeEnabled))
-            Text("Point at a window's title bar, then swipe two fingers: up to fill the screen, down to minimize.")
+            Text("Point at a window's title bar, then hold ⌘ and swipe two fingers: up to fill the screen, down to minimize.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             if s.settings.windowSwipeEnabled {
                 Toggle("Swipe left or right to snap to half-screen",
                        isOn: s.binding(\.windowSnapEnabled))
-                Text("A left or right swipe aligns the window to that half of the current screen.")
+                Text("Hold ⌘ and swipe left or right to align the window to that half of the current screen.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
                 HStack {
                     Text("Sensitivity")

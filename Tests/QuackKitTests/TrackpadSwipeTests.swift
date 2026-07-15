@@ -39,6 +39,33 @@ import CoreGraphics
         #expect(TrackpadSwipe.requiredDisplacement(sensitivity: 1) == 50)
         #expect(TrackpadSwipe.requiredDisplacement(sensitivity: 0.5) == 125)
     }
+
+    // ⌘ gate: no action without the Command modifier, in any direction.
+    @Test func noActionWithoutCommand() {
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .up,    commandHeld: false, snapEnabled: true)  == false)
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .down,  commandHeld: false, snapEnabled: true)  == false)
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .left,  commandHeld: false, snapEnabled: true)  == false)
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .right, commandHeld: false, snapEnabled: true)  == false)
+    }
+
+    // No resolved direction (below threshold) => no action, even with ⌘.
+    @Test func noActionWithoutDirection() {
+        #expect(TrackpadSwipe.shouldPerformAction(direction: nil, commandHeld: true, snapEnabled: true) == false)
+    }
+
+    // Up/down (fill/minimize) fire with ⌘ regardless of the snap setting.
+    @Test func upDownFireWithCommand() {
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .up,   commandHeld: true, snapEnabled: false) == true)
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .down, commandHeld: true, snapEnabled: false) == true)
+    }
+
+    // Left/right (snap) require ⌘ AND snap enabled.
+    @Test func leftRightRequireSnapEnabled() {
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .left,  commandHeld: true, snapEnabled: true)  == true)
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .right, commandHeld: true, snapEnabled: true)  == true)
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .left,  commandHeld: true, snapEnabled: false) == false)
+        #expect(TrackpadSwipe.shouldPerformAction(direction: .right, commandHeld: true, snapEnabled: false) == false)
+    }
 }
 
 @Suite struct BrightnessMathTests {

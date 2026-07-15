@@ -174,8 +174,8 @@ final class GestureMonitor: ManagedService {
     }
 
     /// Shows a floating directional-arrow badge while swiping, for any direction
-    /// that will actually do something (up = fill, down = minimize always;
-    /// left/right only when snapping is enabled).
+    /// that will actually act — ⌘ must be held; up = fill, down = minimize;
+    /// left/right only when snapping is enabled.
     private func updateCursor() {
         guard eligible else { return }
         let threshold = TrackpadSwipe.requiredDisplacement(sensitivity: settings.settings.swipeSensitivity) * 0.4
@@ -183,11 +183,15 @@ final class GestureMonitor: ManagedService {
             indicator.hide()
             return
         }
-        let snapOff = !settings.settings.windowSnapEnabled
-        if (direction == .left || direction == .right), snapOff {
-            indicator.hide()
-        } else {
+        // Show the arrow only when the swipe will actually act (⌘ held, and snap
+        // enabled for left/right). Keeps the badge honest — it appears exactly
+        // when releasing would perform the action.
+        if TrackpadSwipe.shouldPerformAction(direction: direction,
+                                             commandHeld: NSEvent.modifierFlags.contains(.command),
+                                             snapEnabled: settings.settings.windowSnapEnabled) {
             indicator.show(direction: direction, at: NSEvent.mouseLocation)
+        } else {
+            indicator.hide()
         }
     }
 
@@ -200,6 +204,15 @@ final class GestureMonitor: ManagedService {
         let magnitude = (accumulated.dx * accumulated.dx + accumulated.dy * accumulated.dy).squareRoot()
         guard magnitude >= threshold else {
             Log.swipe.debug("gesture below threshold: mag=\(Int(magnitude)) need=\(Int(threshold))")
+            return
+        }
+        // Require ⌘ held so a plain space-switch / horizontal scroll over a title
+        // bar never snaps the window. Same predicate the indicator uses.
+        let direction = ScreenGeometry.direction(forDelta: accumulated, minMagnitude: threshold)
+        guard TrackpadSwipe.shouldPerformAction(direction: direction,
+                                                commandHeld: NSEvent.modifierFlags.contains(.command),
+                                                snapEnabled: settings.settings.windowSnapEnabled) else {
+            Log.swipe.debug("swipe ignored: no ⌘ / no clear direction / snap off")
             return
         }
         let moved = WindowMover.move(window: window, currentFrame: frame, swipe: accumulated,

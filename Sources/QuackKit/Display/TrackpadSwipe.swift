@@ -31,6 +31,27 @@ public enum TrackpadSwipe {
         let s = CGFloat(max(0, min(1, sensitivity)))
         return 200 - 150 * s
     }
+
+    /// Whether a completed title-bar swipe should perform a window action.
+    /// - direction:   resolved swipe direction (nil = below threshold → no action).
+    /// - commandHeld: ⌘ modifier state at the decision moment.
+    /// - snapEnabled: the `windowSnapEnabled` setting.
+    ///
+    /// Every action requires ⌘. Left/right (snap) additionally require snapping
+    /// to be enabled; up/down (fill/minimize) do not. This is the single source
+    /// of truth shared by the indicator badge and the end-of-gesture action, so
+    /// the badge shows exactly when the action will fire.
+    public static func shouldPerformAction(
+        direction: SwipeDirection?,
+        commandHeld: Bool,
+        snapEnabled: Bool
+    ) -> Bool {
+        guard commandHeld, let direction else { return false }
+        switch direction {
+        case .up, .down:    return true
+        case .left, .right: return snapEnabled
+        }
+    }
 }
 
 /// Pure brightness-stepping math for the F1/F2 key routing.
