@@ -188,6 +188,32 @@ final class HiddenBarService: ManagedService {
         warmAndCollapse()
     }
 
+#if DEBUG
+    /// SPIKE (temporary): drag the leftmost SHOWN third-party item ~40pt left and
+    /// log before/after minX. Proves whether macOS honors a synth-⌘-drag of an
+    /// item Quack does not own. Remove once Tasks 4–6 land.
+    func spikeDragLeftmostShownItem() {
+        guard let control else { Log.notch.notice("spike: no control"); return }
+        control.expand()
+        let boundaryX = control.dividerMinX ?? 0
+        let band = MenuBarBand.current()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
+            guard let target = items.filter({ $0.frame.minX > boundaryX }).first else {
+                Log.notch.notice("spike: no shown item to drag"); return
+            }
+            let before = target.frame.minX
+            StatusItemDragger.drag(
+                from: CGPoint(x: target.frame.midX, y: target.frame.midY),
+                toX: target.frame.midX - 40)
+            usleep(300_000)
+            let after = MenuBarAXScanner.elementFrame(target.element)?.minX ?? before
+            Log.notch.notice("spike: \(target.appName, privacy: .public) minX \(before) -> \(after) (moved=\(abs(after - before) > 4))")
+            DispatchQueue.main.async { self.control?.collapse() }
+        }
+    }
+#endif
+
     /// Whether hiding should be active on the display currently hosting the menu
     /// bar: always on a notched display; on a non-notched one only if the user
     /// hasn't opted to show everything there.

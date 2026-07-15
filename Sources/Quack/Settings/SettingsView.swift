@@ -1570,6 +1570,10 @@ private struct StatusSection: View {
             }
             Text("\"Active\" means the feature is receiving input. If it says \"needs Accessibility\", grant it above — it switches to listening within a second, no relaunch.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
+#if DEBUG
+            Button("SPIKE: drag leftmost shown item") { env.spikeMenuBarDrag() }
+                .controlSize(.small)
+#endif
         }
     }
 
