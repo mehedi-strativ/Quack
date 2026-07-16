@@ -752,3 +752,57 @@ git commit -m "chore(menubar): remove synth-drag spike"
 **Placeholder scan:** No TBD/TODO; the one intentional fill-in (Task 6 spike outcome) is a runtime result recorded during execution, not a missing design decision.
 
 **Type consistency:** `LayoutItem(id,name,icon,isHidden)` used identically in Tasks 4/5/6. `DragOp(kind,targetIndex)` + `Kind.reorderItem(id:)`/`.moveDivider` consistent across Tasks 1/6. `plan(currentOrder:currentBoundary:desiredOrder:desiredBoundary:)` matches between Task 1 definition and Task 6 call. Editor callbacks `onCommit(order,boundary)`/`onRefresh` match `commitMenuBarLayout`/`setMenuBarEditing` wiring.
+
+---
+
+## PIVOT (2026-07-16) — synth-drag mechanism dead; read-only preview
+
+Task 3's spike proved (3/3 attempts) macOS 26 does not honor synthesized
+⌘-drags for status-item reordering. Full drag-to-rearrange is therefore
+unachievable. Per user decision, the feature pivots to a **read-only real-glyph
+preview** that keeps the existing ⌘-drag `Arrange…` button as the move
+mechanism. This supersedes Tasks 5–7 below.
+
+**Dead code (remove in Task 7'):** `MenuBarLayoutPlan` (+tests, Task 1),
+`StatusItemDragger` (Task 2), the Task 3 spike blocks — nothing consumes them
+after the pivot.
+
+**Task 4 is unchanged** and still required (scan+capture ALL items, publish
+`menuBarLayout`).
+
+### Task 5' — Read-only two-row preview in HiddenBarSection
+
+**Files:**
+- Create: `Sources/Quack/MenuBar/HiddenBar/MenuBarLayoutEditor.swift`
+- Modify: `Sources/Quack/Settings/SettingsView.swift` (`HiddenBarSection`)
+- Modify: `Sources/Quack/AppEnvironment.swift` (editing gate passthrough)
+
+**Interfaces:**
+- Consumes: `HiddenBarService.LayoutItem` (Task 4), `env.menuBarLayout`,
+  `HiddenBarService.setEditing(_:)` / `refreshLayout()` (Task 4 adds these — see below).
+- Produces: `struct MenuBarLayoutEditor: View` with
+  `let items: [HiddenBarService.LayoutItem]` and `let onRefresh: () -> Void`.
+  Renders a **Shown** row and a **Hidden** row of real-glyph tiles (22×22,
+  app-icon fallback, `.help(name)`), each row a rounded `.quaternary`
+  background; a Refresh button. NO drag, NO onCommit.
+
+`HiddenBarService.setEditing(_:)` (add in Task 4 or 5'): keep the bar expanded +
+suppress hover-reveal while the preview is visible (mirror `beginArrange`
+gating: set `isArranging`, hide panel, `control.expand()`, `refreshLayout()`),
+and on `false` call `warmAndCollapse()`. `AppEnvironment.setMenuBarEditing(_:)`
+forwards it.
+
+In `HiddenBarSection`, render the editor ABOVE the existing `Arrange…` button
+(keep Arrange — it is the real move mechanism). `.onAppear { env.setMenuBarEditing(true) }`
+`.onDisappear { env.setMenuBarEditing(false) }`. The `onRefresh` closure calls
+`env.setMenuBarEditing(true)`.
+
+TDD note: this is a SwiftUI view (no unit test); verification is `swift build`
++ interactive check that both rows show real glyphs and update after Arrange.
+
+### Task 7' — Remove dead code
+
+Delete: `MenuBarLayoutPlan.swift` + `MenuBarLayoutPlanTests.swift`,
+`StatusItemDragger.swift`, the `#if DEBUG` spike blocks
+(`spikeDragLeftmostShownItem`, `spikeMenuBarDrag`, the SPIKE button).
+`swift build` + `swift test` green afterward.
