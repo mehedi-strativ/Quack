@@ -201,10 +201,23 @@ final class HiddenBarService: ManagedService {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.imageCache.captureOnScreen(items: items, windows: windows)
-                let layout = items.map { item in
-                    LayoutItem(id: item.id, name: item.appName,
-                               icon: self.imageCache.image(forID: item.id) ?? item.appIcon,
-                               isHidden: item.frame.minX < boundaryX)
+                // Real per-item glyph capture is unreliable on macOS 26 (the
+                // window server attributes menu-bar windows to Control Center),
+                // so most items fall back to their app icon. Control Center alone
+                // exposes ~9 AX sub-modules (Wi-Fi, Sound, Clock, …) that would
+                // each render as the SAME Control Center icon. Collapse
+                // uncaptured items to one per app so the preview isn't a wall of
+                // duplicate icons; items with a real captured glyph are always
+                // distinct and always kept.
+                var seenUncapturedPIDs = Set<pid_t>()
+                var layout: [LayoutItem] = []
+                for item in items {
+                    let captured = self.imageCache.image(forID: item.id)
+                    if captured == nil, !seenUncapturedPIDs.insert(item.pid).inserted { continue }
+                    layout.append(LayoutItem(
+                        id: item.id, name: item.appName,
+                        icon: captured ?? item.appIcon,
+                        isHidden: item.frame.minX < boundaryX))
                 }
                 self.onLayoutChanged?(layout)
                 if !self.isArranging { self.control?.collapse() }
