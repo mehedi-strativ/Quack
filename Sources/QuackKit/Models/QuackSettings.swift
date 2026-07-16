@@ -28,8 +28,9 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     /// Show Claude Code agent progress in the notch panel.
     public var notchAgentsEnabled: Bool
     /// Bartender-style hidden menu bar (chevron + collapsing divider). Hiding
-    /// applies only on notched displays; displays without a notch always show
-    /// every icon (nothing is crushing them there).
+    /// is active whenever a notched display is connected (even on another
+    /// display's mirrored bar, since it's one shared status item); with no
+    /// notched display connected, every icon is shown everywhere.
     public var hiddenBarEnabled: Bool
     /// Auto-reveal the hidden icons while running on battery power.
     public var hiddenBarRevealOnBattery: Bool

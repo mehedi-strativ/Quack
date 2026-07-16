@@ -23,8 +23,8 @@ final class HiddenBarService: ManagedService {
     private var policyTimer: Timer?
     private var warmAttempts = 0
     private(set) var isArranging = false
-    /// True when the current display is non-notched and we're showing every icon
-    /// (no hiding) — hiding applies to notched displays only.
+    /// True when no connected display has a notch, so every icon is shown
+    /// (hiding is active whenever any connected display has a notch).
     private var showingAll = false
     private let conditionMonitor = HiddenBarConditionMonitor()
     /// True while a system condition (on battery / Wi-Fi off) is forcing reveal.
@@ -56,8 +56,8 @@ final class HiddenBarService: ManagedService {
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in Task { @MainActor in self?.applyDisplayPolicy() } }
-        // The menu bar (and our status item) follows the active display; poll to
-        // notice when it moves between a notched and a non-notched display.
+        // Belt-and-suspenders poll for a connected notched display, alongside
+        // the didChangeScreenParametersNotification observer above.
         let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.applyDisplayPolicy() }
         }
@@ -126,7 +126,7 @@ final class HiddenBarService: ManagedService {
         control.refreshRoles()   // assign chevron glyph to the rightmost item now
         let chevronMinX = (control.chevronMinX ?? chevronFrame.minX)
         let dividerMinX = (control.dividerMinX ?? dividerFrame.minX)
-        // Non-notched display + "show all" setting → don't hide anything here.
+        // No connected display has a notch → nothing to hide.
         guard shouldHideOnCurrentDisplay() else {
             showingAll = true
             control.expand()
@@ -188,27 +188,20 @@ final class HiddenBarService: ManagedService {
         warmAndCollapse()
     }
 
-    /// Whether hiding should be active on the display currently hosting the menu
-    /// bar. Only notched displays hide icons; a display without a notch has
-    /// nothing crushing its icons, so it always shows everything.
+    /// Whether hiding should be active. The divider/chevron are a SINGLE pair
+    /// of status items mirrored identically onto every display's menu bar —
+    /// there is no way to collapse one display's bar while leaving another
+    /// expanded. So this can't be "is the display I'm currently looking at
+    /// notched" (that flapped on/off as the mouse moved between displays,
+    /// undoing the hide whenever it drifted onto an external monitor — you had
+    /// to toggle the feature to force a fresh collapse). It's a static,
+    /// hardware-based rule instead: hide whenever ANY connected display has a
+    /// notch; show everything only when none do (e.g. lid closed, external-only).
     private func shouldHideOnCurrentDisplay() -> Bool {
-        currentDisplayHasNotch()
+        NSScreen.screens.contains { NotchProbe.span(for: $0) != nil }
     }
 
-    private func currentDisplayHasNotch() -> Bool {
-        // Decide by the display under the mouse, NOT the chevron's frame. In
-        // separate-spaces multi-display, the menu bar (and our status items)
-        // follows the mouse's display — but in show-all mode the chevron is
-        // hidden and its frame stays stuck on the display it was last shown on,
-        // which froze the hide/show-all decision and left the notched display
-        // permanently un-hidden once the mouse had visited an external one.
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
-        guard let screen else { return false }
-        return NotchProbe.span(for: screen) != nil
-    }
-
-    /// Re-evaluate hide-vs-show-all when the active display may have changed.
+    /// Re-evaluate hide-vs-show-all when the connected display set may have changed.
     private func applyDisplayPolicy() {
         guard let control, !isArranging else { return }
         // Keep the chevron glyph on the current rightmost (visible) item every
@@ -216,9 +209,9 @@ final class HiddenBarService: ManagedService {
         if !showingAll { control.refreshRoles() }
         let hide = shouldHideOnCurrentDisplay()
         if hide && showingAll {
-            warmAndCollapse()          // moved onto a notched display → re-hide
+            warmAndCollapse()          // a notched display connected → re-hide
         } else if !hide && !showingAll {
-            warmAndCollapse()          // moved onto a non-notched display → show all
+            warmAndCollapse()          // last notched display disconnected → show all
         }
         evaluateConditions(conditionMonitor.conditions)   // also picks up setting changes
     }
