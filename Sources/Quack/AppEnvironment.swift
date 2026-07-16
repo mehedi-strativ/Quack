@@ -162,6 +162,8 @@ final class AppEnvironment: ObservableObject {
         isArrangingHiddenBar = on
     }
 
+    func setMenuBarEditing(_ on: Bool) { hiddenBarService.setEditing(on) }
+
 #if DEBUG
     func spikeMenuBarDrag() { hiddenBarService.spikeDragLeftmostShownItem() }
 #endif

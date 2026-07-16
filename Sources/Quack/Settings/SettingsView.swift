@@ -1476,6 +1476,12 @@ private struct HiddenBarSection: View {
                 Text("If you've hidden the Battery / Wi-Fi icon, it pops out on its own while that condition holds, then hides again. (Hide them via Arrange, like any icon.)")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
 
+                MenuBarLayoutEditor(
+                    items: env.menuBarLayout,
+                    onRefresh: { env.setMenuBarEditing(true) })
+                    .onAppear { env.setMenuBarEditing(true) }
+                    .onDisappear { env.setMenuBarEditing(false) }
+
                 // Arrange mode: expands the real bar with a visible boundary.
                 HStack {
                     Button(env.isArrangingHiddenBar ? "Done" : "Arrange…") {

@@ -173,13 +173,27 @@ final class HiddenBarService: ManagedService {
     }
 
     /// Expand the bar, scan EVERY item, capture real glyphs for all on-screen
-    /// items, classify by the divider X, and publish the full layout. Collapses
-    /// afterward unless the editor is keeping the bar expanded (isArranging).
-    func refreshLayout() {
+    /// items, classify by the divider X, and publish the full layout. Waits for
+    /// the divider to settle on-screen first (expand relayouts async; a premature
+    /// read misclassifies everything). Collapses afterward unless the editor is
+    /// keeping the bar expanded (isArranging).
+    func refreshLayout(retry: Int = 0) {
         guard let control else { return }
         control.expand()
         control.setChevronVisible(true)
-        let boundaryX = control.dividerMinX ?? 0
+        let settled: (CGRect?) -> Bool = { r in
+            guard let r, let s = NSScreen.screens.first(where: { $0.frame.intersects(r) }) else { return false }
+            return abs(s.frame.maxY - r.maxY) < 40
+        }
+        guard let dframe = control.dividerFrameOnScreen, settled(dframe) else {
+            if retry < 15 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                    self?.refreshLayout(retry: retry + 1)
+                }
+            }
+            return
+        }
+        let boundaryX = control.dividerMinX ?? dframe.minX
         let band = MenuBarBand.current()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
@@ -216,6 +230,23 @@ final class HiddenBarService: ManagedService {
         isArranging = false
         control?.setDividerVisible(false)
         warmAndCollapse()
+    }
+
+    /// Keep the bar expanded + suppress hover-reveal while the Settings preview
+    /// is open, and publish a fresh layout. On close, re-warm and collapse.
+    func setEditing(_ on: Bool) {
+        guard control != nil else { return }
+        isArranging = on
+        if on {
+            graceTimer?.invalidate(); graceTimer = nil
+            panel.hide()
+            state = .hidden
+            control?.expand()
+            control?.setChevronVisible(true)
+            refreshLayout()
+        } else {
+            warmAndCollapse()
+        }
     }
 
 #if DEBUG
