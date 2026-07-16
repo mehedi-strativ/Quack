@@ -1,11 +1,19 @@
 import AppKit
 import QuackKit
 
-/// Menu-bar Y band in AX/Quartz global (top-left origin) for the main display.
+/// Menu-bar Y bands in AX/Quartz global (top-left origin), one per display —
+/// the menu bar (and Quack's status items) can live on ANY display, each at a
+/// different global Y. A single main-display band silently dropped every item
+/// when the bar was on a secondary display (empty hover panel).
 enum MenuBarBand {
-    static func current() -> ClosedRange<CGFloat> {
+    static func all() -> [ClosedRange<CGFloat>] {
         let thickness = NSStatusBar.system.thickness   // ~24pt
-        return -5 ... (thickness + 12)                 // generous; main display top
+        let primaryHeight = (NSScreen.screens.first { $0.frame.origin == .zero }
+                             ?? NSScreen.screens.first)?.frame.height ?? 0
+        return NSScreen.screens.map {
+            MenuBarGeometry.topLeftBand(
+                screenMaxYCocoa: $0.frame.maxY, primaryHeight: primaryHeight, thickness: thickness)
+        }
     }
 }
 

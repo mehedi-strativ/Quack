@@ -17,7 +17,9 @@ struct MenuBarAXItem {
 /// spike). Call off the main actor: AX is blocking IPC. Needs the Accessibility
 /// grant (returns [] silently without it).
 enum MenuBarAXScanner {
-    static func scanAll(menuBarBandY: ClosedRange<CGFloat>) -> [MenuBarAXItem] {
+    /// `menuBarBands` are the per-display menu-bar Y ranges (AX/Quartz global,
+    /// top-left origin); an item is kept if its midY falls in ANY of them.
+    static func scanAll(menuBarBands: [ClosedRange<CGFloat>]) -> [MenuBarAXItem] {
         let apps = NSWorkspace.shared.runningApplications
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let lock = NSLock()
@@ -25,7 +27,7 @@ enum MenuBarAXScanner {
         DispatchQueue.concurrentPerform(iterations: apps.count) { i in
             let app = apps[i]
             guard app.processIdentifier != ownPID else { return }
-            let hits = scanApp(app, menuBarBandY: menuBarBandY)
+            let hits = scanApp(app, menuBarBands: menuBarBands)
             guard !hits.isEmpty else { return }
             lock.lock(); found.append(contentsOf: hits); lock.unlock()
         }
@@ -43,7 +45,7 @@ enum MenuBarAXScanner {
     ]
 
     private static func scanApp(_ app: NSRunningApplication,
-                                menuBarBandY: ClosedRange<CGFloat>) -> [MenuBarAXItem] {
+                                menuBarBands: [ClosedRange<CGFloat>]) -> [MenuBarAXItem] {
         if let bid = app.bundleIdentifier, systemDenylist.contains(bid) { return [] }
         let ax = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(ax, 0.25)
@@ -56,7 +58,7 @@ enum MenuBarAXScanner {
         var out: [MenuBarAXItem] = []
         for (index, child) in children.enumerated() {
             guard let frame = frame(of: child), frame.width > 0,
-                  menuBarBandY.contains(frame.midY) else { continue }
+                  menuBarBands.contains(where: { $0.contains(frame.midY) }) else { continue }
             let title = (attr(child, kAXTitleAttribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
                 ?? (attr(child, kAXDescriptionAttribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
                 ?? ""

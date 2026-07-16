@@ -147,9 +147,9 @@ final class HiddenBarService: ManagedService {
         // Classify by the DIVIDER, not the chevron: collapse() only pushes items
         // left of the divider off-screen, so the panel must show exactly those.
         let boundaryX = dividerMinX
-        let band = MenuBarBand.current()
+        let bands = MenuBarBand.all()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
+            let items = MenuBarAXScanner.scanAll(menuBarBands: bands)
             let hidden = items.filter { $0.frame.minX < boundaryX }
             let windows = StatusWindowList.onScreen()
             DispatchQueue.main.async {
@@ -278,7 +278,12 @@ final class HiddenBarService: ManagedService {
     }
 
     private func renderPanel(_ items: [MenuBarAXItem]) {
-        guard let chevronFrame = control?.chevronFrameOnScreen, let screen = NSScreen.main else { return }
+        // Anchor the panel to the display that actually hosts the chevron, not
+        // NSScreen.main — the menu bar (and chevron) can be on a secondary
+        // display, where a main-screen frame would place the panel off-screen.
+        guard let chevronFrame = control?.chevronFrameOnScreen,
+              let screen = NSScreen.screens.first(where: { $0.frame.intersects(chevronFrame) }) ?? NSScreen.main
+        else { return }
         let vms = items.map {
             HiddenBarItemVM(id: $0.id, image: imageCache.image(forID: $0.id) ?? $0.appIcon, item: $0)
         }
