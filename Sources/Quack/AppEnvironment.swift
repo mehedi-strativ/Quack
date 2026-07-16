@@ -101,6 +101,9 @@ final class AppEnvironment: ObservableObject {
         hiddenBarService.onHiddenSetChanged = { [weak self] items in
             Task { @MainActor in self?.hiddenBarItems = items }
         }
+        hiddenBarService.onLayoutChanged = { [weak self] layout in
+            Task { @MainActor in self?.menuBarLayout = layout }
+        }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
         // `AppEnvironment` refresh when settings / meetings / permissions change.
@@ -148,6 +151,8 @@ final class AppEnvironment: ObservableObject {
     @Published var isArrangingHiddenBar = false
     /// The currently-hidden menu-bar items, for the Settings preview.
     @Published var hiddenBarItems: [HiddenBarService.HiddenPreviewItem] = []
+    /// The full L→R menu-bar layout (hidden + shown), for the layout editor preview.
+    @Published var menuBarLayout: [HiddenBarService.LayoutItem] = []
 
     /// Enter/leave hidden-bar Arrange mode from Settings. No-op if the feature
     /// isn't running.

@@ -36,6 +36,10 @@ final class HiddenBarService: ManagedService {
     /// Called (main) whenever the hidden set changes — drives the Settings preview.
     var onHiddenSetChanged: (([HiddenPreviewItem]) -> Void)?
 
+    struct LayoutItem: Identifiable { let id: String; let name: String; let icon: NSImage?; let isHidden: Bool }
+    /// Fired (main) with the full L→R menu-bar item list after a scan — drives the editor.
+    var onLayoutChanged: (([LayoutItem]) -> Void)?
+
     init(settings: SettingsStore, permissions: PermissionsManager) {
         self.settings = settings
         self.permissions = permissions
@@ -168,6 +172,32 @@ final class HiddenBarService: ManagedService {
         }
     }
 
+    /// Expand the bar, scan EVERY item, capture real glyphs for all on-screen
+    /// items, classify by the divider X, and publish the full layout. Collapses
+    /// afterward unless the editor is keeping the bar expanded (isArranging).
+    func refreshLayout() {
+        guard let control else { return }
+        control.expand()
+        control.setChevronVisible(true)
+        let boundaryX = control.dividerMinX ?? 0
+        let band = MenuBarBand.current()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
+            let windows = StatusWindowList.onScreen()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.imageCache.captureOnScreen(items: items, windows: windows)
+                let layout = items.map { item in
+                    LayoutItem(id: item.id, name: item.appName,
+                               icon: self.imageCache.image(forID: item.id) ?? item.appIcon,
+                               isHidden: item.frame.minX < boundaryX)
+                }
+                self.onLayoutChanged?(layout)
+                if !self.isArranging { self.control?.collapse() }
+            }
+        }
+    }
+
     /// Arrange mode: expand the real bar in place with a visible divider so the
     /// user can ⌘-drag icons across the boundary. Suppresses hover-reveal.
     func beginArrange() {
@@ -199,16 +229,22 @@ final class HiddenBarService: ManagedService {
         let band = MenuBarBand.current()
         DispatchQueue.global(qos: .userInitiated).async {
             let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
-            guard let target = items.filter({ $0.frame.minX > boundaryX }).first else {
-                Log.notch.notice("spike: no shown item to drag"); return
+            let shown = items.filter { $0.frame.minX > boundaryX }
+            // Need TWO shown items so the target has a neighbor to reorder past.
+            // Drag the leftmost shown item RIGHT, just past the 2nd item's
+            // midpoint — a reorder only fires when you cross a neighbor's middle.
+            guard shown.count >= 2 else {
+                Log.notch.notice("spike: need >=2 shown items, have \(shown.count)"); return
             }
+            let target = shown[0]
+            let neighbor = shown[1]
             let before = target.frame.minX
             StatusItemDragger.drag(
                 from: CGPoint(x: target.frame.midX, y: target.frame.midY),
-                toX: target.frame.midX - 40)
-            usleep(300_000)
+                toX: neighbor.frame.midX + 8)
+            usleep(400_000)
             let after = MenuBarAXScanner.elementFrame(target.element)?.minX ?? before
-            Log.notch.notice("spike: \(target.appName, privacy: .public) minX \(before) -> \(after) (moved=\(abs(after - before) > 4))")
+            Log.notch.notice("spike: \(target.appName, privacy: .public) minX \(before) -> \(after) past \(neighbor.appName, privacy: .public) (moved=\(abs(after - before) > 4))")
             DispatchQueue.main.async { self.control?.collapse() }
         }
     }
