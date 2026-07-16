@@ -262,38 +262,6 @@ final class HiddenBarService: ManagedService {
         }
     }
 
-#if DEBUG
-    /// SPIKE (temporary): drag the leftmost SHOWN third-party item ~40pt left and
-    /// log before/after minX. Proves whether macOS honors a synth-⌘-drag of an
-    /// item Quack does not own. Remove once Tasks 4–6 land.
-    func spikeDragLeftmostShownItem() {
-        guard let control else { Log.notch.notice("spike: no control"); return }
-        control.expand()
-        let boundaryX = control.dividerMinX ?? 0
-        let band = MenuBarBand.current()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let items = MenuBarAXScanner.scanAll(menuBarBandY: band)
-            let shown = items.filter { $0.frame.minX > boundaryX }
-            // Need TWO shown items so the target has a neighbor to reorder past.
-            // Drag the leftmost shown item RIGHT, just past the 2nd item's
-            // midpoint — a reorder only fires when you cross a neighbor's middle.
-            guard shown.count >= 2 else {
-                Log.notch.notice("spike: need >=2 shown items, have \(shown.count)"); return
-            }
-            let target = shown[0]
-            let neighbor = shown[1]
-            let before = target.frame.minX
-            StatusItemDragger.drag(
-                from: CGPoint(x: target.frame.midX, y: target.frame.midY),
-                toX: neighbor.frame.midX + 8)
-            usleep(400_000)
-            let after = MenuBarAXScanner.elementFrame(target.element)?.minX ?? before
-            Log.notch.notice("spike: \(target.appName, privacy: .public) minX \(before) -> \(after) past \(neighbor.appName, privacy: .public) (moved=\(abs(after - before) > 4))")
-            DispatchQueue.main.async { self.control?.collapse() }
-        }
-    }
-#endif
-
     /// Whether hiding should be active on the display currently hosting the menu
     /// bar: always on a notched display; on a non-notched one only if the user
     /// hasn't opted to show everything there.

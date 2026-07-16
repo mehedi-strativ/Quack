@@ -164,10 +164,6 @@ final class AppEnvironment: ObservableObject {
 
     func setMenuBarEditing(_ on: Bool) { hiddenBarService.setEditing(on) }
 
-#if DEBUG
-    func spikeMenuBarDrag() { hiddenBarService.spikeDragLeftmostShownItem() }
-#endif
-
     /// Event calendars available for the settings picker (empty if no access).
     func availableCalendars() -> [(id: String, title: String)] {
         eventKitProvider.availableCalendars()
