@@ -278,11 +278,14 @@ final class HiddenBarService: ManagedService {
         guard let chevronFrame = control?.chevronFrameOnScreen,
               let screen = NSScreen.screens.first(where: { $0.frame.intersects(chevronFrame) }) ?? NSScreen.main
         else { return }
-        let vms = items.map {
-            HiddenBarItemVM(id: $0.id, image: imageCache.image(forID: $0.id) ?? $0.appIcon, item: $0)
+        let vms = items.map { item -> HiddenBarItemVM in
+            let image = imageCache.image(forID: item.id) ?? item.appIcon
+            let width = HiddenBarLayout.itemDisplayWidth(
+                imageSize: image?.size ?? .zero, targetHeight: 22, minWidth: 16, maxWidth: 36)
+            return HiddenBarItemVM(id: item.id, image: image, item: item, displayWidth: width)
         }
         let frame = HiddenBarLayout.panelFrame(
-            itemCount: vms.count, itemWidth: 24, spacing: 8, padding: 6, height: 34,
+            itemWidths: vms.map(\.displayWidth), spacing: 8, padding: 6, height: 40,
             chevronMidX: chevronFrame.midX,
             menuBarBottomY: screen.frame.maxY - NSStatusBar.system.thickness,
             screenMinX: screen.frame.minX, screenMaxX: screen.frame.maxX)

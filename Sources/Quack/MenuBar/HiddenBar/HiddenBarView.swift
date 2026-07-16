@@ -5,6 +5,10 @@ struct HiddenBarItemVM: Identifiable {
     let id: String
     let image: NSImage?
     let item: MenuBarAXItem
+    /// Precomputed via `HiddenBarLayout.itemDisplayWidth`, so the rendered tile
+    /// matches exactly what the panel's frame (sized before SwiftUI lays out
+    /// anything) was computed for — a captured glyph is rarely square.
+    let displayWidth: CGFloat
 }
 
 /// The secondary-bar replica strip: a row of hidden-item glyphs (or app-icon
@@ -33,14 +37,14 @@ struct HiddenBarView: View {
                             Image(systemName: "app.dashed").resizable().scaledToFit()
                         }
                     }
-                    .frame(width: 22, height: 22)
+                    .frame(width: vm.displayWidth, height: 22)
                 }
                 .buttonStyle(.plain)
                 .help(vm.item.appName)
             }
         }
         .padding(.horizontal, 6)
-        .frame(height: 34)
+        .frame(height: 40)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 }
