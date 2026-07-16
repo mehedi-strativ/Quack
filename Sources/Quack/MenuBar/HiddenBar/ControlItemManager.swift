@@ -1,4 +1,5 @@
 import AppKit
+import QuackKit
 
 /// Owns Quack's two hidden-bar control items. Roles are assigned DYNAMICALLY by
 /// current position rather than creation order: the RIGHTMOST item is the visible
@@ -23,6 +24,7 @@ final class ControlItemManager {
          onChevronExit: @escaping () -> Void,
          onChevronClick: @escaping () -> Void) {
         self.onClick = onChevronClick
+        Self.seedLostAutosavePositions()
         itemA = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         itemB = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         // Autosave persists position so the user's placement (chevron right of the
@@ -33,6 +35,22 @@ final class ControlItemManager {
         hoverA = wire(itemA, enter: onChevronHover, exit: onChevronExit)
         hoverB = wire(itemB, enter: onChevronHover, exit: onChevronExit)
         refreshRoles()
+    }
+
+    /// A control item whose autosaved position was lost (e.g. wiped by an
+    /// external ⌘-drag experiment) is recreated at the far LEFT of the bar,
+    /// where the leftmost-is-divider role logic collapses it uselessly and
+    /// nothing gets hidden. Re-seed the lost position next to its partner
+    /// BEFORE creating the items.
+    private static func seedLostAutosavePositions() {
+        let defaults = UserDefaults.standard
+        let chevronKey = "NSStatusItem Preferred Position quack.hiddenbar.chevron.v2"
+        let dividerKey = "NSStatusItem Preferred Position quack.hiddenbar.divider.v2"
+        let seeds = ControlItemSeeding.seeds(
+            chevron: defaults.object(forKey: chevronKey) as? Double,
+            divider: defaults.object(forKey: dividerKey) as? Double)
+        if let c = seeds.chevron { defaults.set(c, forKey: chevronKey) }
+        if let d = seeds.divider { defaults.set(d, forKey: dividerKey) }
     }
 
     private func wire(_ item: NSStatusItem, enter: @escaping () -> Void, exit: @escaping () -> Void) -> HoverForwarder {
