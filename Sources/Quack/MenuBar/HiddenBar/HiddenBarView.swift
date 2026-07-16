@@ -40,7 +40,7 @@ struct HiddenBarView: View {
             }
         }
         .padding(.horizontal, 6)
-        .frame(height: 26)
+        .frame(height: 34)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 }

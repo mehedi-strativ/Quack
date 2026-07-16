@@ -24,7 +24,7 @@ final class HiddenBarService: ManagedService {
     private var warmAttempts = 0
     private(set) var isArranging = false
     /// True when the current display is non-notched and we're showing every icon
-    /// (no hiding) per `hiddenBarShowAllOnExternal`.
+    /// (no hiding) — hiding applies to notched displays only.
     private var showingAll = false
     private let conditionMonitor = HiddenBarConditionMonitor()
     /// True while a system condition (on battery / Wi-Fi off) is forcing reveal.
@@ -189,11 +189,10 @@ final class HiddenBarService: ManagedService {
     }
 
     /// Whether hiding should be active on the display currently hosting the menu
-    /// bar: always on a notched display; on a non-notched one only if the user
-    /// hasn't opted to show everything there.
+    /// bar. Only notched displays hide icons; a display without a notch has
+    /// nothing crushing its icons, so it always shows everything.
     private func shouldHideOnCurrentDisplay() -> Bool {
-        if !settings.settings.hiddenBarShowAllOnExternal { return true }
-        return currentDisplayHasNotch()
+        currentDisplayHasNotch()
     }
 
     private func currentDisplayHasNotch() -> Bool {
@@ -288,7 +287,7 @@ final class HiddenBarService: ManagedService {
             HiddenBarItemVM(id: $0.id, image: imageCache.image(forID: $0.id) ?? $0.appIcon, item: $0)
         }
         let frame = HiddenBarLayout.panelFrame(
-            itemCount: vms.count, itemWidth: 24, spacing: 8, padding: 6, height: 26,
+            itemCount: vms.count, itemWidth: 24, spacing: 8, padding: 6, height: 34,
             chevronMidX: chevronFrame.midX,
             menuBarBottomY: screen.frame.maxY - NSStatusBar.system.thickness,
             screenMinX: screen.frame.minX, screenMaxX: screen.frame.maxX)

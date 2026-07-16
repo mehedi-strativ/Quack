@@ -1466,9 +1466,7 @@ private struct HiddenBarSection: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
             if s.settings.hiddenBarEnabled {
-                Toggle("Show all icons on displays without a notch",
-                       isOn: s.binding(\.hiddenBarShowAllOnExternal))
-                Text("On external monitors there's no notch crushing icons, so nothing is hidden there.")
+                Text("Icons are hidden only on displays with a notch. On external monitors there's no notch crushing icons, so nothing is hidden there.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
 
                 Toggle("Reveal the Battery icon while on battery", isOn: s.binding(\.hiddenBarRevealOnBattery))

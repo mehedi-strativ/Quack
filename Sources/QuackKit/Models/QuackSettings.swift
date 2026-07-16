@@ -27,11 +27,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var notchMediaEnabled: Bool
     /// Show Claude Code agent progress in the notch panel.
     public var notchAgentsEnabled: Bool
-    /// Bartender-style hidden menu bar (chevron + collapsing divider).
+    /// Bartender-style hidden menu bar (chevron + collapsing divider). Hiding
+    /// applies only on notched displays; displays without a notch always show
+    /// every icon (nothing is crushing them there).
     public var hiddenBarEnabled: Bool
-    /// On displays without a notch (external monitors), show every icon instead
-    /// of hiding — the notch isn't crushing anything there.
-    public var hiddenBarShowAllOnExternal: Bool
     /// Auto-reveal the hidden icons while running on battery power.
     public var hiddenBarRevealOnBattery: Bool
     /// Auto-reveal the hidden icons while Wi-Fi is not connected.
@@ -118,7 +117,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         notchMediaEnabled: Bool = false,
         notchAgentsEnabled: Bool = false,
         hiddenBarEnabled: Bool = false,
-        hiddenBarShowAllOnExternal: Bool = true,
         hiddenBarRevealOnBattery: Bool = false,
         hiddenBarRevealOnWifiOff: Bool = false,
         hideDuckIcon: Bool = false,
@@ -164,7 +162,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.notchMediaEnabled = notchMediaEnabled
         self.notchAgentsEnabled = notchAgentsEnabled
         self.hiddenBarEnabled = hiddenBarEnabled
-        self.hiddenBarShowAllOnExternal = hiddenBarShowAllOnExternal
         self.hiddenBarRevealOnBattery = hiddenBarRevealOnBattery
         self.hiddenBarRevealOnWifiOff = hiddenBarRevealOnWifiOff
         self.hideDuckIcon = hideDuckIcon
@@ -223,7 +220,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         notchMediaEnabled = v(.notchMediaEnabled, d.notchMediaEnabled)
         notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
         hiddenBarEnabled = v(.hiddenBarEnabled, d.hiddenBarEnabled)
-        hiddenBarShowAllOnExternal = v(.hiddenBarShowAllOnExternal, d.hiddenBarShowAllOnExternal)
         hiddenBarRevealOnBattery = v(.hiddenBarRevealOnBattery, d.hiddenBarRevealOnBattery)
         hiddenBarRevealOnWifiOff = v(.hiddenBarRevealOnWifiOff, d.hiddenBarRevealOnWifiOff)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
