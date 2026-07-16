@@ -37,20 +37,31 @@ final class ControlItemManager {
         refreshRoles()
     }
 
-    /// A control item whose autosaved position was lost (e.g. wiped by an
-    /// external ⌘-drag experiment) is recreated at the far LEFT of the bar,
-    /// where the leftmost-is-divider role logic collapses it uselessly and
-    /// nothing gets hidden. Re-seed the lost position next to its partner
-    /// BEFORE creating the items.
+    /// A control item whose autosaved position was lost (wiped by a ⌘-drag
+    /// experiment, a hard kill, etc.) is recreated at the far LEFT of the bar —
+    /// left of the notch — where the leftmost-is-divider role logic collapses
+    /// it uselessly and nothing gets hidden. Re-seed lost positions next to the
+    /// surviving partner (or, if BOTH are gone, at a default slot right of the
+    /// notch) BEFORE creating the items.
     private static func seedLostAutosavePositions() {
         let defaults = UserDefaults.standard
         let chevronKey = "NSStatusItem Preferred Position quack.hiddenbar.chevron.v2"
         let dividerKey = "NSStatusItem Preferred Position quack.hiddenbar.divider.v2"
         let seeds = ControlItemSeeding.seeds(
             chevron: defaults.object(forKey: chevronKey) as? Double,
-            divider: defaults.object(forKey: dividerKey) as? Double)
+            divider: defaults.object(forKey: dividerKey) as? Double,
+            defaultChevron: defaultChevronPosition())
         if let c = seeds.chevron { defaults.set(c, forKey: chevronKey) }
         if let d = seeds.divider { defaults.set(d, forKey: dividerKey) }
+    }
+
+    /// A chevron "preferred position" (distance from the screen's right edge)
+    /// that lands ~200pt right of the notch on the main display, so a
+    /// from-scratch seed puts the chevron in the safe right-of-notch zone.
+    /// Falls back to a proven constant on a non-notched main display.
+    private static func defaultChevronPosition() -> Double {
+        guard let screen = NSScreen.main, let notch = NotchProbe.span(for: screen) else { return 462 }
+        return Double(screen.frame.maxX - (notch.maxX + 200))
     }
 
     private func wire(_ item: NSStatusItem, enter: @escaping () -> Void, exit: @escaping () -> Void) -> HoverForwarder {

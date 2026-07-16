@@ -196,12 +196,14 @@ final class HiddenBarService: ManagedService {
     }
 
     private func currentDisplayHasNotch() -> Bool {
-        let screen: NSScreen?
-        if let f = control?.chevronFrameOnScreen {
-            screen = NSScreen.screens.first { $0.frame.intersects(f) } ?? NSScreen.main
-        } else {
-            screen = NSScreen.main
-        }
+        // Decide by the display under the mouse, NOT the chevron's frame. In
+        // separate-spaces multi-display, the menu bar (and our status items)
+        // follows the mouse's display — but in show-all mode the chevron is
+        // hidden and its frame stays stuck on the display it was last shown on,
+        // which froze the hide/show-all decision and left the notched display
+        // permanently un-hidden once the mouse had visited an external one.
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
         guard let screen else { return false }
         return NotchProbe.span(for: screen) != nil
     }
