@@ -1,61 +1,68 @@
 import SwiftUI
 import QuackKit
 
-/// The feature groups shown in the left sidebar. `general` is the schedule
-/// (agenda) view; `settings` holds the app-level preferences.
+/// The feature groups shown in the left sidebar. Tabs are named for what they
+/// control (self-describing), grouped by surface: menu bar, input, screen, app.
 enum SettingsTab: String, CaseIterable {
-    case general, calendar, temperature, timeAwareness, menuBar, display, windows, mouse, notch, settings
+    case dashboard, meetings, hiddenIcons, stats
+    case mouse, gestures, shortcuts
+    case brightness, notch
+    case general, permissions
 
     var title: String {
         switch self {
-        case .general: return "Dashboard"
-        case .calendar: return "Agenda"
-        case .display: return "Display"
-        case .temperature: return "CPU"
-        case .timeAwareness: return "Time Awareness"
-        case .menuBar: return "Menu Bar"
-        case .windows: return "Windows"
+        case .dashboard: return "Dashboard"
+        case .meetings: return "Meetings"
+        case .hiddenIcons: return "Hidden Icons"
+        case .stats: return "Stats & Timer"
         case .mouse: return "Mouse"
+        case .gestures: return "Gestures"
+        case .shortcuts: return "Shortcuts"
+        case .brightness: return "Brightness"
         case .notch: return "Notch"
-        case .settings: return "Settings"
+        case .general: return "General"
+        case .permissions: return "Permissions"
         }
     }
 
     var icon: String {
         switch self {
-        case .general: return "square.grid.2x2"
-        case .calendar: return "calendar"
-        case .display: return "sun.max"
-        case .temperature: return "thermometer.medium"
-        case .timeAwareness: return "hourglass"
-        case .menuBar: return "menubar.dock.rectangle"
-        case .windows: return "macwindow.on.rectangle"
+        case .dashboard: return "square.grid.2x2"
+        case .meetings: return "calendar"
+        case .hiddenIcons: return "eye.slash"
+        case .stats: return "gauge.with.needle"
         case .mouse: return "computermouse"
+        case .gestures: return "hand.draw"
+        case .shortcuts: return "keyboard"
+        case .brightness: return "sun.max"
         case .notch: return "menubar.rectangle"
-        case .settings: return "gearshape"
+        case .general: return "gearshape"
+        case .permissions: return "lock.shield"
         }
     }
 }
 
-/// Named groupings for the sidebar (CleanMyMac-style section headers). `General`
-/// sits alone at the top; `Settings` sits alone at the bottom.
+/// Named groupings for the sidebar. `Dashboard` sits alone at the top;
+/// `App` (General/Permissions) closes the list.
 private enum SidebarGroup: String, CaseIterable {
     case top = ""
     case menuBar = "Menu Bar"
-    case controls = "Controls"
-    case bottom = " "
+    case input = "Input"
+    case screen = "Screen"
+    case app = "App"
 
     var tabs: [SettingsTab] {
         switch self {
-        case .top: return [.general]
-        case .menuBar: return [.calendar, .temperature, .timeAwareness, .menuBar]
-        case .controls: return [.display, .windows, .mouse, .notch]
-        case .bottom: return [.settings]
+        case .top: return [.dashboard]
+        case .menuBar: return [.meetings, .hiddenIcons, .stats]
+        case .input: return [.mouse, .gestures, .shortcuts]
+        case .screen: return [.brightness, .notch]
+        case .app: return [.general, .permissions]
         }
     }
 
-    /// Whether to render a visible header label (top/bottom are unlabeled).
-    var showsHeader: Bool { self != .top && self != .bottom }
+    /// Whether to render a visible header label (top is unlabeled).
+    var showsHeader: Bool { self != .top }
 }
 
 /// The whole settings window: an immersive full-height sidebar (grouped nav,
@@ -64,9 +71,15 @@ private enum SidebarGroup: String, CaseIterable {
 /// highlight, and light/dark colors are all native and adapt to the appearance.
 struct SettingsRootView: View {
     @EnvironmentObject var env: AppEnvironment
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
 
     private var selection: Binding<SettingsTab?> {
         Binding(get: { env.settingsTab }, set: { if let new = $0 { env.settingsTab = new } })
+    }
+
+    private var results: [SettingEntry] {
+        SettingsSearch.matches(query, in: SettingsSearchRegistry.all)
     }
 
     var body: some View {
@@ -82,28 +95,123 @@ struct SettingsRootView: View {
         .font(.system(size: 14))
         .tint(.accentColor)
         .onAppear { env.permissions.refreshAll() }
+        // ⌘F from anywhere in the window focuses the search field.
+        .background(Button("") { searchFocused = true }
+            .keyboardShortcut("f", modifiers: .command)
+            .opacity(0).accessibilityHidden(true))
     }
 
+    /// A single, always-present `List` whose ROWS swap between the grouped
+    /// nav and search results — never the List itself. Swapping the List
+    /// instance (an earlier version wrapped search results in their own
+    /// `List` behind an if/else) tore down and rebuilt the sidebar's hosting
+    /// view on every keystroke, stealing focus back from the search field
+    /// each time. One stable List keeps the header (logo + search box, in
+    /// that fixed order) untouched while typing.
     private var sidebar: some View {
         List(selection: selection) {
-            ForEach(SidebarGroup.allCases, id: \.self) { group in
-                Section {
-                    ForEach(group.tabs, id: \.self) { tab in
-                        Label(tab.title, systemImage: tab.icon)
-                            .tag(tab)
+            if query.isEmpty {
+                ForEach(SidebarGroup.allCases, id: \.self) { group in
+                    Section {
+                        ForEach(group.tabs, id: \.self) { tab in
+                            Label(tab.title, systemImage: tab.icon)
+                                .tag(tab)
+                        }
+                    } header: {
+                        if group.showsHeader {
+                            Text(group.rawValue).accessibilityAddTraits(.isHeader)
+                        }
                     }
-                } header: {
-                    if group.showsHeader { Text(group.rawValue) }
                 }
+            } else {
+                Section {
+                    searchResultRows
+                }
+                .accessibilityLabel("\(results.count) settings match \(query)")
             }
         }
         .listStyle(.sidebar)
-        // Immersive: the sidebar material runs full-height under the transparent
-        // title bar; this inset keeps the static app name beside the traffic
-        // lights without pushing the list content under them.
-        .safeAreaInset(edge: .top, spacing: 0) { appIdentity }
+        // Immersive: the sidebar material runs full-height under the
+        // transparent title bar. Logo sits first, search box right below it —
+        // both fixed here so neither ever competes with system-controlled
+        // placement for order.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 6) {
+                appIdentity
+                searchField
+            }
+        }
         // Quit is always reachable, pinned to the very bottom of the sidebar.
         .safeAreaInset(edge: .bottom, spacing: 0) { quitFooter }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            TextField("Search settings", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .focused($searchFocused)
+                .onSubmit { if let first = results.first { open(first) } }
+                .onExitCommand { query = ""; searchFocused = false }
+                .accessibilityLabel("Search settings")
+            if query.isEmpty {
+                Text("⌘F").font(.system(size: 10.5)).foregroundStyle(.tertiary)
+            } else {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(.primary.opacity(0.05))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(.primary.opacity(searchFocused ? 0.22 : 0.08), lineWidth: 1))
+        )
+        .padding(.horizontal, 10).padding(.bottom, 4)
+    }
+
+    @ViewBuilder
+    private var searchResultRows: some View {
+        if results.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("No matches").font(.system(size: 13)).foregroundStyle(.secondary)
+                Text("Try \"scroll\", \"break\" or \"hide\"")
+                    .font(.system(size: 11.5)).foregroundStyle(.tertiary)
+            }
+        } else {
+            ForEach(results) { entry in
+                Button { open(entry) } label: {
+                    VStack(alignment: .leading, spacing: 1.5) {
+                        Text(entry.title).font(.system(size: 12.5)).lineLimit(1)
+                        Text(breadcrumb(entry))
+                            .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .padding(.vertical, 1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityHint("Opens \(breadcrumb(entry))")
+            }
+        }
+    }
+
+    private func breadcrumb(_ e: SettingEntry) -> String {
+        let tab = SettingsTab(rawValue: e.tabID)?.title ?? e.tabID
+        return "\(tab) › \(e.section)"
+    }
+
+    private func open(_ entry: SettingEntry) {
+        if let tab = SettingsTab(rawValue: entry.tabID) { env.settingsTab = tab }
+        env.settingsSpotlight = entry.section
+        query = ""
+        searchFocused = false
     }
 
     private var quitFooter: some View {
@@ -147,45 +255,113 @@ struct SettingsPane: View {
     @EnvironmentObject var env: AppEnvironment
 
     var body: some View {
+        // The window title (active tab name) is drawn by AppKit in the
+        // transparent title bar, outside SwiftUI's layout — nothing reserves
+        // that strip automatically. A `safeAreaInset` here does NOT fix it:
+        // Form's grouped-style section headers are sticky (they pin to the
+        // scroll view's own top edge while scrolling), and that pin ignores
+        // a safe-area inset applied outside the Form. A real spacer, in
+        // normal layout flow, pushes the Form's scroll region itself down —
+        // so its sticky header pins below the title instead of under it.
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 30)
+            pane
+        }
+            // Search-jump spotlight: a transient chip naming the section the
+            // user searched for, so the eye lands in the right place.
+            .overlay(alignment: .top) {
+                if let section = env.settingsSpotlight {
+                    // 30 clears the spacer above; +10 is the chip's own margin.
+                    SpotlightChip(text: section)
+                        .padding(.top, 40)
+                        .task {
+                            try? await Task.sleep(nanoseconds: 2_200_000_000)
+                            env.settingsSpotlight = nil
+                        }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var pane: some View {
         switch tab {
-        case .general:
+        case .dashboard:
             DashboardView()
-        case .calendar:
-            CalendarAgendaView()
+        case .meetings:
+            MeetingsPane()
         default:
             Form {
                 switch tab {
-                case .display:
+                case .brightness:
                     BrightnessSection()
-                case .temperature:
+                case .stats:
                     TemperatureSection()
-                case .timeAwareness:
                     TimeAwarenessStatsSection()
                     TimeAwarenessSection()
-                case .windows:
+                case .gestures:
                     WindowSwipeSection()
                     DockGesturesSection()
+                case .shortcuts:
                     KeyboardShortcutsSection()
                 case .mouse:
                     MousePointerSection()
                     MouseScrollSection()
                     MouseButtonsSection()
-                case .menuBar:
+                case .hiddenIcons:
                     HiddenBarSection()
                 case .notch:
                     NotchSection()
-                case .settings:
+                case .general:
                     SettingsSection()
-                    CalendarSection()
-                    RemindersSection()
+                case .permissions:
                     PermissionsSection()
                     StatusSection()
-                case .general, .calendar:
+                case .dashboard, .meetings:
                     EmptyView()
                 }
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)   // let the darker window bg show through
+        }
+    }
+}
+
+/// The transient "you jumped here" marker after picking a search result.
+/// Fades in/out unless Reduce Motion is on (then it just appears/disappears).
+private struct SpotlightChip: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.down.right")
+                .font(.system(size: 10, weight: .semibold))
+            Text(text).font(.system(size: 12, weight: .medium))
+        }
+        .foregroundStyle(Color.accentColor)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(Capsule().fill(Color.accentColor.opacity(0.14))
+            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)))
+        .transition(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            ? .identity : .opacity.combined(with: .move(edge: .top)))
+        .accessibilityLabel("Jumped to \(text)")
+    }
+}
+
+/// Meetings tab: the agenda up top, then the calendar-sync and reminder
+/// settings that used to live under the old Settings tab — everything about
+/// meetings in one place.
+private struct MeetingsPane: View {
+    var body: some View {
+        VSplitView {
+            CalendarAgendaView()
+                .frame(minHeight: 220)
+            Form {
+                CalendarSection()
+                RemindersSection()
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: 180)
         }
     }
 }
@@ -262,18 +438,18 @@ private struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                DashCard(tab: .calendar) { calendarCardContent }
+                DashCard(tab: .meetings) { calendarCardContent }
                 LazyVGrid(columns: columns, spacing: 14) {
-                    DashCard(tab: .temperature) { cpuSummary }
-                    DashCard(tab: .display) { displaySummary }
-                    DashCard(tab: .windows) { windowsSummary }
+                    DashCard(tab: .stats, title: "CPU", icon: "thermometer.medium") { cpuSummary }
+                    DashCard(tab: .brightness) { displaySummary }
+                    DashCard(tab: .gestures, title: "Windows", icon: "macwindow.on.rectangle") { windowsSummary }
                     if env.settingsStore.settings.timeAwarenessEnabled {
-                        DashCard(tab: .timeAwareness, title: "Time", icon: "hourglass") { timeSummary }
+                        DashCard(tab: .stats, title: "Time", icon: "hourglass") { timeSummary }
                     }
                     if env.settingsStore.settings.hiddenBarEnabled {
-                        DashCard(tab: .menuBar, title: "Menu Bar", icon: "menubar.dock.rectangle") { hiddenBarSummary }
+                        DashCard(tab: .hiddenIcons, title: "Hidden Icons", icon: "eye.slash") { hiddenBarSummary }
                     }
-                    DashCard(tab: .settings, title: "Permissions", icon: "lock.shield") { permissionsSummary }
+                    DashCard(tab: .permissions) { permissionsSummary }
                 }
             }
             .padding(20)
@@ -458,7 +634,13 @@ private struct DashCard<Content: View>: View {
     @State private var hovering = false
 
     var body: some View {
-        Button { withAnimation(.easeInOut(duration: 0.15)) { env.settingsTab = tab } } label: {
+        Button {
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                env.settingsTab = tab
+            } else {
+                withAnimation(.easeInOut(duration: 0.15)) { env.settingsTab = tab }
+            }
+        } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: icon ?? tab.icon)
@@ -473,18 +655,27 @@ private struct DashCard<Content: View>: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+            // Raycast-style depth: soft fill, hairline border, and a 1pt inset
+            // top highlight that reads as raised glass on dark backgrounds.
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.primary.opacity(hovering ? 0.09 : 0.05))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.primary.opacity(hovering ? 0.08 : 0.045))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.06))
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(hovering ? 0.14 : 0.07), lineWidth: 1)
                     )
+                    .overlay(alignment: .top) {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
+                            .mask(LinearGradient(colors: [.white, .clear],
+                                                 startPoint: .top, endPoint: .center))
+                    }
             )
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .instantHover($hovering)
+        .accessibilityLabel("\(title ?? tab.title). Opens \(tab.title) settings")
     }
 }
 

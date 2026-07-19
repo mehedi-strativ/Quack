@@ -120,6 +120,17 @@ private struct MeetingRow: View {
         }
         .buttonStyle(.plain)
         .instantHover($hovering)
+        // VoiceOver gets the whole story; the color bar alone identifies the
+        // calendar only visually.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint(joinURL != nil ? "Opens the meeting link" : "")
+    }
+
+    private var accessibilitySummary: String {
+        var parts = [event.title, timeText]
+        if joinURL != nil { parts.append("has video link") }
+        return parts.joined(separator: ", ")
     }
 
     private var timeText: String {

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 
 /// Owns a real `NSWindow` for settings (instead of SwiftUI's `Settings` scene,
 /// whose open behavior is unreliable for an `.accessory` app). Hosts the whole
@@ -8,6 +9,7 @@ import SwiftUI
 final class SettingsWindowController {
     private var window: NSWindow?
     private weak var env: AppEnvironment?
+    private var tabObserver: AnyCancellable?
 
     func show(env: AppEnvironment) {
         self.env = env
@@ -21,8 +23,9 @@ final class SettingsWindowController {
         let hosting = NSHostingController(rootView: SettingsRootView().environmentObject(env))
         let window = NSWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.title = ""
-        window.titleVisibility = .hidden
+        // The title bar shows the active tab name (kept in sync below); the
+        // logo/app name live in the sidebar instead, so this stays transparent.
+        window.titleVisibility = .visible
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         // Resizable within sane bounds; the SwiftUI root sets its own ideal size.
@@ -30,6 +33,8 @@ final class SettingsWindowController {
         window.contentMinSize = NSSize(width: 720, height: 560)
         window.contentMaxSize = NSSize(width: 1100, height: 1000)
         window.center()
+        window.title = env.settingsTab.title
+        tabObserver = env.$settingsTab.sink { [weak window] tab in window?.title = tab.title }
         self.window = window
     }
 }

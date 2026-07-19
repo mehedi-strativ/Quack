@@ -21,7 +21,10 @@ final class AppEnvironment: ObservableObject {
     @Published var now = Date()
     /// The currently selected settings tab (lifted here so features can deep-link
     /// to a specific tab, e.g. the temperature popover → Display).
-    @Published var settingsTab: SettingsTab = .general
+    @Published var settingsTab: SettingsTab = .dashboard
+    /// Set when a search result is chosen: the section name to spotlight in the
+    /// opened pane. Cleared by the pane after the flash.
+    @Published var settingsSpotlight: String?
     private var clockTimer: Timer?
     private var activeObserver: NSObjectProtocol?
 
@@ -95,8 +98,8 @@ final class AppEnvironment: ObservableObject {
             .hiddenBar: hiddenBarService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
-        temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .temperature) }
-        timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .timeAwareness) }
+        temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
+        timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
         notchService.onOpenSettings = { [weak self] in self?.showSettings() }
         hiddenBarService.onHiddenSetChanged = { [weak self] items in
             Task { @MainActor in self?.hiddenBarItems = items }
