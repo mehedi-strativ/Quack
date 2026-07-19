@@ -26,8 +26,13 @@ final class MenuBarItemImageCache {
                 .null, .optionIncludingWindow, win.windowID,
                 [.boundsIgnoreFraming, .bestResolution]),
                 cg.width > 1, cg.height > 1 else { continue }
+            // Size the NSImage from the CAPTURED window's geometry, not the AX
+            // item frame. SwiftUI's scaledToFit derives its aspect ratio from
+            // NSImage.size; AX often reports a different width than the rendered
+            // window (e.g. the Screen-Recording "0m" timer), and the mismatch
+            // squeezed the glyph to the wrong ratio. win.frame matches the pixels.
             cache[item.id] = NSImage(cgImage: cg,
-                size: NSSize(width: item.frame.width, height: item.frame.height))
+                size: NSSize(width: win.frame.width, height: win.frame.height))
         }
     }
 }

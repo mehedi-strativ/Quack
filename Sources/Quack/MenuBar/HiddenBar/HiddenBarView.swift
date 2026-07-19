@@ -44,7 +44,9 @@ struct HiddenBarView: View {
             }
         }
         .padding(.horizontal, 6)
-        .frame(height: 40)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        // Transparent — the behind-window blur is an NSVisualEffectView placed
+        // behind this host in HiddenBarPanel (a SwiftUI Material over a clear
+        // panel has no in-window backdrop to sample, so it barely blurs).
+        .frame(maxHeight: .infinity)
     }
 }

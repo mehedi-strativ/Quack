@@ -14,7 +14,8 @@ public enum HiddenBarReveal {
              (.revealed, .hoverPanel):        return .revealed
         case (.revealed, .exitAll):           return .revealed   // grace armed, not yet hidden
         case (.revealed, .graceElapsed):      return .hidden
-        case (.revealed, .clickChevron):      return .pinned
+        case (.hidden, .clickChevron),                          // click w/o a prior hover
+             (.revealed, .clickChevron):      return .pinned
         case (.pinned, .clickChevron),
              (.pinned, .clickOutside):        return .hidden
         case (.pinned, _):                    return .pinned

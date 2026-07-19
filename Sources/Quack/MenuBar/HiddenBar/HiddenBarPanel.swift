@@ -1,9 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// Borderless, non-activating panel that hangs under the menu bar and renders
-/// the hidden items. Level above the menu bar. No CGEvent tap; it receives
-/// mouse events natively for its own hover lifecycle.
+/// Borderless, non-activating panel that overlays the menu-bar strip and renders
+/// the hidden items. Level above the menu bar, transparent so the strip aligns
+/// with the primary bar behind it. No CGEvent tap; it receives mouse events
+/// natively for its own hover lifecycle.
 @MainActor
 final class HiddenBarPanel {
     private let panel: NSPanel
@@ -20,7 +21,7 @@ final class HiddenBarPanel {
         panel.hidesOnDeactivate = false
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        panel.hasShadow = false   // no floating-card shadow; blend into the bar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
     }
 
@@ -29,7 +30,26 @@ final class HiddenBarPanel {
     func show(view: HiddenBarView, frame: CGRect) {
         let host = NSHostingView(rootView: view)
         self.host = host
-        panel.contentView = TrackingContainer(content: host, enter: onPanelHover, exit: onPanelExit)
+
+        // Behind-window blur (menu-bar vibrancy) rendered under the transparent
+        // SwiftUI host, so the strip frosts the desktop/menu bar behind it.
+        let blur = NSVisualEffectView()
+        blur.material = .menu
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.wantsLayer = true
+        blur.layer?.cornerRadius = 8
+        blur.layer?.masksToBounds = true
+        host.translatesAutoresizingMaskIntoConstraints = false
+        blur.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.topAnchor.constraint(equalTo: blur.topAnchor),
+            host.bottomAnchor.constraint(equalTo: blur.bottomAnchor),
+            host.leadingAnchor.constraint(equalTo: blur.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: blur.trailingAnchor),
+        ])
+
+        panel.contentView = TrackingContainer(content: blur, enter: onPanelHover, exit: onPanelExit)
         panel.setFrame(frame, display: true)
         panel.orderFrontRegardless()
     }

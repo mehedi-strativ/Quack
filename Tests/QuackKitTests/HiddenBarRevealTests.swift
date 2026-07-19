@@ -18,6 +18,7 @@ import Testing
 
     @Test func clickPinsAndClickOutsideUnpins() {
         #expect(HiddenBarReveal.next(.revealed, on: .clickChevron) == .pinned)
+        #expect(HiddenBarReveal.next(.hidden, on: .clickChevron) == .pinned)  // no prior hover
         #expect(HiddenBarReveal.next(.pinned, on: .exitAll) == .pinned)       // pinned ignores hover-out
         #expect(HiddenBarReveal.next(.pinned, on: .graceElapsed) == .pinned)
         #expect(HiddenBarReveal.next(.pinned, on: .clickChevron) == .hidden)  // toggle off

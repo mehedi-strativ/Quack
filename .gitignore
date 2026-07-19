@@ -12,3 +12,4 @@ build/
 
 # SDD scratch (briefs, reports, review packages, ledger) — not part of the repo
 .superpowers/
+.gstack/

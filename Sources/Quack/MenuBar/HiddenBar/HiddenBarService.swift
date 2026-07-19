@@ -262,13 +262,28 @@ final class HiddenBarService: ManagedService {
         }
         state = new
         switch new {
-        case .revealed, .pinned: reveal()
-        case .hidden:            if conditionReveal { renderPanel(conditionItems) } else { panel.hide() }
+        case .revealed: reveal()
+        case .pinned:   pin()
+        case .hidden:   unpin()
         }
     }
 
     private func reveal() {
         renderPanel(hiddenItems)   // hover shows the full hidden set
+    }
+
+    /// Click-to-pin: keep the replica strip up persistently (unlike hover, which
+    /// grace-hides) and flip the chevron to ▶. Stays open until clicked again.
+    private func pin() {
+        control?.setChevronExpanded(true)
+        renderPanel(hiddenItems)
+    }
+
+    /// Leave the pinned state: restore the ◀ glyph and fall back to any
+    /// condition-driven reveal (or nothing).
+    private func unpin() {
+        control?.setChevronExpanded(false)
+        if conditionReveal { renderPanel(conditionItems) } else { panel.hide() }
     }
 
     private func renderPanel(_ items: [MenuBarAXItem]) {
@@ -281,13 +296,17 @@ final class HiddenBarService: ManagedService {
         let vms = items.map { item -> HiddenBarItemVM in
             let image = imageCache.image(forID: item.id) ?? item.appIcon
             let width = HiddenBarLayout.itemDisplayWidth(
-                imageSize: image?.size ?? .zero, targetHeight: 22, minWidth: 16, maxWidth: 36)
+                imageSize: image?.size ?? .zero, targetHeight: 22, minWidth: 16, maxWidth: 48)
             return HiddenBarItemVM(id: item.id, image: image, item: item, displayWidth: width)
         }
+        // Sit the strip IN the menu bar (top edge at screen.maxY, menu-bar
+        // height) so it reads as a continuation of the primary bar rather than a
+        // floating card below it.
         let frame = HiddenBarLayout.panelFrame(
-            itemWidths: vms.map(\.displayWidth), spacing: 8, padding: 6, height: 40,
+            itemWidths: vms.map(\.displayWidth), spacing: 8, padding: 6,
+            height: NSStatusBar.system.thickness,
             chevronMidX: chevronFrame.midX,
-            menuBarBottomY: screen.frame.maxY - NSStatusBar.system.thickness,
+            panelTopY: screen.frame.maxY,
             screenMinX: screen.frame.minX, screenMaxX: screen.frame.maxX)
         let view = HiddenBarView(
             items: vms,

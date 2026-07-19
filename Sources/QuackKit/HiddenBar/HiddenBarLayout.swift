@@ -1,7 +1,9 @@
 import CoreGraphics
 
-/// Pure geometry for the hidden bar. Works in a Y-up space where
-/// `menuBarBottomY` is the menu bar's lower edge and the panel hangs below it.
+/// Pure geometry for the hidden bar. Works in a Y-up (Cocoa) space where the
+/// panel's TOP edge sits at `panelTopY` and it extends downward by `height`.
+/// Pass `panelTopY = screen.maxY` so the strip aligns with the menu bar; a
+/// smaller value hangs it below.
 public enum HiddenBarLayout {
 
     /// The secondary-bar rect: centered under the chevron, clamped within screen.
@@ -10,7 +12,7 @@ public enum HiddenBarLayout {
     /// item would either clip wide glyphs or force narrow ones to stretch.
     public static func panelFrame(
         itemWidths: [CGFloat], spacing: CGFloat, padding: CGFloat,
-        height: CGFloat, chevronMidX: CGFloat, menuBarBottomY: CGFloat,
+        height: CGFloat, chevronMidX: CGFloat, panelTopY: CGFloat,
         screenMinX: CGFloat, screenMaxX: CGFloat
     ) -> CGRect {
         let content = itemWidths.reduce(0, +)
@@ -19,7 +21,7 @@ public enum HiddenBarLayout {
         var minX = chevronMidX - width / 2
         minX = min(max(minX, screenMinX), screenMaxX - width)
         minX = max(minX, screenMinX)   // when width > screen, pin left
-        return CGRect(x: minX, y: menuBarBottomY - height, width: width, height: height)
+        return CGRect(x: minX, y: panelTopY - height, width: width, height: height)
     }
 
     /// The width to render a captured glyph at, given its natural size and a

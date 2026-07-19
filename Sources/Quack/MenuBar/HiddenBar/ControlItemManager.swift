@@ -17,6 +17,9 @@ final class ControlItemManager {
     private var hoverB: HoverForwarder?
     private var arranging = false
     private var chevronHidden = false
+    /// True while the real bar is pinned open (icons revealed in place). Drives
+    /// the chevron glyph: right (▶, "hide again") when expanded, left otherwise.
+    private var chevronExpanded = false
 
     enum Length { static let expanded: CGFloat = 10_000 }
 
@@ -92,8 +95,9 @@ final class ControlItemManager {
     /// marker to the leftmost. Call when positions are settled (both on-screen).
     func refreshRoles() {
         let ch = chevron, dv = divider
-        ch.button?.image = Self.chevronImage
-        ch.button?.setAccessibilityLabel("Show hidden menu bar items")
+        ch.button?.image = chevronExpanded ? Self.chevronRightImage : Self.chevronLeftImage
+        ch.button?.setAccessibilityLabel(chevronExpanded
+            ? "Hide menu bar items" : "Show hidden menu bar items")
         ch.isVisible = !chevronHidden
         dv.button?.image = arranging ? Self.dividerImage : nil
         dv.button?.setAccessibilityLabel("Quack hidden items divider")
@@ -119,6 +123,15 @@ final class ControlItemManager {
     }
     var chevronIsVisible: Bool { chevron.isVisible }
 
+    /// Flip the chevron glyph to reflect pinned-open (▶) vs collapsed (◀) state.
+    func setChevronExpanded(_ expanded: Bool) {
+        chevronExpanded = expanded
+        let ch = chevron
+        ch.button?.image = expanded ? Self.chevronRightImage : Self.chevronLeftImage
+        ch.button?.setAccessibilityLabel(expanded
+            ? "Hide menu bar items" : "Show hidden menu bar items")
+    }
+
     /// Show/hide the white boundary marker on the divider during Arrange mode.
     func setDividerVisible(_ visible: Bool) {
         arranging = visible
@@ -135,8 +148,11 @@ final class ControlItemManager {
 
     // MARK: Images
 
-    private static let chevronImage: NSImage? =
+    private static let chevronLeftImage: NSImage? =
         NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Show hidden menu bar items")
+
+    private static let chevronRightImage: NSImage? =
+        NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "Hide menu bar items")
 
     private static let dividerImage: NSImage = {
         let img = NSImage(size: NSSize(width: 10, height: 18))
