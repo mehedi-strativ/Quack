@@ -14,6 +14,11 @@ final class SettingsWindowController {
     func show(env: AppEnvironment) {
         self.env = env
         if window == nil { buildWindow(env: env) }
+        // Quack is `.accessory` (menu-bar-only, see Info.plist) the rest of the
+        // time, but this is a real, substantial window — promote to `.regular`
+        // while it's open so it gets a Dock icon, an app-menu name, and Cmd-Tab
+        // like any normal window; the close observer below drops it back.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         window?.orderFrontRegardless()
@@ -36,5 +41,8 @@ final class SettingsWindowController {
         window.title = env.settingsTab.title
         tabObserver = env.$settingsTab.sink { [weak window] tab in window?.title = tab.title }
         self.window = window
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { _ in NSApp.setActivationPolicy(.accessory) }
     }
 }
