@@ -701,14 +701,31 @@ private struct CalendarAgendaView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            ScrollView { content }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                header
+                Divider()
+                ScrollView { content }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(.background)
+            .task(id: anchor) {
+                await load()
+                guard isCurrentMonth else { return }
+                // `load()` just flipped `loading`/`events`, which is what
+                // switches `content` from the ProgressView branch to the
+                // LazyVStack — but that state change hasn't been applied to
+                // the rendered view tree yet at this exact point (SwiftUI
+                // commits it on a later run-loop turn), so a `scrollTo` called
+                // synchronously here targets an id that doesn't exist in the
+                // CURRENT tree and silently no-ops. Deferring past that commit
+                // (plus giving the enclosing VSplitView pane a layout pass)
+                // is why this needs a hop, not a bare call.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    proxy.scrollTo(cal.startOfDay(for: Date()), anchor: .top)
+                }
+            }
         }
-        .background(.background)
-        .task(id: anchor) { await load() }
     }
 
     // MARK: Header
