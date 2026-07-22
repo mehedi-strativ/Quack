@@ -21,12 +21,10 @@ enum MenuBarAXScanner {
     /// top-left origin); an item is kept if its midY falls in ANY of them.
     static func scanAll(menuBarBands: [ClosedRange<CGFloat>]) -> [MenuBarAXItem] {
         let apps = NSWorkspace.shared.runningApplications
-        let ownPID = ProcessInfo.processInfo.processIdentifier
         let lock = NSLock()
         var found: [MenuBarAXItem] = []
         DispatchQueue.concurrentPerform(iterations: apps.count) { i in
             let app = apps[i]
-            guard app.processIdentifier != ownPID else { return }
             let hits = scanApp(app, menuBarBands: menuBarBands)
             guard !hits.isEmpty else { return }
             lock.lock(); found.append(contentsOf: hits); lock.unlock()
@@ -59,6 +57,11 @@ enum MenuBarAXScanner {
         for (index, child) in children.enumerated() {
             guard let frame = frame(of: child), frame.width > 0,
                   menuBarBands.contains(where: { $0.contains(frame.midY) }) else { continue }
+            // Our own divider/chevron are control machinery, not user content —
+            // tagged with a shared AX identifier so they're excluded here while
+            // everything else Quack shows (duck, countdown, CPU temp,
+            // time-awareness) still scans normally, like any third-party item.
+            if (attr(child, kAXIdentifierAttribute) as? String) == ControlItemManager.axIdentifier { continue }
             let title = (attr(child, kAXTitleAttribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
                 ?? (attr(child, kAXDescriptionAttribute) as? String).flatMap { $0.isEmpty ? nil : $0 }
                 ?? ""

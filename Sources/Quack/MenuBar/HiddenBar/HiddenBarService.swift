@@ -21,6 +21,7 @@ final class HiddenBarService: ManagedService {
     private var activeObserver: NSObjectProtocol?
     private var screenObserver: NSObjectProtocol?
     private var policyTimer: Timer?
+    private var refreshTimer: Timer?
     private var warmAttempts = 0
     private(set) var isArranging = false
     /// True when no connected display has a notch, so every icon is shown
@@ -63,6 +64,18 @@ final class HiddenBarService: ManagedService {
         }
         RunLoop.main.add(timer, forMode: .common)
         policyTimer = timer
+        // Hidden-item glyphs are static captures (off-screen capture returns
+        // nil — see the hidden-bar spike), so a menu extra whose rendering
+        // changes over time (clock, battery %, CPU temp, countdown text) goes
+        // stale in the panel once cached. Recapture on a steady cadence, but
+        // `refreshWhileShowing` only does real work while something's actually
+        // on screen to look at, so this stays a single quiet capture at
+        // hide-time instead of a perpetual background flash.
+        let refresh = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshWhileShowing() }
+        }
+        RunLoop.main.add(refresh, forMode: .common)
+        refreshTimer = refresh
         conditionMonitor.onChange = { [weak self] c in self?.evaluateConditions(c) }
         conditionMonitor.start()
         // Items are still on-screen (divider expanded): capture, then collapse.
@@ -72,6 +85,7 @@ final class HiddenBarService: ManagedService {
     func stop() {
         graceTimer?.invalidate(); graceTimer = nil
         policyTimer?.invalidate(); policyTimer = nil
+        refreshTimer?.invalidate(); refreshTimer = nil
         conditionMonitor.stop()
         conditionReveal = false
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
@@ -164,8 +178,23 @@ final class HiddenBarService: ManagedService {
                 self.onHiddenSetChanged?(hidden.map {
                     .init(id: $0.id, name: $0.appName, icon: self.imageCache.image(forID: $0.id) ?? $0.appIcon)
                 })
+                // A hover/pinned panel already on screen was rendered from the
+                // now-stale set — refresh it in place with the glyphs just
+                // captured. (The condition-reveal panel doesn't need this: it
+                // re-renders from `hiddenItems` on its own 1.5s policy tick.)
+                if self.state == .revealed || self.state == .pinned { self.renderPanel(self.hiddenItems) }
             }
         }
+    }
+
+    /// Recapture glyphs while a panel is actually on screen, so a hidden item
+    /// whose real glyph is still updating (clock, battery %, CPU temp) doesn't
+    /// go stale for the duration of a hover/pin/condition-reveal. No-ops (cheap)
+    /// the rest of the time.
+    private func refreshWhileShowing() {
+        guard control != nil, !isArranging, !showingAll,
+              state != .hidden || conditionReveal else { return }
+        warmAndCollapse()
     }
 
     /// Arrange mode: expand the real bar in place with a visible divider so the
@@ -296,15 +325,16 @@ final class HiddenBarService: ManagedService {
         let vms = items.map { item -> HiddenBarItemVM in
             let image = imageCache.image(forID: item.id) ?? item.appIcon
             let width = HiddenBarLayout.itemDisplayWidth(
-                imageSize: image?.size ?? .zero, targetHeight: 22, minWidth: 16, maxWidth: 48)
+                imageSize: image?.size ?? .zero, targetHeight: HiddenBarLayout.itemHeight,
+                minWidth: 22, maxWidth: 68)
             return HiddenBarItemVM(id: item.id, image: image, item: item, displayWidth: width)
         }
-        // Sit the strip IN the menu bar (top edge at screen.maxY, menu-bar
-        // height) so it reads as a continuation of the primary bar rather than a
-        // floating card below it.
+        // Anchored at the menu bar's top edge (screen.maxY) so it reads as a
+        // continuation of the primary bar, but deliberately taller than the
+        // native bar thickness — see `HiddenBarLayout.itemHeight`.
         let frame = HiddenBarLayout.panelFrame(
-            itemWidths: vms.map(\.displayWidth), spacing: 8, padding: 6,
-            height: NSStatusBar.system.thickness,
+            itemWidths: vms.map(\.displayWidth), spacing: 10, padding: 8,
+            height: HiddenBarLayout.itemHeight + 10,
             chevronMidX: chevronFrame.midX,
             panelTopY: screen.frame.maxY,
             screenMinX: screen.frame.minX, screenMaxX: screen.frame.maxX)

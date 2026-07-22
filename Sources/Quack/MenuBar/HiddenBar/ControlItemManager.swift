@@ -23,6 +23,13 @@ final class ControlItemManager {
 
     enum Length { static let expanded: CGFloat = 10_000 }
 
+    /// Shared AX identifier tagged on both control-item buttons so
+    /// `MenuBarAXScanner` can exclude exactly these two (regardless of which
+    /// plays which role — roles swap dynamically, see `refreshRoles`) from our
+    /// own AXExtrasMenuBar scan, without excluding the rest of Quack's own
+    /// status items (duck, countdown, CPU temp, time-awareness).
+    nonisolated static let axIdentifier = "quack.hiddenbar.control"
+
     init(onChevronHover: @escaping () -> Void,
          onChevronExit: @escaping () -> Void,
          onChevronClick: @escaping () -> Void) {
@@ -34,6 +41,8 @@ final class ControlItemManager {
         // notch, items left of the divider) survives relaunches.
         itemA.autosaveName = "quack.hiddenbar.chevron.v2"
         itemB.autosaveName = "quack.hiddenbar.divider.v2"
+        itemA.button?.setAccessibilityIdentifier(Self.axIdentifier)
+        itemB.button?.setAccessibilityIdentifier(Self.axIdentifier)
 
         hoverA = wire(itemA, enter: onChevronHover, exit: onChevronExit)
         hoverB = wire(itemB, enter: onChevronHover, exit: onChevronExit)

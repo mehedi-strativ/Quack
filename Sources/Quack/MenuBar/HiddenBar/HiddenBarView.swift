@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import QuackKit
 
 struct HiddenBarItemVM: Identifiable {
     let id: String
@@ -37,7 +38,7 @@ struct HiddenBarView: View {
                             Image(systemName: "app.dashed").resizable().scaledToFit()
                         }
                     }
-                    .frame(width: vm.displayWidth, height: 22)
+                    .frame(width: vm.displayWidth, height: HiddenBarLayout.itemHeight)
                 }
                 .buttonStyle(.plain)
                 .help(vm.item.appName)

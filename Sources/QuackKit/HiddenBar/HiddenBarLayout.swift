@@ -6,6 +6,14 @@ import CoreGraphics
 /// smaller value hangs it below.
 public enum HiddenBarLayout {
 
+    /// Height each hidden-item glyph renders at, and the basis for the panel's
+    /// own height. Deliberately bigger than the native ~24pt menu-bar
+    /// thickness — Ice/Bartender's secondary bar reads as a distinctly
+    /// larger, easier-to-read strip, not a sliver matching the real bar
+    /// exactly. Single source of truth: both the SwiftUI row (`HiddenBarView`)
+    /// and the width math below (`itemDisplayWidth`) key off this.
+    public static let itemHeight: CGFloat = 32
+
     /// The secondary-bar rect: centered under the chevron, clamped within screen.
     /// `itemWidths` is each item's own display width (see `itemDisplayWidth`) —
     /// a captured menu-bar glyph is rarely square, so a single fixed width per

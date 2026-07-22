@@ -39,6 +39,13 @@ final class HiddenBarPanel {
         blur.state = .active
         blur.wantsLayer = true
         blur.layer?.cornerRadius = 8
+        // This strip sits flush at the screen's top edge (panelFrame anchors
+        // panelTopY to screen.maxY, to read as a continuation of the real menu
+        // bar). Rounding the TOP corners too would clip two triangular slivers
+        // right at the screen edge instead of a seamless bar extension — Ice
+        // and Bartender both keep that edge square. NSVisualEffectView is
+        // non-flipped, so minY is the view's bottom.
+        blur.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         blur.layer?.masksToBounds = true
         host.translatesAutoresizingMaskIntoConstraints = false
         blur.addSubview(host)
