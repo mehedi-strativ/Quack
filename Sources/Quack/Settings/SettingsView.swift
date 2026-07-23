@@ -1670,7 +1670,7 @@ private struct HiddenBarSection: View {
         let s = env.settingsStore
         Section("Hidden menu bar") {
             Toggle("Hidden menu bar", isOn: s.binding(\.hiddenBarEnabled))
-            Text("Hide chosen menu bar icons behind a chevron (‹). Hover the chevron to reveal them; click one to open its menu.")
+            Text("Hide chosen menu bar icons behind a chevron (‹). Hover or scroll over the menu bar to reveal them; click one to open its menu.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
             if s.settings.hiddenBarEnabled {

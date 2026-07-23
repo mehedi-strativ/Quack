@@ -53,6 +53,13 @@ final class HiddenBarService: ManagedService {
         control = c
         panel.onPanelHover = { [weak self] in self?.handle(.hoverPanel) }
         panel.onPanelExit  = { [weak self] in self?.handle(.exitAll) }
+        // Listen-only — NOT a CGEventTap, so it cannot gate input (CLAUDE.md
+        // freeze rule only applies to taps). Bartender/Vanilla-style scroll-
+        // to-reveal: scrolling anywhere in the menu bar band reveals, same as
+        // hovering the chevron.
+        scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            Task { @MainActor in self?.handleScroll(event) }
+        }
         activeObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in Task { @MainActor in self?.warmAndCollapse() } }
@@ -91,6 +98,7 @@ final class HiddenBarService: ManagedService {
         conditionMonitor.stop()
         conditionReveal = false
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
+        if let m = scrollMonitor { NSEvent.removeMonitor(m); scrollMonitor = nil }
         if let o = activeObserver { NotificationCenter.default.removeObserver(o); activeObserver = nil }
         if let o = screenObserver { NotificationCenter.default.removeObserver(o); screenObserver = nil }
         panel.hide()
@@ -300,6 +308,25 @@ final class HiddenBarService: ManagedService {
         case .pinned:   pin()
         case .hidden:   unpin()
         }
+    }
+
+    /// A scroll (or two-finger swipe, reported as the same event type) over
+    /// the menu bar reveals the hidden set, same as chevron-hover. There's no
+    /// natural "exit" event for a scroll the way there is for a tracking-area
+    /// hover, so each tick immediately follows the reveal with `.exitAll` —
+    /// which (per `HiddenBarReveal`) keeps the state `.revealed` but (re)arms
+    /// the same short grace-hide timer hover already uses. As long as scroll
+    /// ticks keep arriving faster than the grace delay, the panel stays open;
+    /// once they stop, it grace-hides exactly like a hover would.
+    private func handleScroll(_ event: NSEvent) {
+        guard !isArranging, !showingAll,
+              event.scrollingDeltaX != 0 || event.scrollingDeltaY != 0 else { return }
+        let point = NSEvent.mouseLocation   // Cocoa, bottom-left origin
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }),
+              point.y >= screen.frame.maxY - NSStatusBar.system.thickness - 12
+        else { return }
+        handle(.hoverChevron)
+        handle(.exitAll)
     }
 
     private func reveal() {
