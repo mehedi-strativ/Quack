@@ -79,8 +79,13 @@ files are touched.
 ## Testing
 
 - Unit: `HiddenBarReveal.next` transition table (already pure/testable) —
-  scroll/swipe maps to the existing `.hoverChevron` event (same grace/pin
-  semantics as hover; no new `RevealEvent` case needed).
+  each scroll/swipe tick fires the existing `.hoverChevron` event followed by
+  `.exitAll` (re-arms the grace timer so the panel stays open while ticks
+  keep arriving, same as hover; no new `RevealEvent` case needed). Also unit:
+  `AXSettleWaiter` (settles immediately when the probe already passes,
+  exhausts after `maxAttempts` with the last probed value, a new `start`
+  cancels a prior in-flight wait, cancellation after the probe fires
+  suppresses `completion`).
 - Manual (AX/CGEvent behavior isn't unit-testable): hide items via ⌘-drag;
   hover/click/scroll/swipe reveal; click opens the real app menu; notch
   connect/disconnect toggles hide-vs-show-all; battery/Wi-Fi conditions
