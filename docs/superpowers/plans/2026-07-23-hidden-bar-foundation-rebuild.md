@@ -34,8 +34,12 @@ manually via `./Scripts/install.sh`.
 - Any closure that touches `HiddenBarService`'s state from a background
   queue must hop back via `DispatchQueue.main.async` before touching it
   (the class is `@MainActor`) — follow the existing idiom already used
-  throughout the file, don't introduce Swift Concurrency's `Task`/`async`
-  into this GCD-based file.
+  throughout the file (e.g. `armCollapseAfterMenu`'s `mouseUpMonitor`
+  handler). `Task { @MainActor in ... }` to hop an AppKit callback onto the
+  main actor is that same existing idiom and is fine to reuse (Task 4 does);
+  `AXSettleWaiter` itself (Task 1) must stay GCD-based (`DispatchWorkItem`/
+  `DispatchQueue.asyncAfter`, no `async`/`await`) since it's meant to be a
+  plain, dependency-free QuackKit primitive.
 - Rebuild the app via `./Scripts/install.sh` to see changes — `swift build`
   alone does not update the running `/Applications/Quack.app`.
 
