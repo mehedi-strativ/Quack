@@ -46,30 +46,33 @@ import Foundation
         #expect(firstResult == nil)
     }
 
-    @Test func cancellationDuringSloProbeDoesNotFireCompletion() async throws {
+    @Test func cancellationAfterProbeDoesNotFireCompletion() async throws {
         let waiter = AXSettleWaiter<Int>()
-        var firstResult: AXSettleWaiter<Int>.Outcome?
+        var result: AXSettleWaiter<Int>.Outcome?
         let probeQueue = DispatchQueue(label: "test.probe")
 
-        // Start a wait with a slow probe that sleeps while executing.
-        waiter.start(on: probeQueue, maxAttempts: 10, interval: 0.1,
+        // Start a wait that WOULD settle immediately (settling value 5, single attempt).
+        // The probe sleeps briefly before returning, giving us time to cancel mid-probe.
+        waiter.start(on: probeQueue, maxAttempts: 1, interval: 0.1,
                      probe: {
                          Thread.sleep(forTimeInterval: 0.05)
-                         return 1
+                         return 5
                      },
-                     isSettled: { _ in false },
-                     completion: { firstResult = $0 })
+                     isSettled: { $0 == 5 },
+                     completion: { result = $0 })
 
-        // Cancel after a short delay, while the first probe is still sleeping.
+        // Cancel after a short delay, while the probe is still sleeping.
+        // Without the `guard !myToken.isCancelled` after probe() returns,
+        // the completion would fire with .settled(5).
         try await Task.sleep(for: .milliseconds(25))
         waiter.cancel()
 
         // Wait long enough for the probe to complete and for any pending
-        // completion to fire if it were going to.
-        try await Task.sleep(for: .milliseconds(200))
+        // completion to have had a chance to fire.
+        try await Task.sleep(for: .milliseconds(100))
 
-        // The first wait's completion should never have fired because we
-        // cancelled it while the probe was executing.
-        #expect(firstResult == nil)
+        // The completion should never have fired because we cancelled after
+        // the probe returned but before isSettled could trigger completion.
+        #expect(result == nil)
     }
 }
