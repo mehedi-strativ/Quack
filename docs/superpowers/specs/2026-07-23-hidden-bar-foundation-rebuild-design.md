@@ -8,14 +8,27 @@ findings there still hold — read it first; this doc only covers what changes)
 
 ## Why
 
-The 2026-07-13 design shipped and works, but `HiddenBarService.swift` (405
-lines) accumulated bug-fix-on-bug-fix: an accumulating retry counter that had
-to be patched with an `isRetry` flag, a manual timestamp-based debounce, two
-near-identical copy-pasted 0.2s/25-attempt AX-settle polling loops
-(`warmAndCollapse` and `waitToForwardClick`), and a belt-and-suspenders 1.5s
-poll timer stacked on top of a notification observer. User wants the
-orchestration dropped and rebuilt clean rather than patched again — see
-memory `quack-hidden-bar-capture-findings` for the bug history this produced.
+`HiddenBarService.swift` (383 lines) has an accumulating-retry-counter bug in
+`warmAndCollapse`: an `isRetry` flag and a `warmAttempts` counter that must be
+manually reset on every fresh (non-retry) trigger, or the counter accumulates
+across the 1.5s display-policy timer's ticks until it passes the 25-attempt
+cap and every later call gives up immediately — the feature then needs a
+relaunch to recover. `forwardClick` has a separate, milder bug: a fixed 0.15s
+delay before synthesizing the click, which is a guess, not a wait — the
+"clicking sometimes does nothing" latency bug. User wants the orchestration
+dropped and rebuilt clean rather than patched again — see memory
+`quack-hidden-bar-capture-findings` for the bug history this produced.
+
+**Correction (2026-07-23, mid-planning):** an earlier draft of this doc was
+written against a since-discarded uncommitted WIP that had already added a
+`lastWarmAndCollapseAt` debounce and turned `forwardClick`'s fixed delay into
+its own duplicated retry loop (`waitToForwardClick`, mirroring
+`warmAndCollapse`'s). That WIP was judged stale/abandoned and reverted before
+implementation started; this doc now describes the actual HEAD baseline
+(commit `82e847d`) instead. `HiddenBarService.swift` also has a
+`refreshTimer`/`refreshWhileShowing` (5s periodic recapture while the panel is
+showing) not mentioned below — it's unrelated to the retry-counter bug and
+stays untouched by this phase.
 
 Research into Bartender 6's public marketing page (macbartender.com/pro)
 turned up a feature list, not a technique — no public API exists for
@@ -36,13 +49,16 @@ files are touched.
 
 ## What's rebuilt: `HiddenBarService.swift`
 
-1. **Task-based settle-and-act, replacing Timer/counter soup.** One
-   cancellable-`Task` helper (`waitForSettledFrame`) replaces both
-   `warmAndCollapse`'s and `waitToForwardClick`'s duplicated poll-every-0.2s/
-   give-up-after-25-attempts loops. Every new trigger cancels the in-flight
-   `Task` and starts fresh — this removes the "counter never resets, feature
-   dies until relaunch" bug class structurally instead of patching around it
-   with `isRetry`/timestamp-debounce flags.
+1. **One cancellable settle-and-retry primitive, replacing the counter.** A
+   generic `AXSettleWaiter` (poll-every-0.2s/give-up-after-25-attempts,
+   cancel-and-restart on every new call) replaces `warmAndCollapse`'s
+   `warmAttempts`/`isRetry` counter — starting a new wait cancels whichever
+   wait is in flight, which removes the "counter never resets, feature dies
+   until relaunch" bug class structurally instead of patching around it.
+   `forwardClick`'s fixed 0.15s delay is upgraded to use the same primitive
+   (its second real use, not a duplicate) — fixing the "clicking sometimes
+   does nothing" latency bug as a natural extension rather than a new
+   mechanism.
 2. **New: scroll/swipe reveal.** An `NSEvent.addGlobalMonitorForEvents(matching:
    [.scrollWheel])` monitor (listen-only — not a `CGEventTap`, so it cannot
    gate input and the CLAUDE.md freeze rule does not apply) fires the same
@@ -53,8 +69,9 @@ files are touched.
    belt-and-suspenders alongside `didChangeScreenParametersNotification`,
    since that notification is confirmed unreliable) — just separated out
    from the retry mess so it reads as its own method again.
-4. **Bar panel, click-forward, condition-reveal (battery/Wi-Fi)** — logic
-   unchanged, just no longer tangled with the retry loop it depended on.
+4. **Bar panel, condition-reveal (battery/Wi-Fi)** — logic unchanged.
+   `refreshTimer`/`refreshWhileShowing` (5s periodic recapture while showing)
+   also unchanged — unrelated to the retry-counter bug, out of scope here.
 5. **Settings surface** — unchanged: `hiddenBarEnabled`,
    `hiddenBarRevealOnBattery`, `hiddenBarRevealOnWifiOff` stay wired the same
    way in `SettingsView.swift` / `AppEnvironment.swift`.
