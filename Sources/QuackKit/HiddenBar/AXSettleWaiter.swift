@@ -4,6 +4,10 @@ import Foundation
 /// `isSettled` passes. Starting a new wait cancels whichever wait from this
 /// instance is still in flight, so there's no shared counter to leak across
 /// retriggers — just one cancellable chain per waiter.
+///
+/// Not internally synchronized — call `start` and `cancel` from a single
+/// thread/actor (e.g., the main actor); `probe`, `isSettled`, and `completion`
+/// may run on whatever `queue` you pass in.
 public final class AXSettleWaiter<Value> {
     private var token: DispatchWorkItem?
 
@@ -32,6 +36,7 @@ public final class AXSettleWaiter<Value> {
         func attempt(_ n: Int) {
             guard !myToken.isCancelled else { return }
             let value = probe()
+            guard !myToken.isCancelled else { return }
             if isSettled(value) { completion(.settled(value)); return }
             if n >= maxAttempts { completion(.exhausted(value)); return }
             queue.asyncAfter(deadline: .now() + interval) {
