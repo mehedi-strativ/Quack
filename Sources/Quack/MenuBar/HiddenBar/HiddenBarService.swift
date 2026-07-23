@@ -354,23 +354,41 @@ final class HiddenBarService: ManagedService {
         panel.show(view: view, frame: frame)
     }
 
+    /// `expand()` just changed the divider's `.length`, which relayouts
+    /// asynchronously — sometimes with a multi-second lag (see the hidden-bar
+    /// capture-findings memory) — so the item's live AX frame can still be
+    /// mid-transition well after a fixed 0.15s wait. Clicking too early either
+    /// missed (nothing under the cursor) or hit the item's stale/off-screen
+    /// position — the "clicking sometimes does nothing" bug. Poll for the
+    /// frame to actually be on-screen instead of guessing a fixed delay.
     private func forwardClick(_ item: MenuBarAXItem) {
         control?.expand()          // real item snaps on-screen; menu opens there
         panel.hide()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            guard let self else { return }
-            DispatchQueue.global(qos: .userInitiated).async {
-                // Synthesize a real click at the item's LIVE on-screen frame (it
-                // just snapped back via expand()). AXPress reports success but
-                // doesn't open most third-party popovers — a real click does.
-                let frame = MenuBarAXScanner.elementFrame(item.element) ?? item.frame
-                SynthClick.left(at: CGPoint(x: frame.midX, y: frame.midY))
-            }
-            // Arm collapse-on-next-mouseUp AFTER the synth click's own mouseUp has
-            // passed, so we don't immediately dismiss the menu we just opened.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.armCollapseAfterMenu()
-            }
+        clickWaiter.start(
+            on: DispatchQueue.global(qos: .userInitiated),
+            probe: { MenuBarAXScanner.elementFrame(item.element) },
+            isSettled: { ($0?.minX ?? -1) >= 0 },
+            completion: { [weak self] outcome in
+                let frame: CGRect
+                switch outcome {
+                case .settled(let f):   frame = f ?? item.frame
+                case .exhausted(let f): frame = f ?? item.frame   // last resort: stale beats nothing
+                }
+                DispatchQueue.main.async { self?.sendForwardedClick(frame: frame) }
+            })
+    }
+
+    private func sendForwardedClick(frame: CGRect) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Synthesize a real click at the item's LIVE on-screen frame. AXPress
+            // reports success but doesn't open most third-party popovers — a real
+            // click does.
+            SynthClick.left(at: CGPoint(x: frame.midX, y: frame.midY))
+        }
+        // Arm collapse-on-next-mouseUp AFTER the synth click's own mouseUp has
+        // passed, so we don't immediately dismiss the menu we just opened.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.armCollapseAfterMenu()
         }
     }
 
