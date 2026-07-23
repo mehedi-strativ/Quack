@@ -95,6 +95,8 @@ final class HiddenBarService: ManagedService {
         graceTimer?.invalidate(); graceTimer = nil
         policyTimer?.invalidate(); policyTimer = nil
         refreshTimer?.invalidate(); refreshTimer = nil
+        warmWaiter.cancel()
+        clickWaiter.cancel()
         conditionMonitor.stop()
         conditionReveal = false
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
@@ -126,16 +128,12 @@ final class HiddenBarService: ManagedService {
         // global X, i.e. external monitors positioned left of the built-in.
         // A settled menu-bar item sits at the TOP edge of the screen it's on
         // (frame.maxY ≈ that screen's maxY).
-        let settled: (CGRect?) -> Bool = { r in
-            guard let r, let screen = NSScreen.screens.first(where: { $0.frame.intersects(r) }) else { return false }
-            return abs(screen.frame.maxY - r.maxY) < 40
-        }
         warmWaiter.start(
             on: .main,
             probe: { [weak self] in
                 (chevron: self?.control?.chevronFrameOnScreen, divider: self?.control?.dividerFrameOnScreen)
             },
-            isSettled: { settled($0.chevron) && settled($0.divider) },
+            isSettled: { Self.isOnScreenAtTopEdge($0.chevron) && Self.isOnScreenAtTopEdge($0.divider) },
             completion: { [weak self] outcome in
                 // On exhaustion, give up silently — matches the prior behavior
                 // (no final action was taken when the 25-attempt budget ran out).
@@ -149,7 +147,7 @@ final class HiddenBarService: ManagedService {
     /// roles, decides hide-vs-show-all, warns on an unsafe chevron placement,
     /// then scans + captures the hidden set off the main thread and collapses.
     private func proceedAfterSettled(chevronFrame: CGRect, dividerFrame: CGRect) {
-        guard let control else { return }
+        guard let control, !isArranging else { return }
         control.refreshRoles()   // assign chevron glyph to the rightmost item now
         let chevronMinX = (control.chevronMinX ?? chevronFrame.minX)
         let dividerMinX = (control.dividerMinX ?? dividerFrame.minX)
@@ -180,7 +178,7 @@ final class HiddenBarService: ManagedService {
             let hidden = items.filter { $0.frame.minX < boundaryX }
             let windows = StatusWindowList.onScreen()
             DispatchQueue.main.async {
-                guard let self, !self.showingAll else { return }
+                guard let self, !self.showingAll, !self.isArranging else { return }
                 self.imageCache.captureOnScreen(items: hidden, windows: windows)
                 self.hiddenItems = hidden
                 self.control?.collapse()
@@ -216,6 +214,8 @@ final class HiddenBarService: ManagedService {
         guard control != nil else { return }
         isArranging = true
         graceTimer?.invalidate(); graceTimer = nil
+        warmWaiter.cancel()
+        clickWaiter.cancel()
         panel.hide()
         state = .hidden
         control?.expand()
@@ -241,6 +241,16 @@ final class HiddenBarService: ManagedService {
     /// notch; show everything only when none do (e.g. lid closed, external-only).
     private func shouldHideOnCurrentDisplay() -> Bool {
         NSScreen.screens.contains { NotchProbe.span(for: $0) != nil }
+    }
+
+    /// Is this frame a real, settled on-screen menu-bar position? Never gate on
+    /// `minX >= 0` — external displays can sit at negative global X, so a valid
+    /// frame can legitimately have minX < 0 (see the hidden-bar capture-findings
+    /// memory). Instead: does it intersect some screen, and sit at that screen's
+    /// top edge (frame.maxY ≈ that screen's maxY)?
+    private static func isOnScreenAtTopEdge(_ r: CGRect?) -> Bool {
+        guard let r, let screen = NSScreen.screens.first(where: { $0.frame.intersects(r) }) else { return false }
+        return abs(screen.frame.maxY - r.maxY) < 40
     }
 
     /// Re-evaluate hide-vs-show-all when the connected display set may have changed.
@@ -394,7 +404,7 @@ final class HiddenBarService: ManagedService {
         clickWaiter.start(
             on: DispatchQueue.global(qos: .userInitiated),
             probe: { MenuBarAXScanner.elementFrame(item.element) },
-            isSettled: { ($0?.minX ?? -1) >= 0 },
+            isSettled: { Self.isOnScreenAtTopEdge($0) },
             completion: { [weak self] outcome in
                 let frame: CGRect
                 switch outcome {
