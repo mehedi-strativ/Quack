@@ -18,11 +18,13 @@ final class HiddenBarService: ManagedService {
     private var state: RevealState = .hidden
     private var graceTimer: Timer?
     private var mouseUpMonitor: Any?
+    private var scrollMonitor: Any?
     private var activeObserver: NSObjectProtocol?
     private var screenObserver: NSObjectProtocol?
     private var policyTimer: Timer?
     private var refreshTimer: Timer?
-    private var warmAttempts = 0
+    private let warmWaiter = AXSettleWaiter<(chevron: CGRect?, divider: CGRect?)>()
+    private let clickWaiter = AXSettleWaiter<CGRect?>()
     private(set) var isArranging = false
     /// True when no connected display has a notch, so every icon is shown
     /// (hiding is active whenever any connected display has a notch).
@@ -101,13 +103,8 @@ final class HiddenBarService: ManagedService {
     }
 
     /// Capture glyphs for the currently-on-screen hidden set, then collapse.
-    private func warmAndCollapse(isRetry: Bool = false) {
+    private func warmAndCollapse() {
         guard let control, !isArranging else { return }   // don't collapse mid-arrange
-        // Reset the retry budget on every FRESH trigger (startup, display change,
-        // app-activate). Otherwise the counter accumulates across 1.5s timer ticks
-        // and, once it passes the cap, every later call gives up immediately —
-        // the feature then never recovers without a relaunch.
-        if !isRetry { warmAttempts = 0 }
         control.expand()
         // A hidden chevron (isVisible=false) reports a (0,0) frame, which would
         // fail the on-screen gate below forever. Make it visible first so its
@@ -120,23 +117,31 @@ final class HiddenBarService: ManagedService {
         // divider, while (unlike an X>0 test) still accepting displays at negative
         // global X, i.e. external monitors positioned left of the built-in.
         // A settled menu-bar item sits at the TOP edge of the screen it's on
-        // (frame.maxY ≈ that screen's maxY). This rejects the unpositioned garbage
-        // frames we get right after toggling visibility/length — both (0,-22) at
-        // launch and (0,0) after setChevronVisible/expand — while still accepting
-        // valid positions on any display, including external ones at negative X.
+        // (frame.maxY ≈ that screen's maxY).
         let settled: (CGRect?) -> Bool = { r in
             guard let r, let screen = NSScreen.screens.first(where: { $0.frame.intersects(r) }) else { return false }
             return abs(screen.frame.maxY - r.maxY) < 40
         }
-        guard let chevronFrame = control.chevronFrameOnScreen, settled(chevronFrame),
-              let dividerFrame = control.dividerFrameOnScreen, settled(dividerFrame) else {
-            warmAttempts += 1
-            if warmAttempts <= 25 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.warmAndCollapse(isRetry: true) }
-            }
-            return
-        }
-        warmAttempts = 0
+        warmWaiter.start(
+            on: .main,
+            probe: { [weak self] in
+                (chevron: self?.control?.chevronFrameOnScreen, divider: self?.control?.dividerFrameOnScreen)
+            },
+            isSettled: { settled($0.chevron) && settled($0.divider) },
+            completion: { [weak self] outcome in
+                // On exhaustion, give up silently — matches the prior behavior
+                // (no final action was taken when the 25-attempt budget ran out).
+                guard case .settled(let frames) = outcome,
+                      let chevronFrame = frames.chevron, let dividerFrame = frames.divider else { return }
+                self?.proceedAfterSettled(chevronFrame: chevronFrame, dividerFrame: dividerFrame)
+            })
+    }
+
+    /// Runs once the chevron/divider frames are confirmed on-screen: assigns
+    /// roles, decides hide-vs-show-all, warns on an unsafe chevron placement,
+    /// then scans + captures the hidden set off the main thread and collapses.
+    private func proceedAfterSettled(chevronFrame: CGRect, dividerFrame: CGRect) {
+        guard let control else { return }
         control.refreshRoles()   // assign chevron glyph to the rightmost item now
         let chevronMinX = (control.chevronMinX ?? chevronFrame.minX)
         let dividerMinX = (control.dividerMinX ?? dividerFrame.minX)
