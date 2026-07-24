@@ -1,7 +1,13 @@
 # Hidden Bar Foundation Rebuild — Design
 
 **Date:** 2026-07-23
-**Status:** Approved design, pending implementation plan
+**Status:** Implemented (2026-07-24). Manual QA on real hardware surfaced a
+divider-drift bug not anticipated by this design (every `expand()`/`collapse()`
+cycle permanently shifts the divider's position) — fixed post-merge; see
+`git log --grep drift` for that follow-up commit. A separate, pre-existing
+glyph-capture bug (hidden items always render their generic app icon instead
+of the real menu-bar glyph) was found during the same QA pass and confirmed
+unrelated to this phase — tracked as its own follow-up, not fixed here.
 **Supersedes:** `2026-07-13-bartender-hidden-bar-design.md` (mechanism/spike
 findings there still hold — read it first; this doc only covers what changes)
 **Phase:** 1 of 6 in the Bartender-parity project (see Roadmap below)
