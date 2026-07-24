@@ -44,7 +44,6 @@ final class AppEnvironment: ObservableObject {
     private let notchService: NotchService
     private let mouseService: MouseService
     private let timeAwarenessService: TimeAwarenessService
-    private let hiddenBarService: HiddenBarService
     let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
@@ -81,7 +80,6 @@ final class AppEnvironment: ObservableObject {
         self.notchService = NotchService(settings: settings, permissions: permissions, installer: claudeInstaller)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
         self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
-        self.hiddenBarService = HiddenBarService(settings: settings, permissions: permissions)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -95,15 +93,11 @@ final class AppEnvironment: ObservableObject {
             .notch: notchService,
             .mouse: mouseService,
             .timeAwareness: timeAwarenessService,
-            .hiddenBar: hiddenBarService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
         timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
         notchService.onOpenSettings = { [weak self] in self?.showSettings() }
-        hiddenBarService.onHiddenSetChanged = { [weak self] items in
-            Task { @MainActor in self?.hiddenBarItems = items }
-        }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
         // `AppEnvironment` refresh when settings / meetings / permissions change.
@@ -145,19 +139,6 @@ final class AppEnvironment: ObservableObject {
                 self?.refreshCalendarNow()
             }
         }
-    }
-
-    /// Whether the hidden bar is in Arrange mode (real bar expanded for ⌘-drag).
-    @Published var isArrangingHiddenBar = false
-    /// The currently-hidden menu-bar items, for the Settings preview.
-    @Published var hiddenBarItems: [HiddenBarService.HiddenPreviewItem] = []
-
-    /// Enter/leave hidden-bar Arrange mode from Settings. No-op if the feature
-    /// isn't running.
-    func setHiddenBarArranging(_ on: Bool) {
-        guard settingsStore.settings.hiddenBarEnabled else { return }
-        if on { hiddenBarService.beginArrange() } else { hiddenBarService.endArrange() }
-        isArrangingHiddenBar = on
     }
 
     /// Event calendars available for the settings picker (empty if no access).

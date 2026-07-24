@@ -4,7 +4,7 @@ import QuackKit
 /// The feature groups shown in the left sidebar. Tabs are named for what they
 /// control (self-describing), grouped by surface: menu bar, input, screen, app.
 enum SettingsTab: String, CaseIterable {
-    case dashboard, meetings, hiddenIcons, stats
+    case dashboard, meetings, stats
     case mouse, gestures, shortcuts
     case brightness, notch
     case general, permissions
@@ -13,7 +13,6 @@ enum SettingsTab: String, CaseIterable {
         switch self {
         case .dashboard: return "Dashboard"
         case .meetings: return "Meetings"
-        case .hiddenIcons: return "Hidden Icons"
         case .stats: return "Stats & Timer"
         case .mouse: return "Mouse"
         case .gestures: return "Gestures"
@@ -29,7 +28,6 @@ enum SettingsTab: String, CaseIterable {
         switch self {
         case .dashboard: return "square.grid.2x2"
         case .meetings: return "calendar"
-        case .hiddenIcons: return "eye.slash"
         case .stats: return "gauge.with.needle"
         case .mouse: return "computermouse"
         case .gestures: return "hand.draw"
@@ -54,7 +52,7 @@ private enum SidebarGroup: String, CaseIterable {
     var tabs: [SettingsTab] {
         switch self {
         case .top: return [.dashboard]
-        case .menuBar: return [.meetings, .hiddenIcons, .stats]
+        case .menuBar: return [.meetings, .stats]
         case .input: return [.mouse, .gestures, .shortcuts]
         case .screen: return [.brightness, .notch]
         case .app: return [.general, .permissions]
@@ -307,8 +305,6 @@ struct SettingsPane: View {
                     MousePointerSection()
                     MouseScrollSection()
                     MouseButtonsSection()
-                case .hiddenIcons:
-                    HiddenBarSection()
                 case .notch:
                     NotchSection()
                 case .general:
@@ -446,9 +442,6 @@ private struct DashboardView: View {
                     if env.settingsStore.settings.timeAwarenessEnabled {
                         DashCard(tab: .stats, title: "Time", icon: "hourglass") { timeSummary }
                     }
-                    if env.settingsStore.settings.hiddenBarEnabled {
-                        DashCard(tab: .hiddenIcons, title: "Hidden Icons", icon: "eye.slash") { hiddenBarSummary }
-                    }
                     DashCard(tab: .permissions) { permissionsSummary }
                 }
             }
@@ -580,30 +573,6 @@ private struct DashboardView: View {
         gist("\(granted) of \(kinds.count) granted",
              denied ? "Some access denied" : (all ? "All set" : "Tap to manage"),
              tint: all ? .green : .orange)
-    }
-
-    @ViewBuilder private var hiddenBarSummary: some View {
-        let items = env.hiddenBarItems
-        if items.isEmpty {
-            gist("Nothing hidden", "⌘-drag icons left of the chevron to hide")
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    ForEach(items.prefix(8)) { item in
-                        Group {
-                            if let icon = item.icon {
-                                Image(nsImage: icon).resizable().scaledToFit()
-                            } else {
-                                Image(systemName: "app.dashed").resizable().scaledToFit()
-                            }
-                        }
-                        .frame(width: 18, height: 18)
-                        .help(item.name)
-                    }
-                }
-                Text("\(items.count) hidden").font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-        }
     }
 
     private func gist(_ primary: String, _ secondary: String?, tint: Color = .primary) -> some View {
@@ -1660,59 +1629,6 @@ private struct NotchSection: View {
 
         }
         .onAppear { installed = env.claudeIntegrationInstalled() }
-    }
-}
-
-private struct HiddenBarSection: View {
-    @EnvironmentObject var env: AppEnvironment
-
-    var body: some View {
-        let s = env.settingsStore
-        Section("Hidden menu bar") {
-            Toggle("Hidden menu bar", isOn: s.binding(\.hiddenBarEnabled))
-            Text("Hide chosen menu bar icons behind a chevron (‹). Hover or scroll over the menu bar to reveal them; click one to open its menu.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-
-            if s.settings.hiddenBarEnabled {
-                Text("Hiding is active whenever a notched display is connected — even icons on an external monitor's menu bar, since it's the same hidden set everywhere. With no notched display connected (e.g. lid closed), everything is shown.")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-
-                Toggle("Reveal the Battery icon while on battery", isOn: s.binding(\.hiddenBarRevealOnBattery))
-                Toggle("Reveal the Wi-Fi icon while Wi-Fi is off", isOn: s.binding(\.hiddenBarRevealOnWifiOff))
-                Text("If you've hidden the Battery / Wi-Fi icon, it pops out on its own while that condition holds, then hides again. (Hide them via Arrange, like any icon.)")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-
-                // Arrange mode: expands the real bar with a visible boundary.
-                HStack {
-                    Button(env.isArrangingHiddenBar ? "Done" : "Arrange…") {
-                        env.setHiddenBarArranging(!env.isArrangingHiddenBar)
-                    }
-                    .controlSize(.small)
-                    Text(env.isArrangingHiddenBar
-                         ? "⌘-drag icons to the LEFT of the accent-colored bar to hide them, then click Done."
-                         : "Click Arrange, then ⌘-drag icons across the accent-colored bar.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-
-                if env.permissions.status(for: .accessibility) != .granted {
-                    HStack {
-                        Text("Needs Accessibility to click hidden items.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Grant") { env.permissions.requestAccessibilityAccess() }
-                    }
-                }
-                if env.permissions.status(for: .screenRecording) != .granted {
-                    HStack {
-                        Text("Needs Screen Recording to show real icon glyphs (app icons are used otherwise).")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Grant") {
-                            env.permissions.requestScreenRecording()
-                            env.permissions.openSystemSettings(for: .screenRecording)
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

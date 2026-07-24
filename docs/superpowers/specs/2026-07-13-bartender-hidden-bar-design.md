@@ -1,7 +1,11 @@
 # Bartender-style Hidden Menu Bar — Design
 
 **Date:** 2026-07-13
-**Status:** Approved design, pending implementation plan
+**Status:** Removed (2026-07-24) — shipped, then fully torn out at user request
+("drop the feature completely, I don't want to hide menu icons anymore") after
+a divider-drift bug proved hard to fully trust. See
+`2026-07-23-hidden-bar-foundation-rebuild-design.md` for the rebuild and its
+own removal note.
 **Target OS:** macOS 26 (Tahoe), notched MacBook Pro
 
 ## Goal

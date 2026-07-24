@@ -52,8 +52,7 @@ struct NotchContentView: View {
         .foregroundStyle(.white)
     }
 
-    /// Footer with the duck button that opens Quack's Settings. (The old
-    /// hidden-icons row was superseded by the Bartender-style hidden bar.)
+    /// Footer with the duck button that opens Quack's Settings.
     @ViewBuilder
     private var quackFooterRow: some View {
         HStack(spacing: 10) {

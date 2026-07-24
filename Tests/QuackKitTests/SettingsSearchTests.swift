@@ -7,8 +7,8 @@ import Testing
                      section: "Scrolling", keywords: ["wheel", "animate"]),
         SettingEntry(id: "mouse.tracking", title: "Override tracking speed", tabID: "mouse",
                      section: "Pointer", keywords: ["cursor", "sensitivity", "speed"]),
-        SettingEntry(id: "hiddenbar.enable", title: "Hidden menu bar", tabID: "hiddenIcons",
-                     section: "Hidden icons", keywords: ["bartender", "chevron", "hide icons"]),
+        SettingEntry(id: "brightness.external", title: "External display brightness keys", tabID: "brightness",
+                     section: "Brightness", keywords: ["ddc", "monitor", "f1", "f2"]),
         SettingEntry(id: "time.rest", title: "Remind me to take breaks", tabID: "stats",
                      section: "Rest reminders", keywords: ["break", "rest", "pomodoro"]),
     ]
@@ -19,7 +19,7 @@ import Testing
     }
 
     @Test func synonymKeywordMatches() {
-        #expect(SettingsSearch.matches("bartender", in: entries).first?.id == "hiddenbar.enable")
+        #expect(SettingsSearch.matches("ddc", in: entries).first?.id == "brightness.external")
         #expect(SettingsSearch.matches("cursor", in: entries).first?.id == "mouse.tracking")
         #expect(SettingsSearch.matches("pomodoro", in: entries).first?.id == "time.rest")
     }

@@ -22,14 +22,6 @@ enum SettingsSearchRegistry {
         entry("meetings.remindAtStart", "Remind on time (join now)", .meetings, "Reminders",
               ["start", "join", "on time"]),
 
-        // Hidden icons
-        entry("hiddenbar.enable", "Hidden menu bar", .hiddenIcons, "Hidden menu bar",
-              ["bartender", "chevron", "hide icons", "collapse", "declutter"]),
-        entry("hiddenbar.battery", "Reveal the Battery icon while on battery", .hiddenIcons, "Hidden menu bar",
-              ["power", "unplugged", "auto reveal"]),
-        entry("hiddenbar.wifi", "Reveal the Wi-Fi icon while Wi-Fi is off", .hiddenIcons, "Hidden menu bar",
-              ["wireless", "network", "disconnected", "auto reveal"]),
-
         // Stats & timer
         entry("stats.cpu", "Show CPU temperature in the menu bar", .stats, "CPU temperature",
               ["heat", "thermal", "degrees", "flame"]),

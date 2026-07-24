@@ -27,15 +27,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var notchMediaEnabled: Bool
     /// Show Claude Code agent progress in the notch panel.
     public var notchAgentsEnabled: Bool
-    /// Bartender-style hidden menu bar (chevron + collapsing divider). Hiding
-    /// is active whenever a notched display is connected (even on another
-    /// display's mirrored bar, since it's one shared status item); with no
-    /// notched display connected, every icon is shown everywhere.
-    public var hiddenBarEnabled: Bool
-    /// Auto-reveal the hidden icons while running on battery power.
-    public var hiddenBarRevealOnBattery: Bool
-    /// Auto-reveal the hidden icons while Wi-Fi is not connected.
-    public var hiddenBarRevealOnWifiOff: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
     /// Fire a "join now" reminder at the meeting's start time.
@@ -117,9 +108,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         cpuTemperatureEnabled: Bool = false,
         notchMediaEnabled: Bool = false,
         notchAgentsEnabled: Bool = false,
-        hiddenBarEnabled: Bool = false,
-        hiddenBarRevealOnBattery: Bool = false,
-        hiddenBarRevealOnWifiOff: Bool = false,
         hideDuckIcon: Bool = false,
         remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
@@ -162,9 +150,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
         self.notchMediaEnabled = notchMediaEnabled
         self.notchAgentsEnabled = notchAgentsEnabled
-        self.hiddenBarEnabled = hiddenBarEnabled
-        self.hiddenBarRevealOnBattery = hiddenBarRevealOnBattery
-        self.hiddenBarRevealOnWifiOff = hiddenBarRevealOnWifiOff
         self.hideDuckIcon = hideDuckIcon
         self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
@@ -220,9 +205,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
         notchMediaEnabled = v(.notchMediaEnabled, d.notchMediaEnabled)
         notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
-        hiddenBarEnabled = v(.hiddenBarEnabled, d.hiddenBarEnabled)
-        hiddenBarRevealOnBattery = v(.hiddenBarRevealOnBattery, d.hiddenBarRevealOnBattery)
-        hiddenBarRevealOnWifiOff = v(.hiddenBarRevealOnWifiOff, d.hiddenBarRevealOnWifiOff)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)
