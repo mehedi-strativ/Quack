@@ -19,10 +19,9 @@ final class HiddenBarService: ManagedService {
     private var graceTimer: Timer?
     private var mouseUpMonitor: Any?
     private var scrollMonitor: Any?
-    private var activeObserver: NSObjectProtocol?
     private var screenObserver: NSObjectProtocol?
     private var policyTimer: Timer?
-    private var refreshTimer: Timer?
+    private var lastWarmAndCollapseAt: Date?
     private let warmWaiter = AXSettleWaiter<(chevron: CGRect?, divider: CGRect?)>()
     private let clickWaiter = AXSettleWaiter<CGRect?>()
     private(set) var isArranging = false
@@ -60,9 +59,13 @@ final class HiddenBarService: ManagedService {
         scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             Task { @MainActor in self?.handleScroll(event) }
         }
-        activeObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-        ) { [weak self] _ in Task { @MainActor in self?.warmAndCollapse() } }
+        // Deliberately NOT re-warming on NSApplication.didBecomeActiveNotification:
+        // it fires on every focus change, not just ones where something actually
+        // needs re-syncing, and each expand()/collapse() round trip was confirmed
+        // (2026-07-24) to permanently drift the divider's on-screen position a
+        // little further — this trigger alone reproduced that corruption within
+        // ~7s of an unrelated Arrange. Arrange-Done and display-config changes
+        // already re-warm through their own paths below.
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in Task { @MainActor in self?.applyDisplayPolicy() } }
@@ -73,35 +76,21 @@ final class HiddenBarService: ManagedService {
         }
         RunLoop.main.add(timer, forMode: .common)
         policyTimer = timer
-        // Hidden-item glyphs are static captures (off-screen capture returns
-        // nil — see the hidden-bar spike), so a menu extra whose rendering
-        // changes over time (clock, battery %, CPU temp, countdown text) goes
-        // stale in the panel once cached. Recapture on a steady cadence, but
-        // `refreshWhileShowing` only does real work while something's actually
-        // on screen to look at, so this stays a single quiet capture at
-        // hide-time instead of a perpetual background flash.
-        let refresh = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshWhileShowing() }
-        }
-        RunLoop.main.add(refresh, forMode: .common)
-        refreshTimer = refresh
         conditionMonitor.onChange = { [weak self] c in self?.evaluateConditions(c) }
         conditionMonitor.start()
         // Items are still on-screen (divider expanded): capture, then collapse.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.warmAndCollapse() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.warmAndCollapse(reason: "startup") }
     }
 
     func stop() {
         graceTimer?.invalidate(); graceTimer = nil
         policyTimer?.invalidate(); policyTimer = nil
-        refreshTimer?.invalidate(); refreshTimer = nil
         warmWaiter.cancel()
         clickWaiter.cancel()
         conditionMonitor.stop()
         conditionReveal = false
         if let m = mouseUpMonitor { NSEvent.removeMonitor(m); mouseUpMonitor = nil }
         if let m = scrollMonitor { NSEvent.removeMonitor(m); scrollMonitor = nil }
-        if let o = activeObserver { NotificationCenter.default.removeObserver(o); activeObserver = nil }
         if let o = screenObserver { NotificationCenter.default.removeObserver(o); screenObserver = nil }
         panel.hide()
         control?.setDividerVisible(false)
@@ -113,8 +102,23 @@ final class HiddenBarService: ManagedService {
     }
 
     /// Capture glyphs for the currently-on-screen hidden set, then collapse.
-    private func warmAndCollapse() {
+    /// Debounced: every expand()/collapse() cycle was confirmed (2026-07-24)
+    /// to cumulatively shift the divider/chevron's real on-screen position a
+    /// little further left, corrupting which items get classified as hidden —
+    /// not just fast-repeated cycles, ANY cycle costs some drift. So this is
+    /// only ever called from genuine one-off changes (startup, Arrange
+    /// ending, a display connecting/disconnecting) — never on a periodic
+    /// timer, and never on generic app-activate — and the debounce is a
+    /// backstop against any of those firing back-to-back. `reason` is
+    /// logged, not branched on. See `HiddenBarDebounce`.
+    private func warmAndCollapse(reason: String) {
         guard let control, !isArranging else { return }   // don't collapse mid-arrange
+        guard HiddenBarDebounce.shouldProceed(lastTriggerAt: lastWarmAndCollapseAt, now: Date()) else {
+            Log.hiddenBar.debug("warmAndCollapse(\(reason, privacy: .public)): debounced")
+            return
+        }
+        Log.hiddenBar.debug("warmAndCollapse(\(reason, privacy: .public)): starting")
+        lastWarmAndCollapseAt = Date()
         control.expand()
         // A hidden chevron (isVisible=false) reports a (0,0) frame, which would
         // fail the on-screen gate below forever. Make it visible first so its
@@ -137,6 +141,9 @@ final class HiddenBarService: ManagedService {
             completion: { [weak self] outcome in
                 // On exhaustion, give up silently — matches the prior behavior
                 // (no final action was taken when the 25-attempt budget ran out).
+                if case .exhausted = outcome {
+                    Log.hiddenBar.debug("warmAndCollapse: exhausted, giving up")
+                }
                 guard case .settled(let frames) = outcome,
                       let chevronFrame = frames.chevron, let dividerFrame = frames.divider else { return }
                 self?.proceedAfterSettled(chevronFrame: chevronFrame, dividerFrame: dividerFrame)
@@ -173,12 +180,18 @@ final class HiddenBarService: ManagedService {
         // left of the divider off-screen, so the panel must show exactly those.
         let boundaryX = dividerMinX
         let bands = MenuBarBand.all()
+        Log.hiddenBar.debug("proceedAfterSettled: scanning — boundaryX=\(boundaryX)")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let items = MenuBarAXScanner.scanAll(menuBarBands: bands)
             let hidden = items.filter { $0.frame.minX < boundaryX }
             let windows = StatusWindowList.onScreen()
+            Log.hiddenBar.debug("proceedAfterSettled: scan found \(items.count) items total, \(hidden.count) to hide")
             DispatchQueue.main.async {
-                guard let self, !self.showingAll, !self.isArranging else { return }
+                guard let self, !self.showingAll, !self.isArranging else {
+                    Log.hiddenBar.debug("proceedAfterSettled: scan-completion bailed — showingAll=\(self?.showingAll ?? false), isArranging=\(self?.isArranging ?? false)")
+                    return
+                }
+                Log.hiddenBar.debug("proceedAfterSettled: collapsing with \(hidden.count) hidden items")
                 self.imageCache.captureOnScreen(items: hidden, windows: windows)
                 self.hiddenItems = hidden
                 self.control?.collapse()
@@ -196,16 +209,6 @@ final class HiddenBarService: ManagedService {
                 if self.state == .revealed || self.state == .pinned { self.renderPanel(self.hiddenItems) }
             }
         }
-    }
-
-    /// Recapture glyphs while a panel is actually on screen, so a hidden item
-    /// whose real glyph is still updating (clock, battery %, CPU temp) doesn't
-    /// go stale for the duration of a hover/pin/condition-reveal. No-ops (cheap)
-    /// the rest of the time.
-    private func refreshWhileShowing() {
-        guard control != nil, !isArranging, !showingAll,
-              state != .hidden || conditionReveal else { return }
-        warmAndCollapse()
     }
 
     /// Arrange mode: expand the real bar in place with a visible divider so the
@@ -227,7 +230,7 @@ final class HiddenBarService: ManagedService {
     func endArrange() {
         isArranging = false
         control?.setDividerVisible(false)
-        warmAndCollapse()
+        warmAndCollapse(reason: "endArrange")
     }
 
     /// Whether hiding should be active. The divider/chevron are a SINGLE pair
@@ -261,9 +264,9 @@ final class HiddenBarService: ManagedService {
         if !showingAll { control.refreshRoles() }
         let hide = shouldHideOnCurrentDisplay()
         if hide && showingAll {
-            warmAndCollapse()          // a notched display connected → re-hide
+            warmAndCollapse(reason: "displayPolicy-reHide")   // a notched display connected → re-hide
         } else if !hide && !showingAll {
-            warmAndCollapse()          // last notched display disconnected → show all
+            warmAndCollapse(reason: "displayPolicy-showAll")  // last notched display disconnected → show all
         }
         evaluateConditions(conditionMonitor.conditions)   // also picks up setting changes
     }
