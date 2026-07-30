@@ -34,6 +34,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     /// Show the temperature in Fahrenheit instead of Celsius.
     public var temperatureFahrenheit: Bool
 
+    // MARK: Menu-bar countdown
+    /// How many hours before a meeting to start showing the countdown in the menu bar.
+    public var countdownLeadHours: Int
+
     // MARK: Reminders
     /// Lead times (minutes before start) at which to fire a reminder.
     public var reminderLeadMinutes: [Int]
@@ -113,6 +117,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         hideDuckIcon: Bool = false,
         remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
+        countdownLeadHours: Int = 8,
         reminderLeadMinutes: [Int] = [10, 5],
         notificationSound: String = "quack",
         joinAlertSound: String = "quack",
@@ -156,6 +161,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.hideDuckIcon = hideDuckIcon
         self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
+        self.countdownLeadHours = countdownLeadHours
         self.reminderLeadMinutes = reminderLeadMinutes
         self.notificationSound = notificationSound
         self.joinAlertSound = joinAlertSound
@@ -212,6 +218,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)
+        countdownLeadHours = v(.countdownLeadHours, d.countdownLeadHours)
         reminderLeadMinutes = v(.reminderLeadMinutes, d.reminderLeadMinutes)
         notificationSound = v(.notificationSound, d.notificationSound)
         joinAlertSound = v(.joinAlertSound, d.joinAlertSound)

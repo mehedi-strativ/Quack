@@ -904,6 +904,14 @@ private struct CalendarSection: View {
         let s = env.settingsStore
         Section {
             Toggle("Show meeting countdown in the menu bar", isOn: s.binding(\.menuBarCountdownEnabled))
+            if s.settings.menuBarCountdownEnabled {
+                Picker("Show countdown starting", selection: s.binding(\.countdownLeadHours)) {
+                    ForEach([1, 2, 4, 8, 12, 24], id: \.self) { h in
+                        Text("\(h) hour\(h == 1 ? "" : "s") before").tag(h)
+                    }
+                }
+                .padding(.leading, 14)
+            }
         }
 
         Section {
@@ -1578,7 +1586,8 @@ private struct ShortcutRecorderField: View {
 
 private struct NotchSection: View {
     @EnvironmentObject var env: AppEnvironment
-    @State private var installed = false
+    @State private var claudeInstalled = false
+    @State private var opencodeInstalled = false
 
     var body: some View {
         let s = env.settingsStore
@@ -1587,32 +1596,52 @@ private struct NotchSection: View {
             Text("Hover the notch to see the current track and control playback.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
-            Toggle("Show Claude Code agents in the notch", isOn: s.binding(\.notchAgentsEnabled))
-            Text("Live status of your Claude Code sessions: which agents are working, which need you, and your usage limits.")
+            Toggle("Show coding agents in the notch", isOn: s.binding(\.notchAgentsEnabled))
+            Text("Live status of your Claude Code and opencode sessions: which agents are working, which need you, and your usage limits.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
             if s.settings.notchAgentsEnabled {
                 HStack {
-                    if installed {
+                    if claudeInstalled {
                         Text("Claude integration installed.")
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                         Button("Remove") {
                             env.removeClaudeIntegration()
-                            installed = env.claudeIntegrationInstalled()
+                            claudeInstalled = env.claudeIntegrationInstalled()
                         }
                     } else {
                         Text("Needs hooks in ~/.claude/settings.json to see your agents.")
                             .font(.system(size: 12)).foregroundStyle(.orange)
                         Button("Enable Claude integration") {
                             env.installClaudeIntegration()
-                            installed = env.claudeIntegrationInstalled()
+                            claudeInstalled = env.claudeIntegrationInstalled()
+                        }
+                    }
+                }
+                HStack {
+                    if opencodeInstalled {
+                        Text("opencode integration installed.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        Button("Remove") {
+                            env.removeOpencodeIntegration()
+                            opencodeInstalled = env.opencodeIntegrationInstalled()
+                        }
+                    } else {
+                        Text("Needs a plugin in ~/.config/opencode/plugins/ to see your agents.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Enable opencode integration") {
+                            env.installOpencodeIntegration()
+                            opencodeInstalled = env.opencodeIntegrationInstalled()
                         }
                     }
                 }
             }
 
         }
-        .onAppear { installed = env.claudeIntegrationInstalled() }
+        .onAppear {
+            claudeInstalled = env.claudeIntegrationInstalled()
+            opencodeInstalled = env.opencodeIntegrationInstalled()
+        }
     }
 }
 

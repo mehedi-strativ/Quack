@@ -18,7 +18,7 @@ final class NotchService: NSObject, ManagedService {
     private let reader = NotchScreenReader()
     private let model = NotchContentViewModel()
     private let nowPlaying = NowPlayingService()
-    private let agentsService: ClaudeAgentsService
+    private let agentsService: AgentsService
     private var panel: NotchPanel?
     private var cancellables: Set<AnyCancellable> = []
     private var wired = false
@@ -33,10 +33,16 @@ final class NotchService: NSObject, ManagedService {
     /// Height of the Quack footer row (duck button + padding).
     private let footerRowHeight: CGFloat = 26
 
-    init(settings: SettingsStore, permissions: PermissionsManager, installer: ClaudeConfigInstaller) {
+    init(settings: SettingsStore, permissions: PermissionsManager,
+         claudeInstaller: ClaudeConfigInstaller, opencodeInstaller: OpencodeConfigInstaller) {
         self.settings = settings
         self.permissions = permissions
-        self.agentsService = ClaudeAgentsService(installer: installer)
+        self.agentsService = AgentsService(sources: [
+            .init(sessionsDirectory: claudeInstaller.sessionsDirectory,
+                  isInstalled: claudeInstaller.isInstalled, migrateIfNeeded: claudeInstaller.migrateIfNeeded),
+            .init(sessionsDirectory: opencodeInstaller.sessionsDirectory,
+                  isInstalled: opencodeInstaller.isInstalled, migrateIfNeeded: opencodeInstaller.migrateIfNeeded),
+        ])
     }
 
     func start() {
@@ -125,7 +131,7 @@ final class NotchService: NSObject, ManagedService {
         guard panel == nil else { return }
         let p = NotchPanel(contentRect: NSRect(x: 0, y: 0, width: expandedWidth, height: 40))
         guard let content = p.contentView else { return }
-        let host = NSHostingView(rootView: NotchContentView(model: model))
+        let host = NotchHostingView(rootView: NotchContentView(model: model))
         host.frame = content.bounds
         host.autoresizingMask = [.width, .height]
         content.addSubview(host)
@@ -205,19 +211,47 @@ final class NotchService: NSObject, ManagedService {
         reposition()
     }
 
-    /// Click-to-focus: activate the app hosting the agent's session; fall back
-    /// to revealing the project folder when the host is gone/unknown.
+    /// Click-to-focus: bring the app hosting the agent's session to front.
     private func focusAgent(_ agent: AgentSnapshot) {
-        if let pid = agent.hostPID,
-           let app = NSRunningApplication(processIdentifier: pid_t(pid)),
-           !app.isTerminated {
-            if #available(macOS 14.0, *) {
-                app.activate()
-            } else {
-                app.activate(options: [.activateIgnoringOtherApps])
-            }
+        Log.claude.info("focusAgent: tap \(agent.project, privacy: .public) pid=\(agent.hostPID ?? -1)")
+        guard let app = resolveApp(pid: agent.hostPID) else {
+            Log.claude.info("focusAgent: no live host for \(agent.sessionID, privacy: .public)")
             return
         }
-        Log.claude.info("focusAgent: no live host for session \(agent.sessionID, privacy: .public)")
+        Log.claude.info("focusAgent: activating \(app.localizedName ?? "?", privacy: .public) pid=\(app.processIdentifier)")
+        if let url = app.bundleURL {
+            let cfg = NSWorkspace.OpenConfiguration()
+            cfg.activates = true
+            NSWorkspace.shared.open([], withApplicationAt: url, configuration: cfg)
+        } else {
+            app.activate(options: [.activateIgnoringOtherApps])
+        }
     }
+
+    /// The hook captures a CLI subprocess PID, not the registered GUI app.
+    /// Walk the parent chain until we find a PID known to NSRunningApplication.
+    private func resolveApp(pid startPID: Int?) -> NSRunningApplication? {
+        guard let startPID else { return nil }
+        let registered = Dictionary(uniqueKeysWithValues:
+            NSWorkspace.shared.runningApplications.map { (Int($0.processIdentifier), $0) })
+        var pid = startPID
+        for _ in 0..<12 {
+            if let app = registered[pid], !app.isTerminated { return app }
+            var info = kinfo_proc()
+            var size = MemoryLayout<kinfo_proc>.size
+            var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, Int32(pid)]
+            guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { break }
+            let ppid = Int(info.kp_eproc.e_ppid)
+            guard ppid > 1, ppid != pid else { break }
+            pid = ppid
+        }
+        return nil
+    }
+}
+
+/// Lets the first mouse-down in the non-key notch panel register as a tap
+/// rather than just an activation attempt. Without this, onTapGesture inside
+/// a canBecomeKey=false NSPanel requires two clicks.
+private final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

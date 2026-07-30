@@ -9,12 +9,16 @@ public enum CountdownFormatter {
     public static let menuBarHorizon: TimeInterval = 8 * 3600
 
     /// The menu-bar title string. Returns `nil` when there is no meeting, or the
-    /// next one starts more than 8 hours out (the caller then shows just the duck).
+    /// next one starts beyond `horizon` (default: 8 h).
     ///
     /// - in progress:  `"<title> · now"`
     /// - < 2 hours:    `"<title> · in 5m"` / `"<title> · in 1h 20m"`
     /// - 2–8 hours:    `"<title> · in 3.5hr"` (rounded to the half hour)
-    public static func menuBarTitle(for meeting: MeetingEvent?, now: Date) -> String? {
+    public static func menuBarTitle(
+        for meeting: MeetingEvent?,
+        now: Date,
+        horizon: TimeInterval = menuBarHorizon
+    ) -> String? {
         guard let meeting else { return nil }
         let title = truncate(meeting.title)
         if meeting.isInProgress(at: now) {
@@ -22,7 +26,7 @@ public enum CountdownFormatter {
         }
         let remaining = meeting.start.timeIntervalSince(now)
         guard remaining > 0 else { return "\(title) · now" }
-        guard remaining <= menuBarHorizon else { return nil }   // > 8h: don't show
+        guard remaining <= horizon else { return nil }
         return "\(title) · in \(menuBarRelative(remaining))"
     }
 

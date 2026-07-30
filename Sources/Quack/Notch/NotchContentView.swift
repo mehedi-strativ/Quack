@@ -73,7 +73,7 @@ struct NotchContentView: View {
             HStack(spacing: 6) {
                 Image(systemName: "asterisk").font(.system(size: 10, weight: .bold))
                     .foregroundStyle(NotchTheme.orange)
-                Text("Enable Claude integration in Quack Settings")
+                Text("Enable Claude Code or opencode integration in Quack Settings")
                     .font(.system(size: 11)).foregroundStyle(NotchTheme.textMuted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,9 +91,11 @@ struct NotchContentView: View {
     private var cards: some View {
         VStack(spacing: 8) {
             ForEach(model.agents) { agent in
-                AgentCardView(agent: agent)
-                    .contentShape(Rectangle())
-                    .onTapGesture { model.onAgentTap?(agent) }
+                Button { model.onAgentTap?(agent) } label: {
+                    AgentCardView(agent: agent)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
     }

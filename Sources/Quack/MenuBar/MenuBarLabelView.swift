@@ -10,9 +10,11 @@ struct MenuBarLabelView: View {
     var body: some View {
         HStack(spacing: 5) {
             DuckIconView()
-            if env.settingsStore.settings.menuBarCountdownEnabled,
+            let s = env.settingsStore.settings
+            if s.menuBarCountdownEnabled,
                let meeting = MeetingSelection.currentOrNext(from: env.meetingStore.upcoming, now: env.now),
-               let title = CountdownFormatter.menuBarTitle(for: meeting, now: env.now) {
+               let title = CountdownFormatter.menuBarTitle(for: meeting, now: env.now,
+                                                           horizon: Double(s.countdownLeadHours) * 3600) {
                 Text(title)
             }
         }

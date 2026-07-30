@@ -69,7 +69,8 @@ final class StatusItemController {
         let meeting = MeetingSelection.currentOrNext(from: env.meetingStore.upcoming, now: env.now)
 
         guard s.menuBarCountdownEnabled,
-              let title = CountdownFormatter.menuBarTitle(for: meeting, now: env.now) else {
+              let title = CountdownFormatter.menuBarTitle(for: meeting, now: env.now,
+                                                          horizon: Double(s.countdownLeadHours) * 3600) else {
             countdownItem.isVisible = false
             return
         }

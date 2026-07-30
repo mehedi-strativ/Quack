@@ -48,6 +48,7 @@ final class AppEnvironment: ObservableObject {
     private let mouseService: MouseService
     private let timeAwarenessService: TimeAwarenessService
     let claudeInstaller = ClaudeConfigInstaller()
+    let opencodeInstaller = OpencodeConfigInstaller()
 
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
@@ -97,7 +98,8 @@ final class AppEnvironment: ObservableObject {
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
-        self.notchService = NotchService(settings: settings, permissions: permissions, installer: claudeInstaller)
+        self.notchService = NotchService(settings: settings, permissions: permissions,
+                                          claudeInstaller: claudeInstaller, opencodeInstaller: opencodeInstaller)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
         self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
 
@@ -324,6 +326,24 @@ final class AppEnvironment: ObservableObject {
     func removeClaudeIntegration() -> Bool {
         do { try claudeInstaller.uninstall(); return true }
         catch { Log.claude.error("Claude integration uninstall failed: \(error.localizedDescription)"); return false }
+    }
+
+    /// opencode integration state/actions for the settings pane. Mirrors the
+    /// Claude Code trio above; failures are logged, never fatal.
+    func opencodeIntegrationInstalled() -> Bool {
+        opencodeInstaller.isInstalled()
+    }
+
+    @discardableResult
+    func installOpencodeIntegration() -> Bool {
+        do { try opencodeInstaller.install(); return true }
+        catch { Log.opencode.error("opencode integration install failed: \(error.localizedDescription)"); return false }
+    }
+
+    @discardableResult
+    func removeOpencodeIntegration() -> Bool {
+        do { try opencodeInstaller.uninstall(); return true }
+        catch { Log.opencode.error("opencode integration uninstall failed: \(error.localizedDescription)"); return false }
     }
 }
 

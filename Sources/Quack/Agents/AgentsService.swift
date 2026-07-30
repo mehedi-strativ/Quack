@@ -2,32 +2,48 @@ import Foundation
 import Combine
 import QuackKit
 
-/// Reads the session files the Claude Code integration writes and publishes
-/// reduced agent snapshots. Fail-soft: missing directory or malformed files
-/// yield empty state, never a crash. A periodic tick re-runs the staleness
-/// prune even when no file event arrives (an abandoned session must
-/// eventually drop off the panel).
+/// Reads the session files any installed agent-tool integration (Claude Code,
+/// opencode, ...) writes and publishes reduced agent snapshots merged across
+/// all of them — session IDs are per-tool-formatted and never collide, so
+/// `AgentReducer` just sees one combined `[SessionFiles]`. Fail-soft: missing
+/// directory or malformed files yield empty state, never a crash. A periodic
+/// tick re-runs the staleness prune even when no file event arrives (an
+/// abandoned session must eventually drop off the panel).
 @MainActor
-final class ClaudeAgentsService: ObservableObject {
+final class AgentsService: ObservableObject {
     @Published private(set) var agents: [AgentSnapshot] = []
+    /// True when at least one source integration is installed — gates the
+    /// notch panel's "enable an integration" CTA vs. the empty-state message.
     @Published private(set) var integrationInstalled = false
 
-    private let installer: ClaudeConfigInstaller
-    private let watcher = ClaudeStateWatcher()
+    /// One agent-tool integration's on-disk contract: where it writes state,
+    /// and how to check/refresh its install.
+    struct Source {
+        let sessionsDirectory: URL
+        let isInstalled: () -> Bool
+        let migrateIfNeeded: () -> Void
+    }
+
+    private let sources: [Source]
+    private var watchers: [ClaudeStateWatcher] = []
     private var pruneTimer: Timer?
     private var started = false
 
-    init(installer: ClaudeConfigInstaller) {
-        self.installer = installer
+    init(sources: [Source]) {
+        self.sources = sources
     }
 
     func start() {
         guard !started else { return }
         started = true
-        installer.migrateIfNeeded()   // pick up new hook events for older installs
-        integrationInstalled = installer.isInstalled()
-        watcher.onChange = { [weak self] in self?.refreshNow() }
-        watcher.start(directory: installer.sessionsDirectory)
+        sources.forEach { $0.migrateIfNeeded() }   // pick up new hook events for older installs
+        integrationInstalled = sources.contains { $0.isInstalled() }
+        watchers = sources.map { source in
+            let watcher = ClaudeStateWatcher()
+            watcher.onChange = { [weak self] in self?.refreshNow() }
+            watcher.start(directory: source.sessionsDirectory)
+            return watcher
+        }
         let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshNow() }
         }
@@ -39,22 +55,21 @@ final class ClaudeAgentsService: ObservableObject {
     func stop() {
         guard started else { return }
         started = false
-        watcher.stop()
-        watcher.onChange = nil
+        watchers.forEach { $0.stop() }
+        watchers = []
         pruneTimer?.invalidate(); pruneTimer = nil
         agents = []
     }
 
     func refreshNow() {
-        integrationInstalled = installer.isInstalled()
-        let files = readSessionFiles()
+        integrationInstalled = sources.contains { $0.isInstalled() }
+        let files = sources.flatMap { readSessionFiles(in: $0.sessionsDirectory) }
         let now = Date()
         agents = AgentReducer.snapshots(from: files, now: now)
     }
 
-    private func readSessionFiles() -> [SessionFiles] {
+    private func readSessionFiles(in dir: URL) -> [SessionFiles] {
         let fm = FileManager.default
-        let dir = installer.sessionsDirectory
         guard let names = try? fm.contentsOfDirectory(atPath: dir.path) else { return [] }
         let decoder = JSONDecoder()
         var ids = Set<String>()
