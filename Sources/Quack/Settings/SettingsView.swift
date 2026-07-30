@@ -366,18 +366,6 @@ private struct MeetingsPane: View {
 /// A subtle inline caption about how cross-app calendar edits sync. Plain
 /// secondary text (no tint, no border) so it sits quietly inside its card and
 /// scrolls with the content.
-private struct CalendarSyncTip: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: "info.circle")
-            Text("Edits made in another app (Google, Notion, etc.) appear after macOS syncs them. If they're slow, shorten **Calendar app → Settings → Accounts → Refresh Calendars**.")
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .font(.system(size: 12))
-        .foregroundStyle(.secondary)
-    }
-}
-
 // MARK: - Settings (app-level preferences)
 
 private struct SettingsSection: View {
@@ -457,9 +445,7 @@ private struct DashboardView: View {
     // MARK: Calendar (expanded — next 5 events inline)
 
     @ViewBuilder private var calendarCardContent: some View {
-        if env.permissions.status(for: .calendar) != .granted {
-            gist("Access needed", "Grant Calendar access", tint: .orange)
-        } else if upcoming.isEmpty {
+        if upcoming.isEmpty {
             gist("No upcoming meetings", "Nothing in the next two weeks")
         } else {
             VStack(spacing: 7) {
@@ -493,7 +479,6 @@ private struct DashboardView: View {
     }
 
     private func loadUpcoming() async {
-        guard env.permissions.status(for: .calendar) == .granted else { return }
         let now = env.now
         let window = DateInterval(start: now, duration: 14 * 86_400)
         let all = await env.events(in: window)
@@ -731,12 +716,7 @@ private struct CalendarAgendaView: View {
 
     @ViewBuilder
     private var content: some View {
-        if env.permissions.status(for: .calendar) != .granted {
-            emptyState(icon: "calendar.badge.exclamationmark",
-                       title: "Calendar access needed",
-                       subtitle: "Grant Calendar access to see your schedule.",
-                       action: ("Grant", { env.requestCalendarAccess() }))
-        } else if loading && events.isEmpty {
+        if loading && events.isEmpty {
             ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.top, 44)
         } else if sections.isEmpty {
             emptyState(icon: "calendar",
@@ -915,111 +895,63 @@ private struct AgendaEventRow: View {
 
 private struct CalendarSection: View {
     @EnvironmentObject var env: AppEnvironment
-    @State private var accounts: [CalendarAccountInfo] = []
     @State private var googleCalendars: [GoogleCalendarInfo] = []
     @State private var authInProgress = false
     @State private var authError: String?
     @State private var isAuthed = false
 
     var body: some View {
-      Group {
         let s = env.settingsStore
-
         Section {
             Toggle("Show meeting countdown in the menu bar", isOn: s.binding(\.menuBarCountdownEnabled))
-            if env.permissions.status(for: .calendar) == .granted {
-                CalendarSyncTip()
-            }
         }
 
-            if env.permissions.status(for: .calendar) != .granted {
-                Section {
-                    HStack {
-                        Text("Calendar access is needed to read your events.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Spacer()
-                        Button("Grant") { env.requestCalendarAccess() }
+        Section {
+            if isAuthed {
+                Toggle("Sync Google Calendar", isOn: s.binding(\.useGoogle))
+                if s.settings.useGoogle {
+                    if googleCalendars.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Loading calendars…")
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                            ProgressView().scaleEffect(0.7).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, 4)
+                    } else {
+                        ForEach(googleCalendars) { cal in
+                            Toggle(cal.title, isOn: googleCalendarBinding(cal.id))
+                                .padding(.leading, 14)
+                        }
                     }
                 }
             } else {
-                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                    Section {
-                        Toggle(isOn: accountBinding(account)) {
-                            Text(account.title).fontWeight(.semibold)
-                        }
-                        if isAccountOn(account) {
-                            ForEach(account.calendars) { cal in
-                                Toggle(calendarLabel(cal, in: account), isOn: calendarBinding(cal.id))
-                                    .padding(.leading, 14)
-                            }
-                        }
-                    } header: {
-                        if index == 0 { Text("Calendar accounts") }
-                    }
-                }
-
-                Section {
-                    if isAuthed {
-                        Toggle("Sync Google Calendar", isOn: s.binding(\.useGoogle))
-                        if s.settings.useGoogle {
-                            if googleCalendars.isEmpty {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Loading calendars…")
-                                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                                    ProgressView()
-                                        .scaleEffect(0.7).frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .padding(.vertical, 4)
-                            } else {
-                                ForEach(googleCalendars) { cal in
-                                    Toggle(cal.title, isOn: googleCalendarBinding(cal.id))
-                                        .padding(.leading, 14)
-                                }
-                            }
-                        }
-                    } else {
-                        Button(authInProgress ? "Opening browser…" : "Sign in with Google") { signIn() }
-                            .disabled(authInProgress)
-                    }
-                } header: {
-                    HStack {
-                        if accounts.isEmpty { Text("Calendar accounts") }
-                        Text("Google Calendar")
-                        Spacer()
-                        if isAuthed {
-                            Button("Sign out") { Task { await signOut() } }.buttonStyle(.link)
-                        }
-                    }
-                } footer: {
-                    if let error = authError {
-                        Text(error).font(.system(size: 11)).foregroundStyle(.red)
-                    }
-                    if authInProgress {
-                        HStack(spacing: 6) {
-                            ProgressView().scaleEffect(0.6)
-                            Text("Opening browser for Google sign-in…")
-                                .font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                if accounts.isEmpty && !isAuthed {
-                    Section { Text("No calendars found.").font(.system(size: 12)).foregroundStyle(.secondary) }
-                }
-
-                Section {
-                    Button("Add or remove accounts…") { env.openInternetAccounts() }
-                    Button("Refresh calendars") { accounts = env.availableAccounts() }
-                    Text("Accounts are added in System Settings → Internet Accounts.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                Button(authInProgress ? "Opening browser…" : "Sign in with Google") { signIn() }
+                    .disabled(authInProgress)
+            }
+        } header: {
+            HStack {
+                Text("Calendar accounts")
+                Spacer()
+                if isAuthed {
+                    Button("Sign out") { Task { await signOut() } }.buttonStyle(.link)
                 }
             }
-      }
-      .onAppear { accounts = env.availableAccounts() }
-      .task {
-          isAuthed = await env.isGoogleAuthenticated
-          if isAuthed { await loadCalendars() }
-      }
+        } footer: {
+            if let error = authError {
+                Text(error).font(.system(size: 11)).foregroundStyle(.red)
+            }
+            if authInProgress {
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.6)
+                    Text("Opening browser for Google sign-in…")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .task {
+            isAuthed = await env.isGoogleAuthenticated
+            if isAuthed { await loadCalendars() }
+        }
     }
 
     private func signIn() {
@@ -1058,75 +990,6 @@ private struct CalendarSection: View {
                     if on { $0.selectedGoogleCalendarIDs.append(id) }
                     else { $0.selectedGoogleCalendarIDs.removeAll { $0 == id } }
                 }
-            }
-        )
-    }
-
-    /// Display name for a calendar row. The provider's primary calendar shares
-    /// the account's name (e.g. the email), so show "Primary calendar" instead
-    /// of repeating it under the account toggle.
-    private func calendarLabel(_ cal: CalendarInfo, in account: CalendarAccountInfo) -> String {
-        cal.title == account.title ? "Primary calendar" : cal.title
-    }
-
-    private var allCalendarIDs: [String] {
-        accounts.flatMap { $0.calendars.map(\.id) }
-    }
-
-    /// True when calendar `id` is currently synced. With `syncAllCalendars` on,
-    /// every calendar reads as on.
-    private func isOn(_ id: String) -> Bool {
-        let s = env.settingsStore.settings
-        return s.syncAllCalendars || s.selectedCalendarIDs.contains(id)
-    }
-
-    /// An account is "on" while ANY of its calendars is synced — so turning one
-    /// child off does not collapse the account. Off only when all are off.
-    private func isAccountOn(_ account: CalendarAccountInfo) -> Bool {
-        account.calendars.contains { isOn($0.id) }
-    }
-
-    private func accountBinding(_ account: CalendarAccountInfo) -> Binding<Bool> {
-        let ids = account.calendars.map(\.id)
-        return Binding(
-            get: { isAccountOn(account) },
-            set: { on in
-                var sel = currentSelection
-                if on { sel.formUnion(ids) } else { sel.subtract(ids) }
-                setSelection(sel)
-            }
-        )
-    }
-
-    /// Applies a new explicit selection, collapsing back to "sync all" when the
-    /// selection covers every known calendar (keeps the stored set tidy).
-    private func setSelection(_ ids: Set<String>) {
-        let all = Set(allCalendarIDs)
-        env.settingsStore.update {
-            if !all.isEmpty && all.isSubset(of: ids) {
-                $0.syncAllCalendars = true
-                $0.selectedCalendarIDs = []
-            } else {
-                $0.syncAllCalendars = false
-                $0.selectedCalendarIDs = Array(ids)
-            }
-        }
-    }
-
-    /// The current effective selection as a concrete set (materializing the
-    /// "sync all" state into the full list of ids).
-    private var currentSelection: Set<String> {
-        let s = env.settingsStore.settings
-        return s.syncAllCalendars ? Set(allCalendarIDs) : Set(s.selectedCalendarIDs)
-    }
-
-    private func calendarBinding(_ id: String) -> Binding<Bool> {
-        Binding(
-            get: { isOn(id) },
-            set: { on in
-                var sel = currentSelection
-                if on { sel.insert(id) } else { sel.remove(id) }
-                setSelection(sel)
             }
         )
     }

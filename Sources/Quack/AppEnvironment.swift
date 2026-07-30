@@ -71,13 +71,12 @@ final class AppEnvironment: ObservableObject {
             }
         )
         let composite = CompositeCalendarProvider(
-            providers: [eventKitProvider, googleCalendarProvider]
+            providers: [googleCalendarProvider]
         )
         let store = MeetingStore(
             provider: composite,
             calendarIDs: {
-                if settings.settings.syncAllCalendars { return [] }
-                return settings.settings.selectedCalendarIDs + settings.settings.selectedGoogleCalendarIDs
+                settings.settings.syncAllCalendars ? [] : settings.settings.selectedGoogleCalendarIDs
             }
         )
         let brightness = BrightnessController()
@@ -162,29 +161,6 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// Event calendars available for the settings picker (empty if no access).
-    func availableCalendars() -> [(id: String, title: String)] {
-        eventKitProvider.availableCalendars()
-    }
-
-    /// Calendar accounts (grouped) for the settings UI.
-    func availableAccounts() -> [CalendarAccountInfo] {
-        eventKitProvider.availableAccounts()
-    }
-
-    /// Requests calendar access (used when the picker is empty because access
-    /// has not been granted yet), then refreshes status.
-    func requestCalendarAccess() {
-        Task { @MainActor in
-            let granted = await permissions.requestCalendarAccess()
-            // If the system didn't (or couldn't) prompt — already shown this
-            // session, or previously denied — send the user to System Settings
-            // so the button is never a dead end.
-            if !granted { permissions.openCalendarSettings() }
-            await meetingStore.refresh()
-            objectWillChange.send()
-        }
-    }
 
     /// Plays a sound for the settings preview button.
     func previewSound(_ sound: NotificationSound) {
@@ -249,21 +225,13 @@ final class AppEnvironment: ObservableObject {
         settingsWindow.show(env: self)
     }
 
-    /// Opens System Settings → Internet Accounts, where macOS calendar accounts
-    /// are added or removed (apps cannot do this directly).
-    func openInternetAccounts() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preferences.internetaccounts") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
     /// Fetches every event overlapping `window` for the agenda view, honoring the
     /// user's calendar selection. Returns them sorted by start time with
     /// conferencing links resolved. Empty on no access/error.
     func events(in window: DateInterval) async -> [MeetingEvent] {
         let fetched = (try? await composite.fetchEvents(window: window)) ?? []
         let s = settingsStore.settings
-        let ids = s.syncAllCalendars ? [] : s.selectedCalendarIDs + s.selectedGoogleCalendarIDs
+        let ids = s.syncAllCalendars ? [] : s.selectedGoogleCalendarIDs
         return MeetingSelection.filter(fetched, window: window, calendarIDs: ids)
             .map { $0.withConferencingURL(MeetingURLParser.joinURL(for: $0)) }
             .sorted { $0.start < $1.start }
