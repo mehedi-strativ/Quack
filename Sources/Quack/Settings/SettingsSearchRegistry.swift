@@ -15,6 +15,8 @@ enum SettingsSearchRegistry {
               ["timer", "next meeting", "menu bar"]),
         entry("meetings.accounts", "Calendar accounts & selection", .meetings, "Calendar",
               ["google", "icloud", "eventkit", "sync", "select calendars"]),
+        entry("meetings.google", "Google Calendar sign-in & sync", .meetings, "Google Calendar",
+              ["oauth", "sign in", "google calendar", "google account"]),
         entry("meetings.reminders", "Meeting reminders", .meetings, "Reminders",
               ["notification", "alert", "lead time", "before meeting"]),
         entry("meetings.sound", "Reminder & join sounds", .meetings, "Sound",

@@ -19,7 +19,7 @@ enum SettingsTab: String, CaseIterable {
         case .shortcuts: return "Shortcuts"
         case .brightness: return "Brightness"
         case .notch: return "Notch"
-        case .general: return "General"
+        case .general: return "Settings"
         case .permissions: return "Permissions"
         }
     }
@@ -310,6 +310,8 @@ struct SettingsPane: View {
                     NotchSection()
                 case .general:
                     SettingsSection()
+                    CalendarSection()
+                    RemindersSection()
                 case .permissions:
                     PermissionsSection()
                     StatusSection()
@@ -353,12 +355,10 @@ private struct MeetingsPane: View {
             CalendarAgendaView()
                 .frame(minHeight: 220)
             Form {
-                CalendarSection()
-                RemindersSection()
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
-            .frame(minHeight: 180)
+            .frame(minHeight: 0)
         }
     }
 }
@@ -916,6 +916,10 @@ private struct AgendaEventRow: View {
 private struct CalendarSection: View {
     @EnvironmentObject var env: AppEnvironment
     @State private var accounts: [CalendarAccountInfo] = []
+    @State private var googleCalendars: [GoogleCalendarInfo] = []
+    @State private var authInProgress = false
+    @State private var authError: String?
+    @State private var isAuthed = false
 
     var body: some View {
       Group {
@@ -938,19 +942,13 @@ private struct CalendarSection: View {
                     }
                 }
             } else {
-                // One card per account; children are dividers within the card.
-                // The first card carries the group header.
                 ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
                     Section {
                         Toggle(isOn: accountBinding(account)) {
                             Text(account.title).fontWeight(.semibold)
                         }
-                        // Children only show while the account is on.
                         if isAccountOn(account) {
                             ForEach(account.calendars) { cal in
-                                // A provider's primary calendar is named after the
-                                // account itself — relabel it so it isn't a confusing
-                                // repeat of the account row above.
                                 Toggle(calendarLabel(cal, in: account), isOn: calendarBinding(cal.id))
                                     .padding(.leading, 14)
                             }
@@ -960,7 +958,52 @@ private struct CalendarSection: View {
                     }
                 }
 
-                if accounts.isEmpty {
+                Section {
+                    if isAuthed {
+                        Toggle("Sync Google Calendar", isOn: s.binding(\.useGoogle))
+                        if s.settings.useGoogle {
+                            if googleCalendars.isEmpty {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Loading calendars…")
+                                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                                    ProgressView()
+                                        .scaleEffect(0.7).frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.vertical, 4)
+                            } else {
+                                ForEach(googleCalendars) { cal in
+                                    Toggle(cal.title, isOn: googleCalendarBinding(cal.id))
+                                        .padding(.leading, 14)
+                                }
+                            }
+                        }
+                    } else {
+                        Button(authInProgress ? "Opening browser…" : "Sign in with Google") { signIn() }
+                            .disabled(authInProgress)
+                    }
+                } header: {
+                    HStack {
+                        if accounts.isEmpty { Text("Calendar accounts") }
+                        Text("Google Calendar")
+                        Spacer()
+                        if isAuthed {
+                            Button("Sign out") { Task { await signOut() } }.buttonStyle(.link)
+                        }
+                    }
+                } footer: {
+                    if let error = authError {
+                        Text(error).font(.system(size: 11)).foregroundStyle(.red)
+                    }
+                    if authInProgress {
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.6)
+                            Text("Opening browser for Google sign-in…")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if accounts.isEmpty && !isAuthed {
                     Section { Text("No calendars found.").font(.system(size: 12)).foregroundStyle(.secondary) }
                 }
 
@@ -973,6 +1016,50 @@ private struct CalendarSection: View {
             }
       }
       .onAppear { accounts = env.availableAccounts() }
+      .task {
+          isAuthed = await env.isGoogleAuthenticated
+          if isAuthed { await loadCalendars() }
+      }
+    }
+
+    private func signIn() {
+        authError = nil
+        authInProgress = true
+        Task {
+            do {
+                try await env.signInToGoogle()
+                isAuthed = true
+                await loadCalendars()
+            } catch {
+                authError = error.localizedDescription
+                isAuthed = await env.isGoogleAuthenticated
+            }
+            authInProgress = false
+        }
+    }
+
+    private func signOut() async {
+        await env.signOutFromGoogle()
+        isAuthed = false
+        googleCalendars = []
+    }
+
+    private func loadCalendars() async {
+        guard await env.isGoogleAuthenticated else { return }
+        googleCalendars = await env.availableGoogleCalendars()
+    }
+
+    private func googleCalendarBinding(_ id: String) -> Binding<Bool> {
+        let s = env.settingsStore
+        return Binding(
+            get: { s.settings.syncAllCalendars || s.settings.selectedGoogleCalendarIDs.contains(id) },
+            set: { on in
+                s.update {
+                    if on { $0.selectedGoogleCalendarIDs.append(id) }
+                    else { $0.selectedGoogleCalendarIDs.removeAll { $0 == id } }
+                }
+            }
+        )
     }
 
     /// Display name for a calendar row. The provider's primary calendar shares

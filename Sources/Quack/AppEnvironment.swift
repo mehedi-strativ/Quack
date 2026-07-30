@@ -29,6 +29,9 @@ final class AppEnvironment: ObservableObject {
     private var activeObserver: NSObjectProtocol?
 
     private let eventKitProvider: EventKitProvider
+    private let googleOAuth: GoogleOAuthService
+    private let googleCalendarProvider: GoogleCalendarProvider
+    private let composite: CompositeCalendarProvider
     let brightnessController: BrightnessController
     private let toasts = ToastPresenter()
     private let quackSound = QuackSound()
@@ -55,18 +58,36 @@ final class AppEnvironment: ObservableObject {
         // countdown, reminders, and the dropdown list.
         settings.update { $0.calendarEnabled = true }
         let permissions = PermissionsManager()
-        let provider = EventKitProvider(permissions: permissions)
-        let store = MeetingStore(
-            provider: provider,
+        let eventKitProvider = EventKitProvider(permissions: permissions)
+        let googleOAuth = GoogleOAuthService(
+            clientID: "783466472013-itdojrdr933jt0s0g1s47qb24g1ibnim.apps.googleusercontent.com",
+            clientSecret: "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"
+        )
+        let googleCalendarProvider = GoogleCalendarProvider(
+            oauth: googleOAuth,
+            enabled: { settings.settings.useGoogle },
             calendarIDs: {
-                settings.settings.syncAllCalendars ? [] : settings.settings.selectedCalendarIDs
+                settings.settings.syncAllCalendars ? [] : settings.settings.selectedGoogleCalendarIDs
+            }
+        )
+        let composite = CompositeCalendarProvider(
+            providers: [eventKitProvider, googleCalendarProvider]
+        )
+        let store = MeetingStore(
+            provider: composite,
+            calendarIDs: {
+                if settings.settings.syncAllCalendars { return [] }
+                return settings.settings.selectedCalendarIDs + settings.settings.selectedGoogleCalendarIDs
             }
         )
         let brightness = BrightnessController()
 
         self.settingsStore = settings
         self.permissions = permissions
-        self.eventKitProvider = provider
+        self.eventKitProvider = eventKitProvider
+        self.googleOAuth = googleOAuth
+        self.googleCalendarProvider = googleCalendarProvider
+        self.composite = composite
         self.meetingStore = store
         self.brightnessController = brightness
 
@@ -240,12 +261,36 @@ final class AppEnvironment: ObservableObject {
     /// user's calendar selection. Returns them sorted by start time with
     /// conferencing links resolved. Empty on no access/error.
     func events(in window: DateInterval) async -> [MeetingEvent] {
-        let fetched = (try? await eventKitProvider.fetchEvents(window: window)) ?? []
+        let fetched = (try? await composite.fetchEvents(window: window)) ?? []
         let s = settingsStore.settings
-        let ids = s.syncAllCalendars ? [] : s.selectedCalendarIDs
+        let ids = s.syncAllCalendars ? [] : s.selectedCalendarIDs + s.selectedGoogleCalendarIDs
         return MeetingSelection.filter(fetched, window: window, calendarIDs: ids)
             .map { $0.withConferencingURL(MeetingURLParser.joinURL(for: $0)) }
             .sorted { $0.start < $1.start }
+    }
+
+    // MARK: - Google Calendar
+
+    var isGoogleAuthenticated: Bool {
+        get async { await googleOAuth.isAuthenticated }
+    }
+
+    func signInToGoogle() async throws {
+        try await googleOAuth.authenticate()
+        settingsStore.update { $0.useGoogle = true }
+    }
+
+    func signOutFromGoogle() async {
+        let googleIDs = Set(await googleCalendarProvider.availableCalendars().map(\.id))
+        await googleOAuth.signOut()
+        settingsStore.update {
+            $0.useGoogle = false
+            $0.selectedGoogleCalendarIDs.removeAll { googleIDs.contains($0) }
+        }
+    }
+
+    func availableGoogleCalendars() async -> [GoogleCalendarInfo] {
+        await googleCalendarProvider.availableCalendars()
     }
 
     /// Day statistics for the Dashboard card and the day-by-day view. Today

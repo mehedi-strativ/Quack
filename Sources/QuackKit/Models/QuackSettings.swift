@@ -49,6 +49,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var syncAllCalendars: Bool
     /// Explicit calendar selection used when `syncAllCalendars` is false.
     public var selectedCalendarIDs: [String]
+    /// Google calendars to sync (used when `syncAllCalendars` is false).
+    public var selectedGoogleCalendarIDs: [String]
 
     // MARK: Brightness
     public var brightnessStepPercent: Int
@@ -118,6 +120,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         useGoogle: Bool = false,
         syncAllCalendars: Bool = true,
         selectedCalendarIDs: [String] = [],
+        selectedGoogleCalendarIDs: [String] = [],
         brightnessStepPercent: Int = 10,
         dimInactiveDisplay: Bool = false,
         displayBrightness: [String: Double] = [:],
@@ -160,6 +163,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.useGoogle = useGoogle
         self.syncAllCalendars = syncAllCalendars
         self.selectedCalendarIDs = selectedCalendarIDs
+        self.selectedGoogleCalendarIDs = selectedGoogleCalendarIDs
         self.brightnessStepPercent = brightnessStepPercent
         self.dimInactiveDisplay = dimInactiveDisplay
         self.displayBrightness = displayBrightness
@@ -215,6 +219,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         useGoogle = v(.useGoogle, d.useGoogle)
         syncAllCalendars = v(.syncAllCalendars, d.syncAllCalendars)
         selectedCalendarIDs = v(.selectedCalendarIDs, d.selectedCalendarIDs)
+        selectedGoogleCalendarIDs = v(.selectedGoogleCalendarIDs, d.selectedGoogleCalendarIDs)
         brightnessStepPercent = v(.brightnessStepPercent, d.brightnessStepPercent)
         dimInactiveDisplay = v(.dimInactiveDisplay, d.dimInactiveDisplay)
         displayBrightness = v(.displayBrightness, d.displayBrightness)
