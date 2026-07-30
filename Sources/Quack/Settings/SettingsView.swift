@@ -305,6 +305,7 @@ struct SettingsPane: View {
                     MousePointerSection()
                     MouseScrollSection()
                     MouseButtonsSection()
+                    MouseClickMonitorSection()
                 case .notch:
                     NotchSection()
                 case .general:
@@ -1495,6 +1496,39 @@ private struct MouseButtonsSection: View {
             ShortcutRecorderField(shortcut: s.binding(shortcut),
                                    recorderID: id, activeRecorder: $activeRecorder)
         }
+    }
+}
+
+private struct MouseClickMonitorSection: View {
+    @StateObject private var log = MouseClickLog.shared
+
+    var body: some View {
+        Section {
+            if log.entries.isEmpty {
+                Text("Click any mouse button to see it here.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            } else {
+                ForEach(log.entries) { entry in
+                    HStack {
+                        Text(entry.name)
+                        Spacer()
+                        Text(entry.time)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            HStack {
+                Text("Click monitor")
+                Spacer()
+                Button("Clear") { log.clear() }
+                    .buttonStyle(.link)
+                    .disabled(log.entries.isEmpty)
+            }
+        }
+        .onAppear { log.startMonitoring() }
+        .onDisappear { log.stopMonitoring() }
     }
 }
 

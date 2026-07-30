@@ -39,8 +39,19 @@ enum MouseActionPerformer {
         }
     }
 
+    /// Arrows and the nav cluster are fn-layer keys: a real keypress carries
+    /// `maskSecondaryFn`, and macOS registers its own hotkeys that way (⌃←
+    /// "previous Space" is stored as 0x840000 = control+fn). Without the fn bit
+    /// a synthesized ⌃← matches nothing and silently does nothing.
+    private static let fnLayerKeys: Set<CGKeyCode> = [
+        115, 116, 117, 119, 121,        // home, page up, fwd delete, end, page down
+        123, 124, 125, 126,             // ← → ↓ ↑
+    ]
+
     /// Synthesizes a full keyDown+keyUp pair with modifiers.
     private static func postKeystroke(keyCode: CGKeyCode, flags: CGEventFlags) {
+        var flags = flags
+        if fnLayerKeys.contains(keyCode) { flags.insert(.maskSecondaryFn) }
         guard let src = CGEventSource(stateID: .hidSystemState) else { return }
         for down in [true, false] {
             guard let ev = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: down) else { continue }

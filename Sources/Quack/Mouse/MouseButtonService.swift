@@ -104,6 +104,13 @@ final class MouseButtonService {
 
         let button = event.getIntegerValueField(.mouseEventButtonNumber)
         configLock.lock(); let c = config; configLock.unlock()
+        if type == .otherMouseDown {
+            // Diagnostic: mouse drivers that divert their extra buttons in
+            // firmware (Logi Options+ on an MX Master, e.g.) never let the
+            // click reach a CGEvent tap at all — no line here on a side-button
+            // press means the driver ate it, not that this tap is broken.
+            Log.mouse.debug("otherMouseDown button=\(button, privacy: .public)")
+        }
 
         let action: MouseButtonAction
         let shortcut: MouseShortcut?

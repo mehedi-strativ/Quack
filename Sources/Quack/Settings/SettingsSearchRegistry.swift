@@ -41,6 +41,8 @@ enum SettingsSearchRegistry {
               ["wheel", "animate", "tick", "momentum"]),
         entry("mouse.buttons", "Extra buttons (4 / 5) actions", .mouse, "Extra buttons",
               ["side buttons", "back", "forward", "custom shortcut", "rebind"]),
+        entry("mouse.clickMonitor", "Click monitor", .mouse, "Click monitor",
+              ["log", "live", "test buttons", "which button", "debug"]),
 
         // Gestures
         entry("gestures.swipe", "Two-finger swipe on the title bar", .gestures, "Window swipe",
