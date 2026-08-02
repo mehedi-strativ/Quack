@@ -66,9 +66,9 @@ final class StatusItemController {
     }
 
     /// Exposed for `MenuBarCrushMonitor` only.
-    var duckFrameMinX: CGFloat? { duckItem.button?.window?.frame.minX }
+    var duckFrame: CGRect? { duckItem.button?.window?.frame }
     var duckIsVisible: Bool { duckItem.isVisible }
-    var countdownFrameMinX: CGFloat? { countdownItem.button?.window?.frame.minX }
+    var countdownFrame: CGRect? { countdownItem.button?.window?.frame }
     var countdownIsVisible: Bool { countdownItem.isVisible }
 
     /// Called by `MenuBarCrushMonitor`. Folds the override into

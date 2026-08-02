@@ -71,4 +71,41 @@ import CoreGraphics
         let span = NotchGeometry.NotchSpan(minX: 663, maxX: 848)
         #expect(!NotchGeometry.isHiddenByNotch(itemMinX: 848, notch: span))
     }
+
+    // isPlausibleMenuBarFrame: guards multi-display mismatches and
+    // not-yet-settled placeholder frames from being misread as "crushed."
+
+    @Test func plausibleFrameOnTheScreenNearTheTopIsAccepted() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let itemFrame = CGRect(x: 900, y: 958, width: 40, height: 24)   // maxY = 982, at the very top
+        #expect(NotchGeometry.isPlausibleMenuBarFrame(itemFrame, onScreen: screen))
+    }
+
+    @Test func frameOnADifferentScreenEntirelyIsRejected() {
+        // Built-in notched screen positioned at x=[2560, 4072); item actually
+        // lives on an external primary display at x=[0, 2560) — a real
+        // multi-display mismatch, not a crush.
+        let screen = CGRect(x: 2560, y: 0, width: 1512, height: 982)
+        let itemFrame = CGRect(x: 900, y: 958, width: 40, height: 24)
+        #expect(!NotchGeometry.isPlausibleMenuBarFrame(itemFrame, onScreen: screen))
+    }
+
+    @Test func freshlyCreatedPlaceholderFrameBelowTheMenuBarIsRejected() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let placeholder = CGRect(x: 900, y: -30, width: 40, height: 24)   // fresh NSStatusItem placeholder
+        #expect(!NotchGeometry.isPlausibleMenuBarFrame(placeholder, onScreen: screen))
+    }
+
+    @Test func frameExactlyAtTheBandBoundaryIsAccepted() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        // maxY == screen.maxY - band (982 - 40 = 942) exactly — boundary inclusive.
+        let itemFrame = CGRect(x: 900, y: 942, width: 40, height: 0)
+        #expect(NotchGeometry.isPlausibleMenuBarFrame(itemFrame, onScreen: screen))
+    }
+
+    @Test func frameJustBelowTheBandBoundaryIsRejected() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let itemFrame = CGRect(x: 900, y: 941, width: 40, height: 0)   // maxY = 941, one point below the band
+        #expect(!NotchGeometry.isPlausibleMenuBarFrame(itemFrame, onScreen: screen))
+    }
 }

@@ -19,7 +19,7 @@ final class MenuBarCrushMonitor {
     struct Participant {
         let id: String
         let priority: Int
-        let frameMinX: () -> CGFloat?
+        let frame: () -> CGRect?
         let isVisible: () -> Bool
         let setHidden: (Bool) -> Void
     }
@@ -40,27 +40,27 @@ final class MenuBarCrushMonitor {
         MenuBarCrushMonitor(participants: [
             Participant(
                 id: "duck", priority: 0,
-                frameMinX: { [weak statusController] in statusController?.duckFrameMinX },
+                frame: { [weak statusController] in statusController?.duckFrame },
                 isVisible: { [weak statusController] in statusController?.duckIsVisible ?? false },
                 setHidden: { [weak statusController] hidden in statusController?.setDuckCrushHidden(hidden) }
             ),
             Participant(
                 id: "countdown", priority: 1,
-                frameMinX: { [weak statusController] in statusController?.countdownFrameMinX },
+                frame: { [weak statusController] in statusController?.countdownFrame },
                 isVisible: { [weak statusController] in statusController?.countdownIsVisible ?? false },
                 setHidden: { [weak statusController] hidden in statusController?.setCountdownCrushHidden(hidden) }
             ),
             Participant(
                 id: "temperature", priority: 2,
-                frameMinX: { [weak env] in env?.temperatureMenuBarItem?.button?.window?.frame.minX },
+                frame: { [weak env] in env?.temperatureMenuBarItem?.button?.window?.frame },
                 isVisible: { [weak env] in env?.temperatureMenuBarItem?.isVisible ?? false },
-                setHidden: { [weak env] hidden in env?.temperatureMenuBarItem?.isVisible = !hidden }
+                setHidden: { [weak env] hidden in env?.setTemperatureCrushHidden(hidden) }
             ),
             Participant(
                 id: "timer", priority: 3,
-                frameMinX: { [weak env] in env?.timeAwarenessMenuBarItem?.button?.window?.frame.minX },
+                frame: { [weak env] in env?.timeAwarenessMenuBarItem?.button?.window?.frame },
                 isVisible: { [weak env] in env?.timeAwarenessMenuBarItem?.isVisible ?? false },
-                setHidden: { [weak env] hidden in env?.timeAwarenessMenuBarItem?.isVisible = !hidden }
+                setHidden: { [weak env] hidden in env?.setTimeAwarenessCrushHidden(hidden) }
             ),
         ])
     }
@@ -80,20 +80,24 @@ final class MenuBarCrushMonitor {
     }
 
     private func tick() {
-        let notch = screenReader.currentLayout()?.span
+        guard let notch = screenReader.currentLayout() else {
+            clearStreak = 0
+            return
+        }
 
         var items: [MenuBarCrushGuard.Item] = []
         for p in participants {
-            guard let minX = p.frameMinX() else { continue }   // item not created yet
+            guard let frame = p.frame(),
+                  NotchGeometry.isPlausibleMenuBarFrame(frame, onScreen: notch.screen.frame) else { continue }
             let visible = p.isVisible()
             // Something external (e.g. the user re-enabling a toggle) made a
             // previously crush-hidden item visible again — drop our own
             // bookkeeping so we don't later fight that.
             if visible { crushHidden.remove(p.id) }
-            items.append(.init(id: p.id, priority: p.priority, isVisible: visible, frameMinX: minX))
+            items.append(.init(id: p.id, priority: p.priority, isVisible: visible, frameMinX: frame.minX))
         }
 
-        let decision = MenuBarCrushGuard.decide(items: items, notch: notch, clearStreak: clearStreak)
+        let decision = MenuBarCrushGuard.decide(items: items, notch: notch.span, clearStreak: clearStreak)
         switch decision.action {
         case .hide(let id):
             crushHidden.insert(id)
