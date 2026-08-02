@@ -54,13 +54,28 @@ import CoreGraphics
     @Test func crushedTopmostVisibleItemAloneIsIgnored() {
         // duck (topmost, priority 0) is crushed but nothing else is —
         // the "other than the single highest-priority visible one" exclusion
-        // means this alone never triggers a hide.
+        // means this alone never triggers a hide. But isClear should still
+        // reflect that duck IS crushed (even though it won't be hidden).
         let items = [
             item("duck", priority: 0, visible: true, minX: 700),      // crushed but excluded
             item("countdown", priority: 1, visible: true, minX: 900),
         ]
         let decision = MenuBarCrushGuard.decide(items: items, notch: notch, clearStreak: 0)
         #expect(decision.action == nil)
+        #expect(!decision.isClear)
+    }
+
+    @Test func duckCrushedAloneBlocksRevealDespiteHighClearStreak() {
+        // duck (topmost, priority 0) is crushed alone, and something is
+        // already hidden. Even though clearStreak is high (would normally
+        // trigger reveal), the crush on duck blocks it.
+        let items = [
+            item("duck", priority: 0, visible: true, minX: 700),        // crushed, but alone (topmost)
+            item("temperature", priority: 2, visible: false, minX: 1000),
+        ]
+        let decision = MenuBarCrushGuard.decide(items: items, notch: notch, clearStreak: 5)
+        #expect(decision.action == nil)
+        #expect(!decision.isClear)
     }
 
     @Test func clearWithHiddenCandidateDoesNotRevealBeforeTwoTicks() {

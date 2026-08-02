@@ -30,11 +30,12 @@ public enum MenuBarCrushGuard {
         case reveal(id: String)
     }
 
-    /// `isClear` is true when no visible item is currently crushed — callers
-    /// accumulate this across ticks to gate reveal with hysteresis. It stays
-    /// true even when there's nothing to reveal (nothing hidden, or notch is
-    /// absent) — "clear" describes the absence of a crush, not the presence
-    /// of a pending reveal.
+    /// `isClear` is true when no visible item is currently crushed — including
+    /// the topmost-priority item, even though the topmost is never itself a
+    /// hide target. Callers accumulate this across ticks to gate reveal with
+    /// hysteresis. It stays true even when there's nothing to reveal (nothing
+    /// hidden, or notch is absent) — "clear" describes the absence of a crush,
+    /// not the presence of a pending reveal.
     public struct Decision: Equatable, Sendable {
         public let action: Action?
         public let isClear: Bool
@@ -57,6 +58,9 @@ public enum MenuBarCrushGuard {
         let visible = items.filter(\.isVisible)
         let topPriority = visible.map(\.priority).min()
 
+        let anyVisibleCrushed = visible.contains {
+            NotchGeometry.isHiddenByNotch(itemMinX: $0.frameMinX, notch: notch)
+        }
         let crushedOthers = visible.contains {
             $0.priority != topPriority && NotchGeometry.isHiddenByNotch(itemMinX: $0.frameMinX, notch: notch)
         }
@@ -67,13 +71,13 @@ public enum MenuBarCrushGuard {
 
         let hidden = items.filter { !$0.isVisible }
         guard let revealCandidate = hidden.min(by: { $0.priority < $1.priority }) else {
-            return Decision(action: nil, isClear: true)
+            return Decision(action: nil, isClear: !anyVisibleCrushed)
         }
 
         let hysteresisTicks = 2
-        if clearStreak + 1 >= hysteresisTicks {
+        if !anyVisibleCrushed, clearStreak + 1 >= hysteresisTicks {
             return Decision(action: .reveal(id: revealCandidate.id), isClear: true)
         }
-        return Decision(action: nil, isClear: true)
+        return Decision(action: nil, isClear: !anyVisibleCrushed)
     }
 }
