@@ -21,12 +21,16 @@ struct QuackApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var env: AppEnvironment?
     private var statusController: StatusItemController?
+    private var crushMonitor: MenuBarCrushMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let env = AppEnvironment()
         self.env = env
-        statusController = StatusItemController(env: env)
+        let statusController = StatusItemController(env: env)
+        self.statusController = statusController
+        crushMonitor = MenuBarCrushMonitor.makeDefault(env: env, statusController: statusController)
+        crushMonitor?.start()
         env.showSettings()   // open Settings on first launch
     }
 
