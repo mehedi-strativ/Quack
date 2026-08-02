@@ -13,3 +13,6 @@ build/
 # SDD scratch (briefs, reports, review packages, ledger) — not part of the repo
 .superpowers/
 .gstack/
+
+# Local git worktrees used for isolated feature work
+.worktrees/
