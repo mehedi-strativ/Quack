@@ -99,6 +99,7 @@ final class MenuBarCrushMonitor {
             crushHidden.insert(id)
             participants.first { $0.id == id }?.setHidden(true)
         case .reveal(let id):
+            guard crushHidden.contains(id) else { break }
             crushHidden.remove(id)
             participants.first { $0.id == id }?.setHidden(false)
         case nil:
