@@ -15,6 +15,8 @@ final class StatusItemController {
     private let popover = NSPopover()
     private var cancellable: AnyCancellable?
     private var titleTimer: Timer?
+    private var duckCrushHidden = false
+    private var countdownCrushHidden = false
 
     private let countdownModel = MenuBarCountdownModel()
     private var countdownHost: NSHostingView<MenuBarCountdownView>!
@@ -63,12 +65,33 @@ final class StatusItemController {
         updateCountdown()
     }
 
+    /// Exposed for `MenuBarCrushMonitor` only.
+    var duckFrameMinX: CGFloat? { duckItem.button?.window?.frame.minX }
+    var duckIsVisible: Bool { duckItem.isVisible }
+    var countdownFrameMinX: CGFloat? { countdownItem.button?.window?.frame.minX }
+    var countdownIsVisible: Bool { countdownItem.isVisible }
+
+    /// Called by `MenuBarCrushMonitor`. Folds the override into
+    /// `updateCountdown()`'s own visibility logic rather than setting
+    /// `.isVisible` directly — that logic re-runs on a timer and on every
+    /// settings change, and would otherwise silently undo an external toggle.
+    func setDuckCrushHidden(_ hidden: Bool) {
+        duckCrushHidden = hidden
+        updateCountdown()
+    }
+
+    func setCountdownCrushHidden(_ hidden: Bool) {
+        countdownCrushHidden = hidden
+        updateCountdown()
+    }
+
     private func updateCountdown() {
         let s = env.settingsStore.settings
-        duckItem.isVisible = !s.hideDuckIcon
+        duckItem.isVisible = !s.hideDuckIcon && !duckCrushHidden
         let meeting = MeetingSelection.currentOrNext(from: env.meetingStore.upcoming, now: env.now)
 
-        guard s.menuBarCountdownEnabled,
+        guard !countdownCrushHidden,
+              s.menuBarCountdownEnabled,
               let title = CountdownFormatter.menuBarTitle(for: meeting, now: env.now,
                                                           horizon: Double(s.countdownLeadHours) * 3600) else {
             countdownItem.isVisible = false
