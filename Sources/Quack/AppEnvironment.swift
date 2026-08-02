@@ -53,6 +53,10 @@ final class AppEnvironment: ObservableObject {
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
 
+    /// Exposed for `MenuBarCrushMonitor` only — see Sources/Quack/MenuBar/MenuBarCrushMonitor.swift.
+    var temperatureMenuBarItem: NSStatusItem? { temperatureService.menuBarItem }
+    var timeAwarenessMenuBarItem: NSStatusItem? { timeAwarenessService.menuBarItem }
+
     init() {
         let settings = SettingsStore()
         // Calendar is always on now (its toggle was removed); it powers the

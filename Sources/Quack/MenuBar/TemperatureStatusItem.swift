@@ -19,6 +19,11 @@ final class TemperatureStatusItem: NSObject, ManagedService {
     private var cancellable: AnyCancellable?
     private var lastTempC: Double = -1
 
+    /// Read-only access to the real status item for `MenuBarCrushMonitor` —
+    /// it needs the live frame and toggles `.isVisible` directly (safe here:
+    /// nothing else in this file mutates `.isVisible` outside start()/stop()).
+    var menuBarItem: NSStatusItem? { statusItem }
+
     private let model = TemperatureModel()
     private let popover = NSPopover()
 

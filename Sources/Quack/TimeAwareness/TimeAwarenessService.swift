@@ -18,6 +18,8 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
     private var tracker = ActivityTracker()
     private let statusItem = TimeAwarenessStatusItem()
 
+    var menuBarItem: NSStatusItem? { statusItem.menuBarItem }
+
     private let historyStore = ActivityHistoryStore()
     /// In-memory day aggregates; today's entry includes the live session.
     private(set) var history = ActivityHistory()

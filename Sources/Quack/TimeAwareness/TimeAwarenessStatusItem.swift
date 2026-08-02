@@ -12,6 +12,11 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
     var snapshot: (() -> (total: TimeInterval, apps: [ActivityTracker.AppSlice]))?
 
     private var statusItem: NSStatusItem?
+
+    /// Read-only access for `MenuBarCrushMonitor` — see the equivalent note
+    /// on `TemperatureStatusItem.menuBarItem`.
+    var menuBarItem: NSStatusItem? { statusItem }
+
     private let menu = NSMenu()
 
     func show() {
