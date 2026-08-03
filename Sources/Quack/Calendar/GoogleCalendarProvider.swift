@@ -77,8 +77,11 @@ final class GoogleCalendarProvider: CalendarProvider, @unchecked Sendable {
         let colorMap = Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0.colorHex) })
 
         var allEvents: [MeetingEvent] = []
+        // Google returns both "...T10:00:00Z" and "...T10:00:00.000Z" — try both.
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoFormatterNoFrac = ISO8601DateFormatter()
+        isoFormatterNoFrac.formatOptions = [.withInternetDateTime]
 
         for cal in selected {
             let calEvents = try await fetchEventsForCalendar(
@@ -86,6 +89,7 @@ final class GoogleCalendarProvider: CalendarProvider, @unchecked Sendable {
                 token: token,
                 window: window,
                 isoFormatter: isoFormatter,
+                isoFormatterNoFrac: isoFormatterNoFrac,
                 colorMap: colorMap
             )
             allEvents.append(contentsOf: calEvents)
@@ -112,7 +116,8 @@ final class GoogleCalendarProvider: CalendarProvider, @unchecked Sendable {
 
         let decoded = try JSONDecoder().decode(GoogleCalendarListResponse.self, from: data)
         return decoded.items?.map {
-            GoogleCalendarInfo(id: $0.id, title: $0.summary, colorHex: $0.backgroundColor)
+            GoogleCalendarInfo(id: $0.id, title: $0.summary, colorHex: $0.backgroundColor,
+                               isPrimary: $0.primary ?? false)
         } ?? []
     }
 
@@ -121,6 +126,7 @@ final class GoogleCalendarProvider: CalendarProvider, @unchecked Sendable {
         token: String,
         window: DateInterval,
         isoFormatter: ISO8601DateFormatter,
+        isoFormatterNoFrac: ISO8601DateFormatter,
         colorMap: [String: String?]
     ) async throws -> [MeetingEvent] {
         let dateOnlyFormatter = DateFormatter()
@@ -173,7 +179,7 @@ final class GoogleCalendarProvider: CalendarProvider, @unchecked Sendable {
         } while pageToken != nil
 
         let colorHex = colorMap[calendarID] ?? nil
-        return allItems.compactMap { mapEvent($0, calendarID: calendarID, calendarColorHex: colorHex, isoFormatter: isoFormatter, dateOnlyFormatter: dateOnlyFormatter) }
+        return allItems.compactMap { mapEvent($0, calendarID: calendarID, calendarColorHex: colorHex, isoFormatter: isoFormatter, isoFormatterNoFrac: isoFormatterNoFrac, dateOnlyFormatter: dateOnlyFormatter) }
     }
 
     private func mapEvent(
@@ -181,12 +187,13 @@ final class GoogleCalendarProvider: CalendarProvider, @unchecked Sendable {
         calendarID: String,
         calendarColorHex: String?,
         isoFormatter: ISO8601DateFormatter,
+        isoFormatterNoFrac: ISO8601DateFormatter,
         dateOnlyFormatter: DateFormatter
     ) -> MeetingEvent? {
         guard event.status != "cancelled" else { return nil }
 
-        let startDate = parseDate(event.start, isoFormatter: isoFormatter, dateOnlyFormatter: dateOnlyFormatter)
-        let endDate = parseDate(event.end, isoFormatter: isoFormatter, dateOnlyFormatter: dateOnlyFormatter)
+        let startDate = parseDate(event.start, isoFormatter: isoFormatter, isoFormatterNoFrac: isoFormatterNoFrac, dateOnlyFormatter: dateOnlyFormatter)
+        let endDate = parseDate(event.end, isoFormatter: isoFormatter, isoFormatterNoFrac: isoFormatterNoFrac, dateOnlyFormatter: dateOnlyFormatter)
         guard let start = startDate, let end = endDate else { return nil }
 
         let isAllDay = event.start.dateTime == nil && event.start.date != nil
@@ -213,9 +220,10 @@ final class GoogleCalendarProvider: CalendarProvider, @unchecked Sendable {
         )
     }
 
-    private func parseDate(_ dt: GoogleEventDateTime, isoFormatter: ISO8601DateFormatter, dateOnlyFormatter: DateFormatter) -> Date? {
+    private func parseDate(_ dt: GoogleEventDateTime, isoFormatter: ISO8601DateFormatter,
+                           isoFormatterNoFrac: ISO8601DateFormatter, dateOnlyFormatter: DateFormatter) -> Date? {
         if let dateTime = dt.dateTime {
-            return isoFormatter.date(from: dateTime)
+            return isoFormatter.date(from: dateTime) ?? isoFormatterNoFrac.date(from: dateTime)
         }
         if let date = dt.date {
             return dateOnlyFormatter.date(from: date)

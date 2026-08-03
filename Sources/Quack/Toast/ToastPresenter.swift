@@ -33,13 +33,16 @@ final class ToastPresenter {
     /// Shows a toast. When `dismissAfter` is nil the toast persists until the
     /// user joins or closes it (used for the "join now" toast).
     func show(_ item: ToastItem, dismissAfter seconds: TimeInterval?) {
-        let panel = makePanel(for: item)
+        let panel = makePanel(for: item, autoDismiss: seconds)
         let active = ActiveToast(item: item, panel: panel)
         toasts.insert(active, at: 0)
         reflow()
+        // Panel frames are never animated — overlapping in-flight frame
+        // animations used to leave two toasts stacked on the same slot. The
+        // entrance itself (scale + fade) happens inside `ToastView`.
         panel.alphaValue = 0
         panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.18; panel.animator().alphaValue = 1 }
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.12; panel.animator().alphaValue = 1 }
 
         if let seconds {
             let work = DispatchWorkItem { [weak self] in self?.dismiss(active) }
@@ -61,7 +64,7 @@ final class ToastPresenter {
         reflow()
     }
 
-    private func makePanel(for item: ToastItem) -> NSPanel {
+    private func makePanel(for item: ToastItem, autoDismiss: TimeInterval?) -> NSPanel {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: width, height: 84),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -77,6 +80,7 @@ final class ToastPresenter {
         // SwiftUI colorScheme all track light/dark mode automatically.
         let view = ToastView(
             item: item,
+            autoDismiss: autoDismiss,
             onJoin: { [weak self, weak panel] in
                 if let url = item.joinURL { NSWorkspace.shared.open(url) }
                 if let panel { self?.dismissPanel(panel) }
@@ -109,8 +113,7 @@ final class ToastPresenter {
         var y = screen.maxY - 16
         for toast in toasts {
             let size = toast.panel.frame.size
-            let x = screen.maxX - size.width - 16
-            toast.panel.setFrameOrigin(NSPoint(x: x, y: y - size.height))
+            toast.panel.setFrameOrigin(NSPoint(x: screen.maxX - size.width - 16, y: y - size.height))
             y -= size.height + gap
         }
     }
@@ -118,48 +121,63 @@ final class ToastPresenter {
 
 private struct ToastView: View {
     let item: ToastItem
+    let autoDismiss: TimeInterval?
     let onJoin: () -> Void
     let onClose: () -> Void
+
     @State private var hovering = false
+    @State private var pulsing = false
+    @State private var drain: CGFloat = 1
+    @State private var appeared = false
+
+    private let radius: CGFloat = 18
+    /// Calendar colour when known, otherwise the system accent. One accent for
+    /// the whole card — rail, badge, pill and Join button all share it.
+    private var accent: Color { Color(hex: item.colorHex) ?? .accentColor }
 
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            ProviderBadge(provider: item.provider, accent: accent)
+            VStack(alignment: .leading, spacing: 5) {
                 Text(item.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14.5, weight: .semibold))
                     .lineLimit(1)
-                HStack(spacing: 5) {
-                    Text(item.relativeText).foregroundStyle(Color.accentColor)
-                    Text("·").foregroundStyle(.secondary)
-                    Text(item.timeRange).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    relativePill
+                    Text(item.timeRange)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
-                .font(.system(size: 13))
                 .fixedSize()   // time line is always shown in full
             }
-            Spacer(minLength: 14)
+            Spacer(minLength: 12)
             if item.joinable, item.joinURL != nil {
-                JoinButton(provider: item.provider, onJoin: onJoin)
+                JoinButton(provider: item.provider, accent: accent, onJoin: onJoin)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 18)
+        .padding(.leading, 13)
+        .padding(.trailing, 13)
+        .padding(.vertical, 12)
         // Size to content (up to a cap) so the name and time aren't truncated.
         .frame(minWidth: 300, maxWidth: 480, alignment: .leading)
         .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
-        .overlay(alignment: .topLeading) {
-            if hovering {
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 17))
-                        .foregroundStyle(.secondary)
-                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
-                }
-                .buttonStyle(.plain)
-                // Straddle the top-left corner like the native notification ✕.
-                .offset(x: -8, y: -8)
-            }
+        // Calendar-colour rail, like a calendar event chip.
+        .overlay(alignment: .leading) {
+            Capsule().fill(accent).frame(width: 3).padding(.vertical, 11).padding(.leading, 4)
+        }
+        .overlay(alignment: .bottom) { drainBar }
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+        )
+        .overlay(alignment: .topLeading) { closeButton }
+        // Entrance: springs up to full size from slightly small, so nothing can
+        // overflow (and be clipped by) the panel bounds.
+        .scaleEffect(appeared ? 1 : 0.93, anchor: .topTrailing)
+        .opacity(appeared ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) { appeared = true }
         }
         // Outer margin so the corner-straddling ✕ isn't clipped by the panel.
         .padding(8)
@@ -170,46 +188,107 @@ private struct ToastView: View {
             }
         }
     }
+
+    /// "now" / "in 10 min" — a tinted pill, with a pulsing dot once the meeting
+    /// is live.
+    private var relativePill: some View {
+        HStack(spacing: 4.5) {
+            if item.isStart {
+                Circle()
+                    .fill(accent)
+                    .frame(width: 5, height: 5)
+                    .opacity(pulsing ? 0.25 : 1)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                            pulsing = true
+                        }
+                    }
+            }
+            Text(item.relativeText)
+        }
+        .font(.system(size: 11.5, weight: .semibold))
+        .foregroundStyle(accent)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2.5)
+        .background(Capsule().fill(accent.opacity(0.16)))
+    }
+
+    /// Time-left indicator for auto-dismissing toasts.
+    @ViewBuilder private var drainBar: some View {
+        if let autoDismiss {
+            GeometryReader { geo in
+                Capsule()
+                    .fill(accent.opacity(0.55))
+                    .frame(width: geo.size.width * drain)
+            }
+            .frame(height: 2.5)
+            .onAppear { withAnimation(.linear(duration: autoDismiss)) { drain = 0 } }
+        }
+    }
+
+    private var closeButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(.system(size: 8.5, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        // Straddle the top-left corner like the native notification ✕.
+        .offset(x: -7, y: -7)
+        .opacity(hovering ? 1 : 0)
+        .animation(.easeOut(duration: 0.15), value: hovering)
+    }
 }
 
-/// A pill "Join <provider>" button that opens the meeting in the browser.
+/// Rounded provider glyph tile.
+private struct ProviderBadge: View {
+    let provider: MeetingProvider
+    let accent: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(accent.opacity(0.14))
+            .frame(width: 32, height: 32)
+            .overlay(
+                Image(systemName: provider.glyph)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(accent)
+            )
+    }
+}
+
+/// A filled "Join <provider>" button that opens the meeting.
 private struct JoinButton: View {
     let provider: MeetingProvider
+    let accent: Color
     let onJoin: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         Button(action: onJoin) {
             HStack(spacing: 6) {
-                Image(systemName: "video.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(provider.tint)
+                Image(systemName: "video.fill").font(.system(size: 11, weight: .bold))
                 Text(provider.joinLabel)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(accent.opacity(hovering ? 1 : 0.9)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .fixedSize()
-        .background(Color.primary.opacity(0.08))
-        .clipShape(Capsule())
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
+        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
     }
 }
 
 private extension MeetingProvider {
-    /// Brand-ish tint for the join icon. (Exact provider logos would need bundled
-    /// image assets; this approximates with the provider's brand color.)
-    var tint: Color {
-        switch self {
-        case .googleMeet: return Color(red: 0.20, green: 0.66, blue: 0.33)   // Google green #34A853
-        case .zoom: return Color(red: 0.18, green: 0.46, blue: 0.96)
-        case .teams: return Color(red: 0.36, green: 0.36, blue: 0.84)
-        case .webex: return Color(red: 0.0, green: 0.6, blue: 0.55)
-        case .generic: return .accentColor
-        }
-    }
+    var glyph: String { self == .generic ? "calendar" : "video.fill" }
 }
 

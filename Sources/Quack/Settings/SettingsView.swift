@@ -346,20 +346,12 @@ private struct SpotlightChip: View {
     }
 }
 
-/// Meetings tab: the agenda up top, then the calendar-sync and reminder
-/// settings that used to live under the old Settings tab — everything about
-/// meetings in one place.
+/// Meetings tab: the month agenda, full height. Calendar-sync and reminder
+/// settings live under the Settings tab.
 private struct MeetingsPane: View {
     var body: some View {
-        VSplitView {
-            CalendarAgendaView()
-                .frame(minHeight: 220)
-            Form {
-            }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .frame(minHeight: 0)
-        }
+        CalendarAgendaView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -674,8 +666,8 @@ private struct CalendarAgendaView: View {
                 // commits it on a later run-loop turn), so a `scrollTo` called
                 // synchronously here targets an id that doesn't exist in the
                 // CURRENT tree and silently no-ops. Deferring past that commit
-                // (plus giving the enclosing VSplitView pane a layout pass)
-                // is why this needs a hop, not a bare call.
+                // (plus giving the pane a layout pass) is why this needs a
+                // hop, not a bare call.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     proxy.scrollTo(cal.startOfDay(for: Date()), anchor: .top)
                 }
@@ -899,6 +891,7 @@ private struct CalendarSection: View {
     @State private var authInProgress = false
     @State private var authError: String?
     @State private var isAuthed = false
+    @State private var accountEmail: String?
 
     var body: some View {
         let s = env.settingsStore
@@ -916,6 +909,7 @@ private struct CalendarSection: View {
 
         Section {
             if isAuthed {
+                GoogleAccountCard(email: accountEmail) { Task { await signOut() } }
                 Toggle("Sync Google Calendar", isOn: s.binding(\.useGoogle))
                 if s.settings.useGoogle {
                     if googleCalendars.isEmpty {
@@ -937,13 +931,7 @@ private struct CalendarSection: View {
                     .disabled(authInProgress)
             }
         } header: {
-            HStack {
-                Text("Calendar accounts")
-                Spacer()
-                if isAuthed {
-                    Button("Sign out") { Task { await signOut() } }.buttonStyle(.link)
-                }
-            }
+            Text("Calendar accounts")
         } footer: {
             if let error = authError {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red)
@@ -982,11 +970,13 @@ private struct CalendarSection: View {
         await env.signOutFromGoogle()
         isAuthed = false
         googleCalendars = []
+        accountEmail = nil
     }
 
     private func loadCalendars() async {
         guard await env.isGoogleAuthenticated else { return }
         googleCalendars = await env.availableGoogleCalendars()
+        accountEmail = googleCalendars.first(where: \.isPrimary)?.id
     }
 
     private func googleCalendarBinding(_ id: String) -> Binding<Bool> {
@@ -1000,6 +990,49 @@ private struct CalendarSection: View {
                 }
             }
         )
+    }
+}
+
+// MARK: - Google account card
+
+private struct GoogleAccountCard: View {
+    let email: String?
+    let onSignOut: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Google "G" logo mark
+            ZStack {
+                Circle().fill(Color(nsColor: .windowBackgroundColor))
+                    .frame(width: 32, height: 32)
+                    .overlay(Circle().stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
+                Text("G")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(red: 0.26, green: 0.52, blue: 0.96),
+                                     Color(red: 0.92, green: 0.26, blue: 0.21)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Google Account")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                if let email {
+                    Text(email)
+                        .font(.system(size: 13, weight: .medium))
+                } else {
+                    Text("Loading…")
+                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            Button("Sign out", action: onSignOut)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding(.vertical, 4)
     }
 }
 
