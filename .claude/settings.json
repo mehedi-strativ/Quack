@@ -1,0 +1,5 @@
+{
+  "env": {
+    "OTEL_RESOURCE_ATTRIBUTES": "project.name=rnd-learning,team.name=strativ-devs,client.name=strativ"
+  }
+}
