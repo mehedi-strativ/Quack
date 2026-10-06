@@ -4,9 +4,9 @@ import Combine
 import QuackKit
 
 /// Owns the menu-bar items: a **duck** item (icon only) and a separate
-/// **countdown** item (a 3px rounded calendar-colored bar + the meeting
-/// countdown). Both open the same dropdown popover. The CPU-temperature item is
-/// a separate controller; this keeps each piece as its own menu-bar element.
+/// **countdown** item (meeting title over the countdown). Both open the same
+/// dropdown popover. The CPU-temperature item is a separate controller; this
+/// keeps each piece as its own menu-bar element.
 @MainActor
 final class StatusItemController {
     private let env: AppEnvironment
@@ -69,13 +69,13 @@ final class StatusItemController {
         let meeting = MeetingSelection.currentOrNext(from: env.meetingStore.upcoming, now: env.now)
 
         guard s.menuBarCountdownEnabled,
-              let title = CountdownFormatter.menuBarTitle(for: meeting, now: env.now,
+              let lines = CountdownFormatter.menuBarLines(for: meeting, now: env.now,
                                                           horizon: Double(s.countdownLeadHours) * 3600) else {
             countdownItem.isVisible = false
             return
         }
-        countdownModel.text = title
-        countdownModel.colorHex = meeting?.calendarColorHex
+        countdownModel.title = lines.title
+        countdownModel.detail = lines.detail
         countdownItem.isVisible = true
 
         // Size the item to the hosted view.
@@ -110,25 +110,24 @@ final class StatusItemController {
 }
 
 final class MenuBarCountdownModel: ObservableObject {
-    @Published var text: String = ""
-    @Published var colorHex: String?
+    @Published var title: String = ""
+    @Published var detail: String = ""
 }
 
-/// The countdown menu-bar element: a 3px rounded calendar-colored left bar
-/// followed by the meeting countdown text.
+/// The countdown menu-bar element: a compact two-line stack, meeting title
+/// over the countdown.
 struct MenuBarCountdownView: View {
     @ObservedObject var model: MenuBarCountdownModel
 
     var body: some View {
-        HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .fill(Color.white)
-                .frame(width: 3, height: 15)
-            Text(model.text)
-                .font(.system(size: 13))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: -1) {
+            Text(model.title)
+                .font(.system(size: 9, weight: .semibold))
+            Text(model.detail)
+                .font(.system(size: 9, weight: .ultraLight))   // CSS 200
         }
+        .foregroundStyle(.primary)
+        .lineLimit(1)
         .padding(.horizontal, 5)
         .fixedSize()
         .allowsHitTesting(false)   // let the status button receive the click

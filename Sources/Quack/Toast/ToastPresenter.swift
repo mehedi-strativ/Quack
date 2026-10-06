@@ -132,7 +132,7 @@ private struct ToastView: View {
 
     private let radius: CGFloat = 18
     /// Calendar colour when known, otherwise the system accent. One accent for
-    /// the whole card — rail, badge, pill and Join button all share it.
+    /// the whole card — badge, pill and Join button all share it.
     private var accent: Color { Color(hex: item.colorHex) ?? .accentColor }
 
     var body: some View {
@@ -161,10 +161,6 @@ private struct ToastView: View {
         // Size to content (up to a cap) so the name and time aren't truncated.
         .frame(minWidth: 300, maxWidth: 480, alignment: .leading)
         .background(Color(nsColor: .windowBackgroundColor))
-        // Calendar-colour rail, like a calendar event chip.
-        .overlay(alignment: .leading) {
-            Capsule().fill(accent).frame(width: 3).padding(.vertical, 11).padding(.leading, 4)
-        }
         .overlay(alignment: .bottom) { drainBar }
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(

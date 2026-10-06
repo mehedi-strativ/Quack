@@ -21,13 +21,25 @@ public enum CountdownFormatter {
     ) -> String? {
         guard let meeting else { return nil }
         let title = truncate(meeting.title)
-        if meeting.isInProgress(at: now) {
-            return "\(title) · now"
-        }
         let remaining = meeting.start.timeIntervalSince(now)
-        guard remaining > 0 else { return "\(title) · now" }
+        if meeting.isInProgress(at: now) || remaining <= 0 { return "\(title) · now" }
         guard remaining <= horizon else { return nil }
         return "\(title) · in \(menuBarRelative(remaining))"
+    }
+
+    /// Two-line menu-bar form: the (truncated) title, and `"starting in 4m"`
+    /// or `"happening now"` beneath it. `nil` under the same rules as `menuBarTitle`.
+    public static func menuBarLines(
+        for meeting: MeetingEvent?,
+        now: Date,
+        horizon: TimeInterval = menuBarHorizon
+    ) -> (title: String, detail: String)? {
+        guard let meeting else { return nil }
+        let title = truncate(meeting.title)
+        let remaining = meeting.start.timeIntervalSince(now)
+        if meeting.isInProgress(at: now) || remaining <= 0 { return (title, "happening now") }
+        guard remaining <= horizon else { return nil }
+        return (title, "starting in \(menuBarRelative(remaining))")
     }
 
     /// Menu-bar countdown text: minute precision under 2 hours, then half-hour

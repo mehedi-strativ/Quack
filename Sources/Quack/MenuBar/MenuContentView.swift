@@ -3,8 +3,8 @@ import AppKit
 import QuackKit
 
 /// The dropdown (window-style popover) shown when the menu-bar item is clicked.
-/// Styled after a calendar menu: upcoming meetings grouped by day with colored
-/// dots, then Settings and Quit. All-day events appear in the list.
+/// Styled after a calendar menu: upcoming meetings grouped by day, then
+/// Settings and Quit. All-day events appear in the list.
 struct MenuContentView: View {
     @EnvironmentObject var env: AppEnvironment
 
@@ -86,7 +86,7 @@ struct MenuContentView: View {
     }()
 }
 
-/// One meeting row: colored calendar bar, time (or "All day"), title.
+/// One meeting row: time (or "All day"), title.
 /// Clicking a row with a join link opens it.
 private struct MeetingRow: View {
     @EnvironmentObject var env: AppEnvironment
@@ -98,9 +98,6 @@ private struct MeetingRow: View {
     var body: some View {
         Button { if let joinURL { NSWorkspace.shared.open(joinURL) } } label: {
             HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color(hex: event.calendarColorHex) ?? .accentColor)
-                    .frame(width: 3, height: 16)
                 Text(timeText)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
@@ -120,8 +117,7 @@ private struct MeetingRow: View {
         }
         .buttonStyle(.plain)
         .instantHover($hovering)
-        // VoiceOver gets the whole story; the color bar alone identifies the
-        // calendar only visually.
+        // VoiceOver reads the row as one summary.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint(joinURL != nil ? "Opens the meeting link" : "")
