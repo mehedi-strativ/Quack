@@ -26,6 +26,7 @@ final class AgentsService: ObservableObject {
 
     private let sources: [Source]
     private var watchers: [ClaudeStateWatcher] = []
+    private let codexWatcher = CodexStateWatcher()
     private var pruneTimer: Timer?
     private var started = false
 
@@ -44,6 +45,8 @@ final class AgentsService: ObservableObject {
             watcher.start(directory: source.sessionsDirectory)
             return watcher
         }
+        codexWatcher.onChange = { [weak self] in self?.refreshNow() }
+        codexWatcher.start(directory: CodexSessionReader.sessionsDirectory)
         let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshNow() }
         }
@@ -57,15 +60,34 @@ final class AgentsService: ObservableObject {
         started = false
         watchers.forEach { $0.stop() }
         watchers = []
+        codexWatcher.stop()
         pruneTimer?.invalidate(); pruneTimer = nil
         agents = []
     }
 
     func refreshNow() {
-        integrationInstalled = sources.contains { $0.isInstalled() }
+        integrationInstalled = sources.contains { $0.isInstalled() } || CodexSessionReader.isAvailable()
         let files = sources.flatMap { readSessionFiles(in: $0.sessionsDirectory) }
         let now = Date()
-        agents = AgentReducer.snapshots(from: files, now: now)
+        agents = sort(
+            AgentReducer.snapshots(from: files, now: now)
+                + CodexSessionReader.snapshots(now: now)
+        )
+    }
+
+    private func sort(_ agents: [AgentSnapshot]) -> [AgentSnapshot] {
+        agents.sorted { a, b in
+            if rank(a.status) != rank(b.status) { return rank(a.status) < rank(b.status) }
+            return a.lastUpdate > b.lastUpdate
+        }
+    }
+
+    private func rank(_ status: AgentStatus) -> Int {
+        switch status {
+        case .needsYou: return 0
+        case .working: return 1
+        case .idle: return 2
+        }
     }
 
     private func readSessionFiles(in dir: URL) -> [SessionFiles] {

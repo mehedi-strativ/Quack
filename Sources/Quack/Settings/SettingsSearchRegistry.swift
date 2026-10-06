@@ -73,7 +73,7 @@ enum SettingsSearchRegistry {
         // Notch
         entry("notch.media", "Show the media player in the notch", .notch, "Notch panel",
               ["now playing", "music", "spotify", "controls", "dynamic island"]),
-        entry("notch.agents", "Show Claude Code agents in the notch", .notch, "Notch panel",
+        entry("notch.agents", "Show Codex, Claude Code, and opencode agents in the notch", .notch, "Notch panel",
               ["ai", "progress", "tasks"]),
 
         // General

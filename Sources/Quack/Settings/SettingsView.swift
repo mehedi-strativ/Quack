@@ -1630,10 +1630,12 @@ private struct NotchSection: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
             Toggle("Show coding agents in the notch", isOn: s.binding(\.notchAgentsEnabled))
-            Text("Live status of your Claude Code and opencode sessions: which agents are working, which need you, and your usage limits.")
+            Text("Live status of your Codex, Claude Code, and opencode sessions: which agents are working, which need you, and your usage limits.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
 
             if s.settings.notchAgentsEnabled {
+                Text("Codex sessions are detected automatically from ~/.codex. Claude Code and opencode need their integrations enabled below.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
                 HStack {
                     if claudeInstalled {
                         Text("Claude integration installed.")
