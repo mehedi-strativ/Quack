@@ -14,6 +14,8 @@ final class NotchContentViewModel: ObservableObject {
     @Published var mediaEnabled = false
     @Published var agentsEnabled = false
     @Published var integrationInstalled = false
+    @Published var overflowItems: [MenuBarOverflowService.Item] = []
+    @Published var isOverflowPinned = false
     /// Real notch height for this screen; view pads content below the cutout.
     @Published var contentTopInset: CGFloat = 0
 
@@ -24,9 +26,10 @@ final class NotchContentViewModel: ObservableObject {
     var onAgentTap: ((AgentSnapshot) -> Void)?
     /// Opens Quack's Settings window (the duck button in the notch header).
     var onOpenQuack: (() -> Void)?
+    var onToggleOverflowPin: (() -> Void)?
 
     var needsYouCount: Int { agents.filter { $0.status == .needsYou }.count }
     var activeCount: Int { agents.filter { $0.status != .idle }.count }
     /// Ambient peek shows only when the agents zone is on and something is live.
-    var showsPeek: Bool { agentsEnabled && activeCount > 0 }
+    var showsPeek: Bool { (agentsEnabled && activeCount > 0) || !overflowItems.isEmpty }
 }

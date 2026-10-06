@@ -6,6 +6,7 @@ import QuackKit
 /// `TemperatureStatusItem`'s create-once / toggle-visibility pattern.
 @MainActor
 final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
+    private let overflow: MenuBarOverflowService
     var onReset: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     /// Pulled when the menu opens (and for renders) — the service owns state.
@@ -13,6 +14,11 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private let menu = NSMenu()
+
+    init(overflow: MenuBarOverflowService) {
+        self.overflow = overflow
+        super.init()
+    }
 
     func show() {
         if statusItem == nil {
@@ -31,19 +37,28 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
             menu.autoenablesItems = false
             item.menu = menu
             statusItem = item
+            overflow.register(
+                id: "quack.timeawareness", title: "Activity timer", systemImage: "hourglass", priority: 20,
+                statusItem: item, activate: { [weak self] in self?.activate() }
+            )
         }
-        statusItem?.isVisible = true
+        overflow.setSourceVisible(true, id: "quack.timeawareness")
         render(total: snapshot?().total ?? 0)
     }
 
     func hide() {
-        statusItem?.isVisible = false   // hide, don't remove (keeps menu-bar layout stable)
+        overflow.setSourceVisible(false, id: "quack.timeawareness")
     }
 
     func render(total: TimeInterval) {
         guard let button = statusItem?.button else { return }
         button.title = " " + ActivityFormat.compact(total)
+        overflow.update(id: "quack.timeawareness", title: button.title.trimmingCharacters(in: .whitespaces))
         tightenWidth(button)
+    }
+
+    private func activate() {
+        statusItem?.button?.performClick(nil)
     }
 
     /// Rebuilt on every open so times are current.

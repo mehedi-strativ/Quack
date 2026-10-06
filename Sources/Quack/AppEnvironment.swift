@@ -44,6 +44,7 @@ final class AppEnvironment: ObservableObject {
     private let hotkeyService: HotkeyMonitor
     private let dockPinchService: DockPinchMonitor
     private let temperatureService: TemperatureStatusItem
+    let menuBarOverflow: MenuBarOverflowService
     private let notchService: NotchService
     private let mouseService: MouseService
     private let timeAwarenessService: TimeAwarenessService
@@ -91,17 +92,20 @@ final class AppEnvironment: ObservableObject {
         self.meetingStore = store
         self.brightnessController = brightness
 
+        self.menuBarOverflow = MenuBarOverflowService()
         self.calendarService = CalendarRefreshService(store: store, permissions: permissions)
         self.reminderScheduler = ReminderScheduler(store: store, settings: settings, toasts: toasts, sound: quackSound)
         self.cursorService = CursorBrightnessService(controller: brightness, settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.gestureService = GestureMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
         self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
-        self.temperatureService = TemperatureStatusItem(settings: settings)
+        self.temperatureService = TemperatureStatusItem(settings: settings, overflow: menuBarOverflow)
         self.notchService = NotchService(settings: settings, permissions: permissions,
-                                          claudeInstaller: claudeInstaller, opencodeInstaller: opencodeInstaller)
+                                          claudeInstaller: claudeInstaller, opencodeInstaller: opencodeInstaller,
+                                          overflow: menuBarOverflow)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
-        self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
+        self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts,
+                                                         overflow: menuBarOverflow)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -112,7 +116,6 @@ final class AppEnvironment: ObservableObject {
             .windowShortcuts: hotkeyService,
             .dockPinch: dockPinchService,
             .temperature: temperatureService,
-            .notch: notchService,
             .mouse: mouseService,
             .timeAwareness: timeAwarenessService,
         ]
@@ -133,6 +136,10 @@ final class AppEnvironment: ObservableObject {
 
         permissions.refreshAll()
         coordinator.activate()
+        // The notch panel is also the host for the always-available overflow
+        // rail, so its shell must run even when media/agent zones are disabled.
+        menuBarOverflow.start()
+        notchService.start()
 
         // Apply the saved appearance app-wide now, and re-apply whenever it
         // changes. Setting `NSApp.appearance` affects the settings window, the

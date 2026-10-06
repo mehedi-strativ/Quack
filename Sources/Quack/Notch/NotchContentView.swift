@@ -27,6 +27,9 @@ struct NotchContentView: View {
     private var expanded: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: model.contentTopInset)
+            if !model.overflowItems.isEmpty {
+                overflowZone
+            }
             if model.agentsEnabled {
                 VStack(alignment: .leading, spacing: 10) {
                     NotchHeaderView(model: model)
@@ -52,6 +55,57 @@ struct NotchContentView: View {
         .foregroundStyle(.white)
     }
 
+    private var overflowZone: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Hidden from menu bar", systemImage: "ellipsis.circle")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(NotchTheme.textSecondary)
+                Spacer(minLength: 0)
+                Button { model.onToggleOverflowPin?() } label: {
+                    Image(systemName: model.isOverflowPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(NotchTheme.textSecondary)
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .help(model.isOverflowPinned ? "Unpin overflow rail" : "Keep overflow rail open")
+            }
+
+            HStack(spacing: 6) {
+                ForEach(model.overflowItems) { item in
+                    Button { item.activate() } label: {
+                        HStack(spacing: 5) {
+                            if let image = item.image {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 14, height: 14)
+                            } else if let systemImage = item.systemImage {
+                                Image(systemName: systemImage)
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            Text(item.title)
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(NotchTheme.textPrimary)
+                        .padding(.horizontal, 8)
+                        .frame(height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(NotchTheme.card)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(item.title)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+    }
+
     /// Footer with the duck button that opens Quack's Settings.
     @ViewBuilder
     private var quackFooterRow: some View {
@@ -73,7 +127,7 @@ struct NotchContentView: View {
             HStack(spacing: 6) {
                 Image(systemName: "asterisk").font(.system(size: 10, weight: .bold))
                     .foregroundStyle(NotchTheme.orange)
-                Text("Enable Claude Code or opencode integration in Quack Settings")
+                Text("Enable coding agents in Quack Settings")
                     .font(.system(size: 11)).foregroundStyle(NotchTheme.textMuted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,6 +157,19 @@ struct NotchContentView: View {
     private var peek: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
+                if !model.overflowItems.isEmpty {
+                    HStack(spacing: 3) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 8, weight: .bold))
+                        Text("\(model.overflowItems.count)")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(NotchTheme.orangeSoft)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(NotchTheme.orangeSoft.opacity(0.14)))
+                    .accessibilityLabel("\(model.overflowItems.count) hidden menu items")
+                }
                 ForEach(model.agents.filter { $0.status != .idle }.prefix(6)) { agent in
                     Circle()
                         .fill(NotchTheme.statusColor(agent.status))
@@ -114,5 +181,18 @@ struct NotchContentView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(peekAccessibilityLabel)
+    }
+
+    private var peekAccessibilityLabel: String {
+        var parts: [String] = []
+        if model.activeCount > 0 {
+            parts.append("\(model.activeCount) active agents")
+        }
+        if !model.overflowItems.isEmpty {
+            parts.append("\(model.overflowItems.count) hidden menu items")
+        }
+        return parts.joined(separator: ", ")
     }
 }

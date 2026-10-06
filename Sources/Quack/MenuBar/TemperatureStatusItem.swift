@@ -11,6 +11,7 @@ import CSMC
 @MainActor
 final class TemperatureStatusItem: NSObject, ManagedService {
     private let settings: SettingsStore
+    private let overflow: MenuBarOverflowService
     /// Set by AppEnvironment after construction (opens the Settings window).
     var onOpenSettings: (() -> Void)?
 
@@ -22,8 +23,9 @@ final class TemperatureStatusItem: NSObject, ManagedService {
     private let model = TemperatureModel()
     private let popover = NSPopover()
 
-    init(settings: SettingsStore) {
+    init(settings: SettingsStore, overflow: MenuBarOverflowService) {
         self.settings = settings
+        self.overflow = overflow
         super.init()
     }
 
@@ -52,8 +54,12 @@ final class TemperatureStatusItem: NSObject, ManagedService {
                 rootView: TemperaturePopover(model: model) { [weak self] in self?.openSettings() }
             )
             statusItem = item
+            overflow.register(
+                id: "quack.temperature", title: "Temperature", systemImage: "flame.fill", priority: 40,
+                statusItem: item, activate: { [weak self] in self?.togglePopover() }
+            )
         }
-        statusItem?.isVisible = true
+        overflow.setSourceVisible(true, id: "quack.temperature")
 
         // Re-render immediately when the unit toggle changes.
         cancellable = settings.objectWillChange
@@ -71,7 +77,7 @@ final class TemperatureStatusItem: NSObject, ManagedService {
         timer?.invalidate(); timer = nil
         cancellable = nil
         if popover.isShown { popover.performClose(nil) }
-        statusItem?.isVisible = false   // hide, don't remove (keeps the layout stable)
+        overflow.setSourceVisible(false, id: "quack.temperature")
     }
 
     @objc private func togglePopover() {
@@ -120,6 +126,7 @@ final class TemperatureStatusItem: NSObject, ManagedService {
         } else {
             button.title = " --"
         }
+        overflow.update(id: "quack.temperature", title: button.title.trimmingCharacters(in: .whitespaces))
         tightenWidth(button)
     }
 

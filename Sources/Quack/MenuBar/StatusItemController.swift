@@ -45,6 +45,18 @@ final class StatusItemController {
             button.setAccessibilityLabel("Quack settings")
         }
 
+        env.menuBarOverflow.register(
+            id: "quack.duck", title: "Quack", image: Self.duckImage(), priority: 100,
+            statusItem: duckItem, activate: { [weak self] in self?.openSettings() }
+        )
+        env.menuBarOverflow.register(
+            id: "quack.countdown", title: "Next meeting", systemImage: "calendar", priority: 80,
+            statusItem: countdownItem, activate: { [weak self] in
+                guard let self else { return }
+                self.togglePopover(self.countdownItem.button)
+            }
+        )
+
         popover.behavior = .transient
         popover.animates = false
         let content = NSHostingController(rootView: MenuContentView().environmentObject(env))
@@ -65,18 +77,20 @@ final class StatusItemController {
 
     private func updateCountdown() {
         let s = env.settingsStore.settings
-        duckItem.isVisible = !s.hideDuckIcon
+        env.menuBarOverflow.setSourceVisible(!s.hideDuckIcon, id: "quack.duck")
         let meeting = MeetingSelection.currentOrNext(from: env.meetingStore.upcoming, now: env.now)
 
         guard s.menuBarCountdownEnabled,
               let lines = CountdownFormatter.menuBarLines(for: meeting, now: env.now,
                                                           horizon: Double(s.countdownLeadHours) * 3600) else {
-            countdownItem.isVisible = false
+            env.menuBarOverflow.setSourceVisible(false, id: "quack.countdown")
             return
         }
+        let title = "\(lines.title) · \(lines.detail)"
         countdownModel.title = lines.title
         countdownModel.detail = lines.detail
-        countdownItem.isVisible = true
+        env.menuBarOverflow.setSourceVisible(true, id: "quack.countdown")
+        env.menuBarOverflow.update(id: "quack.countdown", title: title)
 
         // Size the item to the hosted view.
         countdownHost.layoutSubtreeIfNeeded()

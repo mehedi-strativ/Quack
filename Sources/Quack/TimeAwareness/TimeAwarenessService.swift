@@ -16,7 +16,7 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
     private let settings: SettingsStore
     private let toasts: ToastPresenter
     private var tracker = ActivityTracker()
-    private let statusItem = TimeAwarenessStatusItem()
+    private let statusItem: TimeAwarenessStatusItem
 
     private let historyStore = ActivityHistoryStore()
     /// In-memory day aggregates; today's entry includes the live session.
@@ -32,9 +32,10 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
     private var lastRenderedMinute = -1
     private var started = false
 
-    init(settings: SettingsStore, toasts: ToastPresenter) {
+    init(settings: SettingsStore, toasts: ToastPresenter, overflow: MenuBarOverflowService) {
         self.settings = settings
         self.toasts = toasts
+        self.statusItem = TimeAwarenessStatusItem(overflow: overflow)
     }
 
     func start() {

@@ -15,6 +15,7 @@ final class NotchService: NSObject, ManagedService {
     var onOpenSettings: (() -> Void)?
     private let settings: SettingsStore
     private let permissions: PermissionsManager
+    private let overflow: MenuBarOverflowService
     private let reader = NotchScreenReader()
     private let model = NotchContentViewModel()
     private let nowPlaying = NowPlayingService()
@@ -25,8 +26,8 @@ final class NotchService: NSObject, ManagedService {
     private var mediaRunning = false
     private var agentsRunning = false
 
-    /// Collapsed hover strip height, hanging below the notch. Kept small so it
-    /// doesn't catch hover/clicks over app content beneath the notch.
+    /// Collapsed hover strip height, hanging below the notch. It only carries
+    /// the compact status lights; all task detail is revealed on hover.
     private let hoverMargin: CGFloat = 8
     private let expandedWidth: CGFloat = 420
     private let mediaOnlyContentHeight: CGFloat = 58
@@ -34,9 +35,11 @@ final class NotchService: NSObject, ManagedService {
     private let footerRowHeight: CGFloat = 26
 
     init(settings: SettingsStore, permissions: PermissionsManager,
-         claudeInstaller: ClaudeConfigInstaller, opencodeInstaller: OpencodeConfigInstaller) {
+         claudeInstaller: ClaudeConfigInstaller, opencodeInstaller: OpencodeConfigInstaller,
+         overflow: MenuBarOverflowService) {
         self.settings = settings
         self.permissions = permissions
+        self.overflow = overflow
         self.agentsService = AgentsService(sources: [
             .init(sessionsDirectory: claudeInstaller.sessionsDirectory,
                   isInstalled: claudeInstaller.isInstalled, migrateIfNeeded: claudeInstaller.migrateIfNeeded),
@@ -65,6 +68,8 @@ final class NotchService: NSObject, ManagedService {
         panel?.orderOut(nil)
         panel = nil
         model.isOpen = false
+        model.isOverflowPinned = false
+        model.overflowItems = []
         model.track = nil
         model.agents = []
     }
@@ -78,6 +83,12 @@ final class NotchService: NSObject, ManagedService {
         model.onPrevious = { [weak self] in self?.nowPlaying.previous() }
         model.onAgentTap = { [weak self] agent in self?.focusAgent(agent) }
         model.onOpenQuack = { [weak self] in self?.onOpenSettings?() }
+        model.onToggleOverflowPin = { [weak self] in
+            guard let self else { return }
+            self.model.isOverflowPinned.toggle()
+            self.model.isOpen = true
+            self.reposition()
+        }
 
         nowPlaying.$track
             .sink { [weak self] t in self?.model.track = t }
@@ -87,6 +98,12 @@ final class NotchService: NSObject, ManagedService {
             .store(in: &cancellables)
         agentsService.$integrationInstalled
             .sink { [weak self] i in self?.model.integrationInstalled = i }
+            .store(in: &cancellables)
+        overflow.$hiddenItems
+            .sink { [weak self] items in
+                self?.model.overflowItems = items
+                self?.repositionIfNeeded()
+            }
             .store(in: &cancellables)
         settings.$settings
             .map { ($0.notchMediaEnabled, $0.notchAgentsEnabled) }
@@ -149,7 +166,7 @@ final class NotchService: NSObject, ManagedService {
 
     private func repositionIfNeeded() {
         // Card count / zone flags change the expanded height while open, and
-        // the peek pill needs the panel present while closed.
+        // the compact status lights need the panel positioned while closed.
         reposition()
     }
 
@@ -195,15 +212,16 @@ final class NotchService: NSObject, ManagedService {
                 h += CGFloat(visible) * 100 + CGFloat(visible - 1) * 8
             }
             h += 10                                             // zone bottom pad
-        } else {
+        } else if model.mediaEnabled {
             h += mediaOnlyContentHeight - 10
         }
+        if !model.overflowItems.isEmpty { h += 68 }
         if model.mediaEnabled { h += 58 }                       // pinned strip
         return min(h, 480)
     }
 
     private func handleHover(_ hovering: Bool) {
-        model.isOpen = hovering
+        model.isOpen = hovering || model.isOverflowPinned
         if hovering {
             Log.notch.notice("hover-in: agents=\(self.model.agentsEnabled) media=\(self.model.mediaEnabled)")
             refreshTokensToday()
