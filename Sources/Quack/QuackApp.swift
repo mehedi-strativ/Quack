@@ -7,10 +7,12 @@ struct QuackApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // Quack has no normal windows; it lives entirely in a manually-managed
-        // NSStatusItem (see AppDelegate). This empty Settings scene just satisfies
-        // the `App` protocol — Quack opens its own settings window.
-        Settings { EmptyView() }
+        // Quack has no SwiftUI windows; it lives in a manually-managed
+        // NSStatusItem (see AppDelegate) and opens its own settings window.
+        // A never-inserted MenuBarExtra just satisfies `App` — unlike an empty
+        // `Settings` scene, SwiftUI can't open it as a blank "Quack Settings"
+        // window on launch/activation.
+        MenuBarExtra("Quack", isInserted: .constant(false)) { EmptyView() }
     }
 }
 
@@ -34,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `open`). LSUIElement apps get this instead of a fresh launch.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         env?.showSettings()
-        return true
+        // Handled. `true` lets AppKit's default reopen run too, which makes
+        // SwiftUI open its only scene — the empty placeholder `Settings` window.
+        return false
     }
 }
