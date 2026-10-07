@@ -16,7 +16,7 @@
 A native macOS menu-bar utility that bundles the little power-tools you'd
 otherwise install five apps for: meeting countdowns & click-to-join reminders,
 external-monitor brightness on the F1/F2 keys, window management by keyboard and
-trackpad, pinch-to-quit on Dock icons, and a CPU temperature readout.
+trackpad, and a CPU temperature readout.
 
 Lives in the menu bar (no Dock icon). Every feature is individually toggleable,
 and services start **only** when their toggle is on.
@@ -33,7 +33,6 @@ and services start **only** when their toggle is on.
 | ☀️ | **External brightness** | F1/F2 control whichever external display the cursor is on, over DDC — with software dimming **below** the hardware floor | Accessibility¹ |
 | 🪟 | **Window shortcuts** | ⌘⌥ + arrows: fill / move to the screen below / left & right halves (press again → adjacent monitor) | Accessibility |
 | ✋ | **Window swipe** | Two-finger title-bar swipe: ↑ fullscreen, ↓ minimize, ←→ snap to half | Accessibility |
-| 🔥 | **Dock pinch-to-quit** | Pinch-in on an app's Dock icon to quit it | Accessibility |
 | 🌡️ | **CPU temperature** | Flame + live temperature (°C/°F) read from the Mac's sensors, à la `hot` | — |
 | 🖱️ | **Mouse** | Pointer-speed override, buttery smooth scrolling for wheel mice, and custom actions on buttons 4/5 (Mission Control, media keys, any shortcut…) | Accessibility² |
 | ⏳ | **Time awareness** | Menu-bar timer of continuous activity with a per-app breakdown; break reminders; daily statistics with a 30-day day-by-day view | — |
@@ -92,7 +91,6 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
   left/right half; press a direction again to jump to the adjacent monitor.
 - **Window swipe** — point at a title bar, swipe two fingers: up = fullscreen,
   down = minimize, left/right = snap to that half.
-- **Dock pinch** — point at an app's Dock icon and pinch-in to quit it.
 - **Reminders** — pick lead times under **Calendar → Reminders**; 20/10/5 are
   plain notifications, 1-minute and on-time show a **Join** button. Each group
   has its own sound (previewed on selection) and a **Preview** button.
@@ -110,8 +108,8 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
 ## 🔐 Permissions
 
 - **Calendar** — requested when you enable calendar features.
-- **Accessibility** — for F1/F2 routing, window shortcuts, swipe, and dock
-  pinch. Can't be granted programmatically: click **Grant**, flip Quack on in
+- **Accessibility** — for F1/F2 routing, window shortcuts, and swipe.
+  Can't be granted programmatically: click **Grant**, flip Quack on in
   System Settings → Privacy & Security → Accessibility. Quack picks it up live.
 
 Each Settings section has an **Open Settings** deep-link if you ever deny one.
@@ -136,12 +134,11 @@ Quack (executable — SwiftUI + AppKit)
   Display/   CursorBrightnessService, BrightnessKeyTap, BrightnessController,
              DisplayDimmer, BrightnessHUD, DDCControl
   Windows/   HotkeyMonitor, GestureMonitor, EventTapThread, WindowMover,
-             DockPinchMonitor, DockAccessibility, AXHelpers, InputTaps
+             AXHelpers, InputTaps
   Settings/  SettingsView
 
 C targets (private-API shims, no sandbox)
   CDDC         DDC/CI brightness via IOAVService (m1ddc-style)
-  CMultitouch  raw trackpad pinch via MultitouchSupport (dlopen)
   CSMC         CPU temperature via SMC + IOHID
 ```
 

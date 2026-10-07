@@ -298,7 +298,6 @@ struct SettingsPane: View {
                     TimeAwarenessSection()
                 case .gestures:
                     WindowSwipeSection()
-                    DockGesturesSection()
                 case .shortcuts:
                     KeyboardShortcutsSection()
                 case .mouse:
@@ -533,10 +532,9 @@ private struct DashboardView: View {
         var on: [String] = []
         if s.windowShortcutsEnabled { on.append("Shortcuts") }
         if s.windowSwipeEnabled { on.append("Swipe") }
-        if s.dockPinchQuitEnabled || s.windowPinchCloseEnabled { on.append("Pinch") }
         return Group {
             if on.isEmpty {
-                gist("All off", "Shortcuts, swipe & pinch gestures")
+                gist("All off", "Shortcuts & swipe gestures")
             } else {
                 gist(on.joined(separator: " · ") + " on", "Window management", tint: .green)
             }
@@ -1364,39 +1362,6 @@ private struct WindowSwipeSection: View {
     }
 }
 
-// MARK: - Pinch gestures
-
-private struct DockGesturesSection: View {
-    @EnvironmentObject var env: AppEnvironment
-
-    var body: some View {
-        let s = env.settingsStore
-        let anyOn = s.settings.dockPinchQuitEnabled || s.settings.windowPinchCloseEnabled
-        Section("Pinch gestures") {
-            Toggle("Pinch a Dock icon to quit the app", isOn: s.binding(\.dockPinchQuitEnabled))
-            Text("Point at an app's icon in the Dock and pinch-in (two fingers together) to quit it. Apps with unsaved work still get to ask first.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-
-            Toggle("Pinch a window's title bar to close it", isOn: s.binding(\.windowPinchCloseEnabled))
-            Text("Point at a window's title bar and pinch-in to close just that window (not the whole app).")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-
-            if anyOn {
-                if env.permissions.status(for: .accessibility) != .granted {
-                    HStack {
-                        Text("Requires Accessibility permission.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Grant") { env.permissions.requestAccessibilityAccess() }
-                    }
-                } else if !env.diagnostics.dockPinchActive {
-                    Text("Trackpad not detected — this needs a Magic Trackpad or built-in trackpad.")
-                        .font(.system(size: 12)).foregroundStyle(.orange)
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Mouse
 
 private struct MousePointerSection: View {
@@ -1724,8 +1689,6 @@ private struct StatusSection: View {
                 onText: "listening", offText: env.settingsStore.settings.windowSwipeEnabled ? "needs Accessibility" : "off")
             row("Brightness keys active", d.brightnessKeyTapInstalled,
                 onText: "listening", offText: env.settingsStore.settings.brightnessEnabled ? "needs Accessibility" : "off")
-            row("Dock pinch active", d.dockPinchActive,
-                onText: "listening", offText: env.settingsStore.settings.dockPinchQuitEnabled ? "needs Accessibility / trackpad" : "off")
             HStack {
                 Text("External displays")
                 Spacer()

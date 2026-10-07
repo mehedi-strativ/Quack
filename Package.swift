@@ -32,14 +32,6 @@ let package = Package(
                 .linkedFramework("CoreFoundation"),
             ]
         ),
-        // C shim for raw trackpad touches over the private MultitouchSupport API
-        // (loaded at runtime via dlopen — see CMultitouch.c).
-        .target(
-            name: "CMultitouch",
-            linkerSettings: [
-                .linkedFramework("CoreFoundation"),
-            ]
-        ),
         // C shim for CPU temperature via the SMC over IOKit.
         .target(
             name: "CSMC",
@@ -53,7 +45,7 @@ let package = Package(
         .executableTarget(
             name: "Quack",
             dependencies: [
-                "QuackKit", "CDDC", "CMultitouch", "CSMC",
+                "QuackKit", "CDDC", "CSMC",
                 // Dynamic-library product from the local sub-package (see
                 // dependencies: above) — resolves to libMediaRemoteAdapter.dylib
                 // linked via @rpath, not statically embedded.

@@ -51,10 +51,6 @@ enum SettingsSearchRegistry {
               ["trackpad", "move window", "throw", "flick", "snap half"]),
         entry("gestures.swipeSensitivity", "Swipe sensitivity", .gestures, "Window swipe",
               ["speed", "threshold", "velocity"]),
-        entry("gestures.dockPinch", "Pinch a Dock icon to quit the app", .gestures, "Pinch gestures",
-              ["quit", "close app", "trackpad"]),
-        entry("gestures.windowPinch", "Pinch a window's title bar to close it", .gestures, "Pinch gestures",
-              ["close window", "trackpad"]),
 
         // Shortcuts
         entry("shortcuts.windows", "Window management shortcuts", .shortcuts, "Keyboard shortcuts",

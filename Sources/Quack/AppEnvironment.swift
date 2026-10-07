@@ -42,7 +42,6 @@ final class AppEnvironment: ObservableObject {
     private let cursorService: CursorBrightnessService
     private let gestureService: GestureMonitor
     private let hotkeyService: HotkeyMonitor
-    private let dockPinchService: DockPinchMonitor
     private let temperatureService: TemperatureStatusItem
     let menuBarOverflow: MenuBarOverflowService
     private let notchService: NotchService
@@ -98,7 +97,6 @@ final class AppEnvironment: ObservableObject {
         self.cursorService = CursorBrightnessService(controller: brightness, settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.gestureService = GestureMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
-        self.dockPinchService = DockPinchMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings, overflow: menuBarOverflow)
         self.notchService = NotchService(settings: settings, permissions: permissions,
                                           claudeInstaller: claudeInstaller, opencodeInstaller: opencodeInstaller,
@@ -114,7 +112,6 @@ final class AppEnvironment: ObservableObject {
             .brightness: cursorService,
             .windowSwipe: gestureService,
             .windowShortcuts: hotkeyService,
-            .dockPinch: dockPinchService,
             .temperature: temperatureService,
             .mouse: mouseService,
             .timeAwareness: timeAwarenessService,

@@ -16,11 +16,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var windowShortcutsEnabled: Bool
     /// Modifier bitmask for the shortcuts: bit0 ⌘, bit1 ⌥, bit2 ⌃, bit3 ⇧.
     public var windowShortcutModifiers: Int
-    /// Pinch two fingers in on an app's Dock icon to quit that app.
-    public var dockPinchQuitEnabled: Bool
-    /// Pinch two fingers in while hovering a window's title bar to close that
-    /// window (just the window, not the whole app).
-    public var windowPinchCloseEnabled: Bool
     /// Show CPU temperature (with a flame icon) in the menu bar.
     public var cpuTemperatureEnabled: Bool
     /// Dynamic notch media player controls.
@@ -109,8 +104,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowSnapEnabled: Bool = true,
         windowShortcutsEnabled: Bool = true,
         windowShortcutModifiers: Int = 0b0011,   // ⌘ + ⌥
-        dockPinchQuitEnabled: Bool = false,
-        windowPinchCloseEnabled: Bool = false,
         cpuTemperatureEnabled: Bool = false,
         notchMediaEnabled: Bool = false,
         notchAgentsEnabled: Bool = false,
@@ -153,8 +146,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.windowSnapEnabled = windowSnapEnabled
         self.windowShortcutsEnabled = windowShortcutsEnabled
         self.windowShortcutModifiers = windowShortcutModifiers
-        self.dockPinchQuitEnabled = dockPinchQuitEnabled
-        self.windowPinchCloseEnabled = windowPinchCloseEnabled
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
         self.notchMediaEnabled = notchMediaEnabled
         self.notchAgentsEnabled = notchAgentsEnabled
@@ -210,8 +201,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowSnapEnabled = v(.windowSnapEnabled, d.windowSnapEnabled)
         windowShortcutsEnabled = v(.windowShortcutsEnabled, d.windowShortcutsEnabled)
         windowShortcutModifiers = v(.windowShortcutModifiers, d.windowShortcutModifiers)
-        dockPinchQuitEnabled = v(.dockPinchQuitEnabled, d.dockPinchQuitEnabled)
-        windowPinchCloseEnabled = v(.windowPinchCloseEnabled, d.windowPinchCloseEnabled)
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
         notchMediaEnabled = v(.notchMediaEnabled, d.notchMediaEnabled)
         notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
