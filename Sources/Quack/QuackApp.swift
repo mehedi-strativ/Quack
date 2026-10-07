@@ -13,6 +13,13 @@ struct QuackApp: App {
         // `Settings` scene, SwiftUI can't open it as a blank "Quack Settings"
         // window on launch/activation.
         MenuBarExtra("Quack", isInserted: .constant(false)) { EmptyView() }
+            .commands {
+                // App menu "Settings…" / ⌘, → Quack's real settings window.
+                CommandGroup(after: .appInfo) {   // no Settings scene → no .appSettings group to replace
+                    Button("Settings…") { appDelegate.showSettings() }
+                        .keyboardShortcut(",", modifiers: .command)
+                }
+            }
     }
 }
 
@@ -30,6 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.env = env
         statusController = StatusItemController(env: env)
         env.showSettings()   // open Settings on first launch
+    }
+
+    func showSettings() {
+        env?.showSettings()
     }
 
     /// Fires when the app is opened again while already running (Finder/Dock/
