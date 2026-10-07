@@ -76,16 +76,18 @@ final class MenuBarOverflowService: ObservableObject {
 
     func update(id: String, title: String? = nil, image: NSImage? = nil) {
         guard var item = entries[id] else { return }
+        let changed = (title != nil && title != item.title) || (image != nil && image !== item.image)
+        guard changed else { return }   // temperature/countdown call this every tick
         if let title { item.title = title }
         if let image { item.image = image }
         entries[id] = item
-        publishHiddenItems()
+        if item.isManagedHidden { publishHiddenItems() }
     }
 
     /// Updates visibility owned by the source feature. A manager-hidden item
     /// stays hidden in AppKit until the overflow policy explicitly reveals it.
     func setSourceVisible(_ visible: Bool, id: String) {
-        guard var item = entries[id] else { return }
+        guard var item = entries[id], item.isAvailable != visible else { return }
         item.isAvailable = visible
         if !visible {
             item.isManagedHidden = false
@@ -158,10 +160,15 @@ final class MenuBarOverflowService: ObservableObject {
         if changed { publishHiddenItems() }
     }
 
+    /// Publishes only on a visible difference: every publish repositions and
+    /// re-renders the notch panel.
     private func publishHiddenItems() {
-        hiddenItems = entries.values
+        let next = entries.values
             .filter { $0.isAvailable && $0.isManagedHidden }
             .sorted { $0.priority > $1.priority }
+        func same(_ a: Item, _ b: Item) -> Bool { a.id == b.id && a.title == b.title && a.image === b.image }
+        guard next.count != hiddenItems.count || !zip(next, hiddenItems).allSatisfy(same) else { return }
+        hiddenItems = next
     }
 
     private func currentNotchSpan() -> NotchGeometry.NotchSpan? {

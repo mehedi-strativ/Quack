@@ -123,6 +123,8 @@ enum WindowMover {
         let resizes = abs(start.width - end.width) > 1 || abs(start.height - end.height) > 1
         let dx = end.minX - start.minX
         let dy = end.minY - start.minY
+        let key = CFHash(window)
+        tokenLock.lock(); nextToken += 1; let token = nextToken; tokens[key] = token; tokenLock.unlock()
 
         // Pace on a background thread: each AX position-set is a synchronous IPC
         // the target app must honor, and some apps are slow at it. Driving this
@@ -134,6 +136,8 @@ enum WindowMover {
             let steps = 30
             let frameDuration = 0.20 / Double(steps)
             for i in 1...steps {
+                // A newer animation of this window took over — stop gliding.
+                guard isCurrent(token, key) else { return }
                 let p = Double(i) / Double(steps)
                 let e = 1 - pow(1 - p, 3)   // ease-out cubic
                 AXHelpers.setPosition(
@@ -142,8 +146,22 @@ enum WindowMover {
                 )
                 Thread.sleep(forTimeInterval: frameDuration)
             }
+            guard isCurrent(token, key) else { return }
             if resizes { AXHelpers.setSize(end.size, of: window) }
             AXHelpers.setPosition(end.origin, of: window)
+            tokenLock.lock(); if tokens[key] == token { tokens[key] = nil }; tokenLock.unlock()
         }
+    }
+
+    /// Latest animation token per window, so rapid repeats (⌘⌥→ then ⌘⌥←)
+    /// don't run two glides on one window at once. ponytail: keyed by CFHash —
+    /// a hash collision between two windows mid-glide just stops the older one.
+    private nonisolated static let tokenLock = NSLock()
+    nonisolated(unsafe) private static var tokens: [CFHashCode: Int] = [:]
+    nonisolated(unsafe) private static var nextToken = 0
+
+    private nonisolated static func isCurrent(_ token: Int, _ key: CFHashCode) -> Bool {
+        tokenLock.lock(); defer { tokenLock.unlock() }
+        return tokens[key] == token
     }
 }

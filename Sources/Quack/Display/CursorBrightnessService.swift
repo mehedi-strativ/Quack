@@ -29,6 +29,7 @@ final class CursorBrightnessService: ManagedService {
     private var lastDisplayID: String?
     private var started = false
     private var permissionCancellable: AnyCancellable?
+    private var displaysCancellable: AnyCancellable?
     private var axObserver: NSObjectProtocol?
     private let hud = BrightnessHUD()
     // Rated max luminance per display id (nil = display doesn't report one),
@@ -50,16 +51,22 @@ final class CursorBrightnessService: ManagedService {
     func start() {
         started = true
         controller.refreshDisplays()
-        rebuildSnapshot()
-        diagnostics.externalDisplayCount = controller.displays.count
         diagnostics.ddcServiceCount = DDCControl.isAppleSilicon ? DDCControl.externalDisplayCount() : 0
         lastDisplayID = nil
+        // Rebuild the key tap's snapshot only when the display list changes
+        // (the controller refreshes on screen reconfiguration), not per mouse move.
+        displaysCancellable = controller.$displays
+            .sink { [weak self] displays in
+                self?.rebuildSnapshot(from: displays)
+                self?.diagnostics.externalDisplayCount = displays.count
+            }
 
+        // Global monitor handlers and scheduled timers both fire on the main thread.
         cursorMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
-            Task { @MainActor in self?.evaluateCursor() }
+            MainActor.assumeIsolated { self?.evaluateCursor() }
         }
         let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.evaluateCursor() }
+            MainActor.assumeIsolated { self?.evaluateCursor() }
         }
         timer.tolerance = 0.1
         pollTimer = timer
@@ -105,6 +112,7 @@ final class CursorBrightnessService: ManagedService {
     func stop() {
         started = false
         permissionCancellable = nil
+        displaysCancellable = nil
         if let axObserver { DistributedNotificationCenter.default().removeObserver(axObserver) }
         axObserver = nil
         if let cursorMonitor { NSEvent.removeMonitor(cursorMonitor) }
@@ -121,7 +129,6 @@ final class CursorBrightnessService: ManagedService {
     // MARK: Cursor tracking (dim inactive display)
 
     private func evaluateCursor() {
-        rebuildSnapshot()   // keep the key tap's snapshot current as displays move/change
         let point = NSEvent.mouseLocation   // Cocoa Y-up global coords
         guard let active = controller.display(containing: point) else {
             lastDisplayID = nil
@@ -144,13 +151,10 @@ final class CursorBrightnessService: ManagedService {
 
     // MARK: Brightness-key routing
 
-    /// Rebuilds the thread-safe display snapshot the key tap reads.
-    private func rebuildSnapshot() {
-        let snap = controller.displays.compactMap {
-            d -> (frame: CGRect, supportsDDC: Bool, id: String, name: String, number: CGDirectDisplayID)? in
-            guard let screen = NSScreen.screens.first(where: { $0.displayID == d.screenNumber }) else { return nil }
-            return (screen.frame, d.supportsDDC, d.id, d.name, d.screenNumber)
-        }
+    /// Rebuilds the thread-safe display snapshot the key tap reads. Takes the
+    /// list explicitly: `$displays` delivers before the property is updated.
+    private func rebuildSnapshot(from displays: [ControllableDisplay]) {
+        let snap = displays.map { d in (frame: d.frame, supportsDDC: d.supportsDDC, id: d.id, name: d.name, number: d.screenNumber) }
         snapshotLock.lock(); displaySnapshot = snap; snapshotLock.unlock()
     }
 

@@ -20,7 +20,7 @@ final class ReminderScheduler: ManagedService {
     private var cancellables: Set<AnyCancellable> = []
     private var pollTimer: Timer?
     private var nextTimer: Timer?   // one-shot, fires exactly at the next reminder instant
-    private var fired: Set<String> = []   // reminder identifiers already shown
+    private var fired: [String: Date] = [:]   // reminder id already shown → its meeting's end (for pruning)
     private var active = false
 
     // A reminder fires if "now" is within this window past its scheduled instant
@@ -71,9 +71,9 @@ final class ReminderScheduler: ManagedService {
     private func primeAlreadyPassed(now: Date) {
         for meeting in store.upcoming where !meeting.isAllDay {
             for lead in leads {
-                if meeting.start.addingTimeInterval(-Double(lead) * 60) <= now { fired.insert(leadID(meeting, lead)) }
+                if meeting.start.addingTimeInterval(-Double(lead) * 60) <= now { fired[leadID(meeting, lead)] = meeting.end }
             }
-            if meeting.start <= now { fired.insert(startID(meeting)) }
+            if meeting.start <= now { fired[startID(meeting)] = meeting.end }
         }
     }
 
@@ -82,19 +82,21 @@ final class ReminderScheduler: ManagedService {
     private func check() {
         guard active else { return }
         let now = Date()
+        // Drop ids of meetings long over — none of their instants can recur.
+        fired = fired.filter { $0.value.addingTimeInterval(fireWindow) > now }
         for meeting in store.upcoming where !meeting.isAllDay {
             for lead in leads {
                 let fire = meeting.start.addingTimeInterval(-Double(lead) * 60)
                 let id = leadID(meeting, lead)
-                if !fired.contains(id), now >= fire, now < fire.addingTimeInterval(fireWindow), now < meeting.start {
-                    fired.insert(id)
+                if fired[id] == nil, now >= fire, now < fire.addingTimeInterval(fireWindow), now < meeting.start {
+                    fired[id] = meeting.end
                     showReminder(meeting, leadMinutes: lead)
                 }
             }
             let sid = startID(meeting)
             if settings.settings.remindAtStart,
-               !fired.contains(sid), now >= meeting.start, now < meeting.start.addingTimeInterval(fireWindow) {
-                fired.insert(sid)
+               fired[sid] == nil, now >= meeting.start, now < meeting.start.addingTimeInterval(fireWindow) {
+                fired[sid] = meeting.end
                 showStart(meeting)
                 sound.play(NotificationSound.from(settings.settings.joinAlertSound))
             }
@@ -115,10 +117,10 @@ final class ReminderScheduler: ManagedService {
             soonest = min(soonest ?? date, date)
         }
         for meeting in store.upcoming where !meeting.isAllDay {
-            for lead in leads where !fired.contains(leadID(meeting, lead)) {
+            for lead in leads where fired[leadID(meeting, lead)] == nil {
                 consider(meeting.start.addingTimeInterval(-Double(lead) * 60))
             }
-            if !fired.contains(startID(meeting)) { consider(meeting.start) }
+            if fired[startID(meeting)] == nil { consider(meeting.start) }
         }
         guard let target = soonest else { return }
 

@@ -20,12 +20,20 @@ final class BrightnessController: ObservableObject {
     @Published private(set) var displays: [ControllableDisplay] = []
 
     private let dimmer = DisplayDimmer()
+    private var screenObserver: NSObjectProtocol?
 
     /// Whether this Mac can do DDC at all (Apple Silicon path only here).
     var isSupportedPlatform: Bool { DDCControl.isAppleSilicon }
 
     init() {
         refreshDisplays()
+        // Hot-plug / rearrange: frames and the index-based DDC mapping go stale
+        // otherwise, routing keys to the wrong monitor (or none).
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshDisplays() }
+        }
     }
 
     /// Rebuilds the external-display list. External `NSScreen`s are ordered by

@@ -21,8 +21,7 @@ final class GestureMonitor: ManagedService {
     private let permissions: PermissionsManager
     private let diagnostics: DiagnosticsStatus
 
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    private var tap: EventTapThread?
     private var started = false
     private var axObserver: NSObjectProtocol?
 
@@ -75,57 +74,42 @@ final class GestureMonitor: ManagedService {
     }
 
     private func teardownTap() {
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        }
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-            CFMachPortInvalidate(eventTap)
-        }
-        runLoopSource = nil
-        eventTap = nil
+        tap?.stop()
+        tap = nil
         diagnostics.swipeTapInstalled = false
     }
 
     private func installTap() {
-        let mask: CGEventMask = 1 << CGEventType.scrollWheel.rawValue
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
+        // Dedicated thread (CLAUDE.md rule 1). The tap thread only filters for
+        // trackpad gesture phases — ordinary wheel scrolling never reaches the
+        // main thread; gesture state and AX work stay on main.
+        let t = EventTapThread(
+            mask: 1 << CGEventType.scrollWheel.rawValue,
             options: .listenOnly,   // observe only; title-bar scrolls are otherwise inert
-            eventsOfInterest: mask,
-            callback: { _, type, event, refcon in
-                if let refcon {
-                    Unmanaged<GestureMonitor>.fromOpaque(refcon).takeUnretainedValue()
-                        .handleScroll(type: type, event: event)
-                }
-                return Unmanaged.passUnretained(event)
-            },
-            userInfo: refcon
-        ) else {
-            Log.swipe.error("Failed to create scroll event tap (Accessibility not effective?)")
-            return
+            label: "com.quack.swipeTap"
+        ) { [weak self] type, event in
+            if type == .scrollWheel, Self.isGesturePhase(event), let copy = event.copy() {
+                DispatchQueue.main.async { self?.handleScroll(copy) }
+            }
+            return Unmanaged.passUnretained(event)
         }
-
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-        eventTap = tap
-        runLoopSource = source
-        diagnostics.swipeTapInstalled = true
-        Log.swipe.log("Scroll gesture tap installed")
+        tap = t
+        t.start()
+        diagnostics.swipeTapInstalled = AXIsProcessTrusted()
     }
 
-    fileprivate func handleScroll(type: CGEventType, event: CGEvent) {
-        if type == .tapDisabledByTimeout {
-            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }   // callback too slow; safe
-            return
-        }
-        if type == .tapDisabledByUserInput {
-            return   // Accessibility revoked — re-enabling here loops and freezes input
-        }
-        guard let ns = NSEvent(cgEvent: event), ns.hasPreciseScrollingDeltas else { return }
+    /// Precise (trackpad) scroll carrying a began/changed/ended/cancelled phase.
+    /// Momentum and mouse-wheel events have no gesture phase.
+    private nonisolated static func isGesturePhase(_ event: CGEvent) -> Bool {
+        guard event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0 else { return false }
+        // CGScrollPhase raw values (not NSEvent.Phase's): began 1, changed 2,
+        // ended 4, cancelled 8; mayBegin (128) and none (0) are ignored.
+        let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
+        return phase & 0b1111 != 0
+    }
+
+    private func handleScroll(_ event: CGEvent) {
+        guard started, let ns = NSEvent(cgEvent: event), ns.hasPreciseScrollingDeltas else { return }
 
         switch ns.phase {
         case .began:

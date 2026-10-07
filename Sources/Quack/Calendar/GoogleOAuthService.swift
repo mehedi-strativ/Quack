@@ -171,8 +171,10 @@ actor GoogleOAuthService {
             listener.newConnectionHandler = { connection in
                 connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, error in
                     lock.lock()
-                    guard !didResume else { lock.unlock(); return }
-                    defer { lock.unlock() }
+                    guard !didResume else { lock.unlock(); connection.cancel(); return }
+                    // Every path below resumes, so the listener is done: close the
+                    // local port (an accepted connection outlives its listener).
+                    defer { listener.cancel(); lock.unlock() }
 
                     if let error = error {
                         continuation.resume(throwing: error)
@@ -228,6 +230,15 @@ HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(h
                 connection.start(queue: .main)
             }
 
+            // A bind failure (port taken) surfaces here, not from the init.
+            listener.stateUpdateHandler = { newState in
+                guard case .failed(let error) = newState else { return }
+                lock.lock(); defer { lock.unlock() }
+                guard !didResume else { return }
+                didResume = true
+                listener.cancel()
+                continuation.resume(throwing: GoogleOAuthError.listenerSetupFailed(error))
+            }
             listener.start(queue: .main)
 
             DispatchQueue.main.async {

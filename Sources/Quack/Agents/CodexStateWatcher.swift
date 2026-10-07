@@ -1,6 +1,7 @@
 import Foundation
 
-/// Polls Codex's date-partitioned rollout tree for changed JSONL files.
+/// Polls Codex's date-partitioned rollout tree (recent day dirs only — see
+/// `CodexSessionReader.recentRolloutFiles`) for changed JSONL files.
 /// Codex appends to files rather than replacing directory entries, so a
 /// recursive file signature is more reliable here than the existing
 /// directory-only Claude watcher.
@@ -29,22 +30,16 @@ final class CodexStateWatcher {
     }
 
     private func poll() {
-        guard let directory else { return }
-        let next = fileSignature(in: directory)
+        guard directory != nil else { return }
+        let next = fileSignature()
         guard next != signature else { return }
         signature = next
         onChange?()
     }
 
-    private func fileSignature(in directory: URL) -> Set<String> {
-        guard let enumerator = FileManager.default.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
+    private func fileSignature() -> Set<String> {
         var result = Set<String>()
-        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+        for url in CodexSessionReader.recentRolloutFiles() {
             let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
             let modified = values?.contentModificationDate?.timeIntervalSinceReferenceDate ?? 0
             let size = values?.fileSize ?? 0
