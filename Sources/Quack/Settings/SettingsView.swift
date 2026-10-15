@@ -36,6 +36,22 @@ enum SettingsTab: String, CaseIterable {
         case .permissions: return "lock.shield"
         }
     }
+
+    /// Each feature area's signature color — used for its sidebar tile and
+    /// dashboard card so every area reads at a glance.
+    var color: Color {
+        switch self {
+        case .dashboard: return .quackOrange
+        case .meetings: return .quackPink
+        case .stats: return Color(hex: "#FF9500")!
+        case .mouse: return Color(hex: "#7C5CFF")!
+        case .gestures: return Color(hex: "#00B8F0")!
+        case .shortcuts: return Color(hex: "#3D7BFF")!
+        case .brightness: return Color(hex: "#F5B700")!
+        case .general: return Color(hex: "#8A8FA3")!
+        case .permissions: return Color(hex: "#20C35A")!
+        }
+    }
 }
 
 /// Named groupings for the sidebar. `Dashboard` sits alone at the top;
@@ -89,7 +105,7 @@ struct SettingsRootView: View {
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 740, idealWidth: 820, minHeight: 560, idealHeight: 660)
         .font(.system(size: 14))
-        .tint(.accentColor)
+        .tint(.quackOrange)
         .onAppear { env.permissions.refreshAll() }
         // ⌘F from anywhere in the window focuses the search field.
         .background(Button("") { searchFocused = true }
@@ -110,8 +126,12 @@ struct SettingsRootView: View {
                 ForEach(SidebarGroup.allCases, id: \.self) { group in
                     Section {
                         ForEach(group.tabs, id: \.self) { tab in
-                            Label(tab.title, systemImage: tab.icon)
-                                .tag(tab)
+                            Label {
+                                Text(tab.title)
+                            } icon: {
+                                IconTile(symbol: tab.icon, color: tab.color)
+                            }
+                            .tag(tab)
                         }
                     } header: {
                         if group.showsHeader {
@@ -331,10 +351,10 @@ private struct SpotlightChip: View {
                 .font(.system(size: 10, weight: .semibold))
             Text(text).font(.system(size: 12, weight: .medium))
         }
-        .foregroundStyle(Color.accentColor)
+        .foregroundStyle(Color.quackOrange)
         .padding(.horizontal, 10).padding(.vertical, 5)
-        .background(Capsule().fill(Color.accentColor.opacity(0.14))
-            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)))
+        .background(Capsule().fill(Color.quackOrange.opacity(0.14))
+            .overlay(Capsule().strokeBorder(Color.quackOrange.opacity(0.35), lineWidth: 1)))
         .transition(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             ? .identity : .opacity.combined(with: .move(edge: .top)))
         .accessibilityLabel("Jumped to \(text)")
@@ -397,27 +417,28 @@ private struct SettingsSection: View {
 
 // MARK: - Dashboard (General tab)
 
-/// The Dashboard tab: a full-width Calendar card listing the next few events,
-/// then a grid of summary cards for the other feature areas. Each card opens
-/// its tab on click.
+/// The Dashboard tab: a greeting, a sunrise-gradient "Next up" hero for the
+/// coming meeting (countdown + Join), then a grid of tinted stat cards — one
+/// per feature area, each in its signature color. Cards open their tab.
 private struct DashboardView: View {
     @EnvironmentObject var env: AppEnvironment
-    private let columns = [GridItem(.adaptive(minimum: 250), spacing: 14)]
+    private let columns = [GridItem(.adaptive(minimum: 230), spacing: 14)]
 
     @State private var upcoming: [MeetingEvent] = []
     @State private var tempC: Double = -1
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
-                DashCard(tab: .meetings) { calendarCardContent }
+            VStack(alignment: .leading, spacing: 16) {
+                greeting
+                NextUpHero(upcoming: upcoming)
                 LazyVGrid(columns: columns, spacing: 14) {
                     DashCard(tab: .stats, title: "CPU", icon: "thermometer.medium") { cpuSummary }
+                    if env.settingsStore.settings.timeAwarenessEnabled {
+                        DashCard(tab: .stats, title: "Focus", icon: "bolt.fill") { timeSummary }
+                    }
                     DashCard(tab: .brightness) { displaySummary }
                     DashCard(tab: .gestures, title: "Windows", icon: "macwindow.on.rectangle") { windowsSummary }
-                    if env.settingsStore.settings.timeAwarenessEnabled {
-                        DashCard(tab: .stats, title: "Time", icon: "hourglass") { timeSummary }
-                    }
                     DashCard(tab: .permissions) { permissionsSummary }
                 }
             }
@@ -429,47 +450,30 @@ private struct DashboardView: View {
         .task { await pollTemperature() }
     }
 
-    // MARK: Calendar (expanded — next 5 events inline)
-
-    @ViewBuilder private var calendarCardContent: some View {
-        if upcoming.isEmpty {
-            gist("No upcoming meetings", "Nothing in the next two weeks")
-        } else {
-            VStack(spacing: 7) {
-                ForEach(upcoming) { miniRow($0) }
-            }
-            .padding(.top, 2)
+    private var greeting: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(Self.greeting(for: env.now))
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+            Text(Self.longDate.string(from: env.now))
+                .font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
     }
 
-    private func miniRow(_ e: MeetingEvent) -> some View {
-        HStack(spacing: 9) {
-            Circle().fill(Color(hex: e.calendarColorHex) ?? .accentColor).frame(width: 7, height: 7)
-            Text(whenText(e))
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-                .frame(width: 118, alignment: .leading)
-            Text(e.title).font(.system(size: 13)).lineLimit(1)
-            Spacer(minLength: 4)
-            if e.conferencingURL != nil {
-                Image(systemName: "video.fill").font(.system(size: 10)).foregroundStyle(.secondary)
-            }
+    private static func greeting(for date: Date) -> String {
+        switch Calendar.current.component(.hour, from: date) {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default: return "Burning the midnight oil"
         }
-        .opacity(e.end <= env.now && !e.isInProgress(at: env.now) ? 0.5 : 1)
-    }
-
-    /// "2:30 PM" for today, "Fri 2:30 PM" otherwise; "All day" variants too.
-    private func whenText(_ e: MeetingEvent) -> String {
-        let today = Calendar.current.isDateInToday(e.start)
-        if e.isAllDay { return today ? "All day" : "\(Self.wday.string(from: e.start)) · All day" }
-        let t = Self.time.string(from: e.start)
-        return today ? t : "\(Self.wday.string(from: e.start)) \(t)"
     }
 
     private func loadUpcoming() async {
         let now = env.now
         let window = DateInterval(start: now, duration: 14 * 86_400)
         let all = await env.events(in: window)
-        upcoming = Array(all.filter { $0.isAllDay || $0.end > now }.prefix(5))
+        upcoming = Array(all.filter { $0.isAllDay || $0.end > now }.prefix(6))
     }
 
     private func pollTemperature() async {
@@ -484,10 +488,12 @@ private struct DashboardView: View {
     @ViewBuilder private var timeSummary: some View {
         if let stats = env.activityStats(for: Date()), stats.activeSeconds >= 60 {
             let top = env.activityTopApps(for: Date(), 1).first
-            gist("\(ActivityFormat.compact(stats.activeSeconds)) active today · \(stats.breaks) break\(stats.breaks == 1 ? "" : "s")",
-                 top.map { "Top: \($0.name) (\(ActivityFormat.compact($0.seconds)))" } ?? "No app breakdown yet")
+            // ponytail: ring fills against a fixed 8h workday; make it a setting if anyone asks.
+            gist(ActivityFormat.compact(stats.activeSeconds),
+                 "\(stats.breaks) break\(stats.breaks == 1 ? "" : "s")" + (top.map { " · Top: \($0.name)" } ?? ""),
+                 progress: Double(stats.activeSeconds) / (8 * 3600), ringColor: SettingsTab.stats.color)
         } else {
-            gist("No activity yet today", "The timer records while you work")
+            gist("0m", "The timer records while you work")
         }
     }
 
@@ -500,9 +506,10 @@ private struct DashboardView: View {
             let v = f ? tempC * 9 / 5 + 32 : tempC
             gist("\(Int(v.rounded()))°\(f ? "F" : "C")",
                  s.cpuTemperatureEnabled ? "Showing in menu bar" : "Not in menu bar",
-                 tint: tempTint(tempC))
+                 tint: tempTint(tempC),
+                 progress: (tempC - 30) / 70, ringColor: tempTint(tempC))
         } else {
-            gist("Reading…", "Unit: \(f ? "Fahrenheit" : "Celsius")")
+            gist("—", "Reading sensor…")
         }
     }
 
@@ -517,9 +524,9 @@ private struct DashboardView: View {
         let s = env.settingsStore.settings
         if s.brightnessEnabled {
             let n = env.diagnostics.externalDisplayCount
-            gist("F1 / F2 routing on", "\(n) external display\(n == 1 ? "" : "s")", tint: .green)
+            gist("On", "F1 / F2 · \(n) external display\(n == 1 ? "" : "s")", tint: .green)
         } else {
-            gist("Off", "Control external brightness with F1 / F2")
+            gist("Off", "Control external brightness with F1 / F2", tint: .secondary)
         }
     }
 
@@ -530,9 +537,9 @@ private struct DashboardView: View {
         if s.windowSwipeEnabled { on.append("Swipe") }
         return Group {
             if on.isEmpty {
-                gist("All off", "Shortcuts & swipe gestures")
+                gist("Off", "Shortcuts & swipe gestures", tint: .secondary)
             } else {
-                gist(on.joined(separator: " · ") + " on", "Window management", tint: .green)
+                gist("On", on.joined(separator: " · "), tint: .green)
             }
         }
     }
@@ -542,18 +549,147 @@ private struct DashboardView: View {
         let granted = kinds.filter { env.permissions.status(for: $0) == .granted }.count
         let denied = kinds.contains { env.permissions.status(for: $0) == .denied }
         let all = granted == kinds.count
-        gist("\(granted) of \(kinds.count) granted",
+        gist("\(granted)/\(kinds.count)",
              denied ? "Some access denied" : (all ? "All set" : "Tap to manage"),
-             tint: all ? .green : .orange)
+             tint: all ? .primary : .orange,
+             progress: Double(granted) / Double(kinds.count),
+             ringColor: all ? SettingsTab.permissions.color : .orange)
     }
 
-    private func gist(_ primary: String, _ secondary: String?, tint: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(primary).font(.system(size: 13, weight: .medium)).foregroundStyle(tint).lineLimit(1)
-            if let secondary {
-                Text(secondary).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
+    /// Big rounded headline value + caption, with an optional progress ring.
+    private func gist(_ primary: String, _ secondary: String?, tint: Color = .primary,
+                      progress: Double? = nil, ringColor: Color = .quackOrange) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(primary)
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(tint).lineLimit(1)
+                if let secondary {
+                    Text(secondary).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+            if let progress { ProgressRing(progress: progress, color: ringColor) }
+        }
+    }
+
+    private static let longDate: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "EEEE, MMMM d"; return f
+    }()
+}
+
+/// The dashboard hero: the current-or-next timed meeting on the sunrise
+/// gradient — big countdown, title, Join button — plus the next few events.
+private struct NextUpHero: View {
+    @EnvironmentObject var env: AppEnvironment
+    let upcoming: [MeetingEvent]
+
+    private var now: Date { env.now }
+    private var next: MeetingEvent? {
+        upcoming.first { !$0.isAllDay && $0.end > now }
+    }
+    private var later: [MeetingEvent] {
+        Array(upcoming.filter { $0.id != next?.id }.prefix(3))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Next up", systemImage: "bolt.fill")
+                    .font(.system(size: 12, weight: .bold)).textCase(.uppercase)
+                    .opacity(0.9)
+                Spacer()
+                Button {
+                    env.settingsTab = .meetings
+                } label: {
+                    HStack(spacing: 3) {
+                        Text("Agenda")
+                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the Meetings tab")
+            }
+            if let next {
+                headline(next)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Clear runway")
+                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                    Text("No meetings in the next two weeks — go make something.")
+                        .font(.system(size: 13, weight: .medium)).opacity(0.9)
+                }
+            }
+            if !later.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(later) { laterRow($0) }
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(0.16)))
             }
         }
+        .foregroundStyle(.white)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(LinearGradient.quackSunrise)
+                .shadow(color: .quackPink.opacity(0.35), radius: 14, y: 6)
+        )
+    }
+
+    private func headline(_ e: MeetingEvent) -> some View {
+        let live = e.isInProgress(at: now)
+        let countdown = live
+            ? "Live · ends in \(CountdownFormatter.relative(e.end.timeIntervalSince(now)))"
+            : "in \(CountdownFormatter.relative(e.start.timeIntervalSince(now)))"
+        let join = MeetingURLParser.joinURL(for: e)
+        return HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(countdown)
+                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                Text(e.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                Text(Self.time.string(from: e.start) + " – " + Self.time.string(from: e.end))
+                    .font(.system(size: 12, weight: .medium)).opacity(0.85)
+            }
+            Spacer(minLength: 0)
+            if let join {
+                Button { NSWorkspace.shared.open(join) } label: {
+                    Label("Join", systemImage: "video.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.quackPink)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Capsule().fill(.white))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Join \(e.title)")
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func laterRow(_ e: MeetingEvent) -> some View {
+        HStack(spacing: 9) {
+            Text(whenText(e))
+                .font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                .frame(width: 92, alignment: .leading)
+            Text(e.title).font(.system(size: 13)).lineLimit(1)
+            Spacer(minLength: 4)
+            if e.conferencingURL != nil {
+                Image(systemName: "video.fill").font(.system(size: 10)).opacity(0.85)
+            }
+        }
+    }
+
+    /// "2:30 PM" for today, "Fri 2:30 PM" otherwise; "All day" variants too.
+    private func whenText(_ e: MeetingEvent) -> String {
+        let today = Calendar.current.isDateInToday(e.start)
+        if e.isAllDay { return today ? "All day" : "\(Self.wday.string(from: e.start)) · All day" }
+        let t = Self.time.string(from: e.start)
+        return today ? t : "\(Self.wday.string(from: e.start)) \(t)"
     }
 
     private static let time: DateFormatter = {
@@ -564,8 +700,8 @@ private struct DashboardView: View {
     }()
 }
 
-/// A single dashboard card: feature icon + title + chevron over a gist. Opens
-/// the matching tab when clicked.
+/// A dashboard stat card in its feature's signature color: icon tile + title
+/// over a big headline value, on a soft tinted wash. Opens the matching tab.
 private struct DashCard<Content: View>: View {
     @EnvironmentObject var env: AppEnvironment
     let tab: SettingsTab
@@ -582,37 +718,30 @@ private struct DashCard<Content: View>: View {
                 withAnimation(.easeInOut(duration: 0.15)) { env.settingsTab = tab }
             }
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
-                    Image(systemName: icon ?? tab.icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.accentColor).frame(width: 20)
-                    Text(title ?? tab.title).font(.system(size: 15, weight: .semibold))
+                    IconTile(symbol: icon ?? tab.icon, color: tab.color, size: 24)
+                    Text(title ?? tab.title).font(.system(size: 14, weight: .semibold))
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+                        .offset(x: hovering ? 2 : 0)
                 }
                 content().frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-            // Raycast-style depth: soft fill, hairline border, and a 1pt inset
-            // top highlight that reads as raised glass on dark backgrounds.
+            .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.primary.opacity(hovering ? 0.08 : 0.045))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(tab.color.opacity(hovering ? 0.16 : 0.09))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(hovering ? 0.14 : 0.07), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(tab.color.opacity(hovering ? 0.45 : 0.22), lineWidth: 1)
                     )
-                    .overlay(alignment: .top) {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
-                            .mask(LinearGradient(colors: [.white, .clear],
-                                                 startPoint: .top, endPoint: .center))
-                    }
             )
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .scaleEffect(hovering && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1.015 : 1)
+            .animation(.easeOut(duration: 0.15), value: hovering)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
         .instantHover($hovering)
@@ -748,10 +877,10 @@ private struct CalendarAgendaView: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(isToday ? .white : .primary)
                 .frame(width: 32, height: 32)
-                .background(isToday ? AnyView(Circle().fill(Color.accentColor)) : AnyView(Color.clear))
+                .background(isToday ? AnyView(Circle().fill(Color.quackOrange)) : AnyView(Color.clear))
             Text(Self.dayLabel.string(from: day).uppercased())
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(isToday ? Color.accentColor : .secondary)
+                .foregroundStyle(isToday ? Color.quackOrange : .secondary)
         }
         .frame(width: 56)
         .padding(.top, 8)

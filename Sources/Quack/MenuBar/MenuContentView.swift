@@ -32,6 +32,9 @@ struct MenuContentView: View {
             if sections.isEmpty {
                 placeholder("No upcoming meetings")
             } else {
+                if let next = env.meetingStore.currentOrNext {
+                    NextUpCard(event: next, now: now)
+                }
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(sections) { section in
@@ -84,6 +87,43 @@ struct MenuContentView: View {
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "EEEE, MMM d"; return f
     }()
+}
+
+/// The sunrise-gradient hero at the top of the dropdown: countdown to the
+/// current-or-next meeting, its title, and a one-click Join.
+private struct NextUpCard: View {
+    let event: MeetingEvent
+    let now: Date
+
+    var body: some View {
+        let live = event.isInProgress(at: now)
+        let join = MeetingURLParser.joinURL(for: event)
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(live ? "Live now" : "In \(CountdownFormatter.relative(event.start.timeIntervalSince(now)))")
+                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                Text(event.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if let join {
+                Button { NSWorkspace.shared.open(join) } label: {
+                    Label("Join", systemImage: "video.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.quackPink)
+                        .padding(.horizontal, 11).padding(.vertical, 6)
+                        .background(Capsule().fill(.white))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Join \(event.title)")
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(LinearGradient.quackSunrise))
+        .padding(.horizontal, 8).padding(.top, 8)
+        .accessibilityElement(children: .combine)
+    }
 }
 
 /// One meeting row: time (or "All day"), title.
