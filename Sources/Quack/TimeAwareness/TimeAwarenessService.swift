@@ -32,10 +32,10 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
     private var lastRenderedMinute = -1
     private var started = false
 
-    init(settings: SettingsStore, toasts: ToastPresenter, overflow: MenuBarOverflowService) {
+    init(settings: SettingsStore, toasts: ToastPresenter) {
         self.settings = settings
         self.toasts = toasts
-        self.statusItem = TimeAwarenessStatusItem(overflow: overflow)
+        self.statusItem = TimeAwarenessStatusItem()
     }
 
     func start() {

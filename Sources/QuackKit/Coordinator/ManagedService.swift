@@ -19,7 +19,6 @@ public enum Feature: CaseIterable, Sendable {
     case windowSwipe
     case windowShortcuts
     case temperature
-    case notch
     case mouse
     case timeAwareness
 
@@ -32,7 +31,6 @@ public enum Feature: CaseIterable, Sendable {
         case .windowSwipe: return settings.windowSwipeEnabled
         case .windowShortcuts: return settings.windowShortcutsEnabled
         case .temperature: return settings.cpuTemperatureEnabled
-        case .notch: return settings.notchMediaEnabled || settings.notchAgentsEnabled
         case .mouse:
             return settings.mouseSensitivityEnabled
                 || settings.smoothScrollEnabled

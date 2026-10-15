@@ -55,44 +55,6 @@ import Foundation
         c.cancel()
         #expect(published == 2)
     }
-
-    @Test func notchMediaDefaultsOff() {
-        #expect(!QuackSettings().notchMediaEnabled)
-    }
-
-    @Test func notchMediaDecodesFromOldBlobAsDefault() throws {
-        let json = #"{"brightnessEnabled": true}"#.data(using: .utf8)!
-        let decoded = try JSONDecoder().decode(QuackSettings.self, from: json)
-        #expect(!decoded.notchMediaEnabled)
-    }
-
-    @Test func notchMediaFeatureFollowsFlag() {
-        var s = QuackSettings()
-        s.notchMediaEnabled = true
-        #expect(Feature.notch.isEnabled(in: s))
-        s.notchMediaEnabled = false
-        #expect(!Feature.notch.isEnabled(in: s))
-    }
-
-    @Test func notchAgentsDefaultsOff() {
-        #expect(!QuackSettings().notchAgentsEnabled)
-    }
-
-    @Test func notchAgentsDecodesFromOldBlobAsDefault() throws {
-        let json = #"{"brightnessEnabled": true}"#.data(using: .utf8)!
-        let decoded = try JSONDecoder().decode(QuackSettings.self, from: json)
-        #expect(!decoded.notchAgentsEnabled)
-    }
-
-    @Test func notchAgentsFeatureFollowsFlag() {
-        var s = QuackSettings()
-        s.notchMediaEnabled = false
-        s.notchAgentsEnabled = true
-        #expect(Feature.notch.isEnabled(in: s))
-        s.notchAgentsEnabled = false
-        #expect(!Feature.notch.isEnabled(in: s))
-    }
-
 }
 
 @Suite struct TimeAwarenessSettingsTests {

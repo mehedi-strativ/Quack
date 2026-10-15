@@ -18,10 +18,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var windowShortcutModifiers: Int
     /// Show CPU temperature (with a flame icon) in the menu bar.
     public var cpuTemperatureEnabled: Bool
-    /// Dynamic notch media player controls.
-    public var notchMediaEnabled: Bool
-    /// Show Claude Code agent progress in the notch panel.
-    public var notchAgentsEnabled: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
     /// Fire a "join now" reminder at the meeting's start time.
@@ -105,8 +101,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowShortcutsEnabled: Bool = true,
         windowShortcutModifiers: Int = 0b0011,   // ⌘ + ⌥
         cpuTemperatureEnabled: Bool = false,
-        notchMediaEnabled: Bool = false,
-        notchAgentsEnabled: Bool = false,
         hideDuckIcon: Bool = false,
         remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
@@ -147,8 +141,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.windowShortcutsEnabled = windowShortcutsEnabled
         self.windowShortcutModifiers = windowShortcutModifiers
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
-        self.notchMediaEnabled = notchMediaEnabled
-        self.notchAgentsEnabled = notchAgentsEnabled
         self.hideDuckIcon = hideDuckIcon
         self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
@@ -202,8 +194,6 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         windowShortcutsEnabled = v(.windowShortcutsEnabled, d.windowShortcutsEnabled)
         windowShortcutModifiers = v(.windowShortcutModifiers, d.windowShortcutModifiers)
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
-        notchMediaEnabled = v(.notchMediaEnabled, d.notchMediaEnabled)
-        notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)

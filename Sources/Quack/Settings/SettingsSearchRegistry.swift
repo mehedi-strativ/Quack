@@ -66,12 +66,6 @@ enum SettingsSearchRegistry {
         entry("brightness.dimInactive", "Dim the inactive display", .brightness, "External-display brightness",
               ["focus", "other monitor", "darken"]),
 
-        // Notch
-        entry("notch.media", "Show the media player in the notch", .notch, "Notch panel",
-              ["now playing", "music", "spotify", "controls", "dynamic island"]),
-        entry("notch.agents", "Show Codex, Claude Code, and opencode agents in the notch", .notch, "Notch panel",
-              ["ai", "progress", "tasks"]),
-
         // General
         entry("general.launchAtLogin", "Launch Quack at login", .general, "General",
               ["startup", "autostart", "boot"]),

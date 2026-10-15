@@ -43,12 +43,8 @@ final class AppEnvironment: ObservableObject {
     private let gestureService: GestureMonitor
     private let hotkeyService: HotkeyMonitor
     private let temperatureService: TemperatureStatusItem
-    let menuBarOverflow: MenuBarOverflowService
-    private let notchService: NotchService
     private let mouseService: MouseService
     private let timeAwarenessService: TimeAwarenessService
-    let claudeInstaller = ClaudeConfigInstaller()
-    let opencodeInstaller = OpencodeConfigInstaller()
 
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
@@ -91,19 +87,14 @@ final class AppEnvironment: ObservableObject {
         self.meetingStore = store
         self.brightnessController = brightness
 
-        self.menuBarOverflow = MenuBarOverflowService()
         self.calendarService = CalendarRefreshService(store: store, permissions: permissions)
         self.reminderScheduler = ReminderScheduler(store: store, settings: settings, toasts: toasts, sound: quackSound)
         self.cursorService = CursorBrightnessService(controller: brightness, settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.gestureService = GestureMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
-        self.temperatureService = TemperatureStatusItem(settings: settings, overflow: menuBarOverflow)
-        self.notchService = NotchService(settings: settings, permissions: permissions,
-                                          claudeInstaller: claudeInstaller, opencodeInstaller: opencodeInstaller,
-                                          overflow: menuBarOverflow)
+        self.temperatureService = TemperatureStatusItem(settings: settings)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
-        self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts,
-                                                         overflow: menuBarOverflow)
+        self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
 
         let services: [Feature: ManagedService] = [
             .calendar: calendarService,
@@ -119,7 +110,6 @@ final class AppEnvironment: ObservableObject {
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
         timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
-        notchService.onOpenSettings = { [weak self] in self?.showSettings() }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
         // `AppEnvironment` refresh when settings / meetings / permissions change.
@@ -133,10 +123,6 @@ final class AppEnvironment: ObservableObject {
 
         permissions.refreshAll()
         coordinator.activate()
-        // The notch panel is also the host for the always-available overflow
-        // rail, so its shell must run even when media/agent zones are disabled.
-        menuBarOverflow.start()
-        notchService.start()
 
         // Apply the saved appearance app-wide now, and re-apply whenever it
         // changes. Setting `NSApp.appearance` affects the settings window, the
@@ -313,42 +299,6 @@ final class AppEnvironment: ObservableObject {
 
     /// The pointer-sensitivity unit (settings UI reads `liveApplyAvailable`).
     var mouseSensitivity: MouseSensitivityService { mouseService.sensitivity }
-
-    /// Claude Code integration state/actions for the settings pane. Returns
-    /// success; failures are logged, never fatal (the panel degrades quietly).
-    func claudeIntegrationInstalled() -> Bool {
-        claudeInstaller.isInstalled()
-    }
-
-    @discardableResult
-    func installClaudeIntegration() -> Bool {
-        do { try claudeInstaller.install(); return true }
-        catch { Log.claude.error("Claude integration install failed: \(error.localizedDescription)"); return false }
-    }
-
-    @discardableResult
-    func removeClaudeIntegration() -> Bool {
-        do { try claudeInstaller.uninstall(); return true }
-        catch { Log.claude.error("Claude integration uninstall failed: \(error.localizedDescription)"); return false }
-    }
-
-    /// opencode integration state/actions for the settings pane. Mirrors the
-    /// Claude Code trio above; failures are logged, never fatal.
-    func opencodeIntegrationInstalled() -> Bool {
-        opencodeInstaller.isInstalled()
-    }
-
-    @discardableResult
-    func installOpencodeIntegration() -> Bool {
-        do { try opencodeInstaller.install(); return true }
-        catch { Log.opencode.error("opencode integration install failed: \(error.localizedDescription)"); return false }
-    }
-
-    @discardableResult
-    func removeOpencodeIntegration() -> Bool {
-        do { try opencodeInstaller.uninstall(); return true }
-        catch { Log.opencode.error("opencode integration uninstall failed: \(error.localizedDescription)"); return false }
-    }
 }
 
 /// A no-op service used for features that are purely reactive (the menu-bar

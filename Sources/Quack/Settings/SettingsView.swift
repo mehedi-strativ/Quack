@@ -6,7 +6,7 @@ import QuackKit
 enum SettingsTab: String, CaseIterable {
     case dashboard, meetings, stats
     case mouse, gestures, shortcuts
-    case brightness, notch
+    case brightness
     case general, permissions
 
     var title: String {
@@ -18,7 +18,6 @@ enum SettingsTab: String, CaseIterable {
         case .gestures: return "Gestures"
         case .shortcuts: return "Shortcuts"
         case .brightness: return "Brightness"
-        case .notch: return "Notch"
         case .general: return "Settings"
         case .permissions: return "Permissions"
         }
@@ -33,7 +32,6 @@ enum SettingsTab: String, CaseIterable {
         case .gestures: return "hand.draw"
         case .shortcuts: return "keyboard"
         case .brightness: return "sun.max"
-        case .notch: return "menubar.rectangle"
         case .general: return "gearshape"
         case .permissions: return "lock.shield"
         }
@@ -54,7 +52,7 @@ private enum SidebarGroup: String, CaseIterable {
         case .top: return [.dashboard]
         case .menuBar: return [.meetings, .stats]
         case .input: return [.mouse, .gestures, .shortcuts]
-        case .screen: return [.brightness, .notch]
+        case .screen: return [.brightness]
         case .app: return [.general, .permissions]
         }
     }
@@ -305,8 +303,6 @@ struct SettingsPane: View {
                     MouseScrollSection()
                     MouseButtonsSection()
                     MouseClickMonitorSection()
-                case .notch:
-                    NotchSection()
                 case .general:
                     SettingsSection()
                     CalendarSection()
@@ -1577,71 +1573,6 @@ private struct ShortcutRecorderField: View {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         if activeRecorder == recorderID { activeRecorder = nil }
-    }
-}
-
-// MARK: - Notch panel
-
-private struct NotchSection: View {
-    @EnvironmentObject var env: AppEnvironment
-    @State private var claudeInstalled = false
-    @State private var opencodeInstalled = false
-
-    var body: some View {
-        let s = env.settingsStore
-        Section("Notch panel") {
-            Toggle("Show the media player in the notch", isOn: s.binding(\.notchMediaEnabled))
-            Text("Hover the notch to see the current track and control playback.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-
-            Toggle("Show coding agents in the notch", isOn: s.binding(\.notchAgentsEnabled))
-            Text("Live status of your Codex, Claude Code, and opencode sessions: which agents are working, which need you, and your usage limits.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-
-            if s.settings.notchAgentsEnabled {
-                Text("Codex sessions are detected automatically from ~/.codex. Claude Code and opencode need their integrations enabled below.")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                HStack {
-                    if claudeInstalled {
-                        Text("Claude integration installed.")
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                        Button("Remove") {
-                            env.removeClaudeIntegration()
-                            claudeInstalled = env.claudeIntegrationInstalled()
-                        }
-                    } else {
-                        Text("Needs hooks in ~/.claude/settings.json to see your agents.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Enable Claude integration") {
-                            env.installClaudeIntegration()
-                            claudeInstalled = env.claudeIntegrationInstalled()
-                        }
-                    }
-                }
-                HStack {
-                    if opencodeInstalled {
-                        Text("opencode integration installed.")
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                        Button("Remove") {
-                            env.removeOpencodeIntegration()
-                            opencodeInstalled = env.opencodeIntegrationInstalled()
-                        }
-                    } else {
-                        Text("Needs a plugin in ~/.config/opencode/plugins/ to see your agents.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Enable opencode integration") {
-                            env.installOpencodeIntegration()
-                            opencodeInstalled = env.opencodeIntegrationInstalled()
-                        }
-                    }
-                }
-            }
-
-        }
-        .onAppear {
-            claudeInstalled = env.claudeIntegrationInstalled()
-            opencodeInstalled = env.opencodeIntegrationInstalled()
-        }
     }
 }
 

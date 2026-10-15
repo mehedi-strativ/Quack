@@ -8,9 +8,6 @@ enum Log {
     static let brightness = Logger(subsystem: "com.quack.menubar", category: "brightness")
     static let swipe = Logger(subsystem: "com.quack.menubar", category: "swipe")
     static let permissions = Logger(subsystem: "com.quack.menubar", category: "permissions")
-    static let claude = Logger(subsystem: "com.quack.menubar", category: "claude")
-    static let opencode = Logger(subsystem: "com.quack.menubar", category: "opencode")
-    static let notch = Logger(subsystem: "com.quack.menubar", category: "notch")
     static let mouse = Logger(subsystem: "com.quack.menubar", category: "mouse")
     static let time = Logger(subsystem: "com.quack.menubar", category: "time")
 }
