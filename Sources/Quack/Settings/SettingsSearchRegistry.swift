@@ -10,19 +10,6 @@ enum SettingsSearchRegistry {
     }
 
     static let all: [SettingEntry] = [
-        // Meetings
-        entry("meetings.countdown", "Show meeting countdown in the menu bar", .meetings, "Calendar",
-              ["timer", "next meeting", "menu bar"]),
-        entry("meetings.accounts", "Calendar accounts & selection", .meetings, "Calendar",
-              ["google", "icloud", "eventkit", "sync", "select calendars"]),
-        entry("meetings.google", "Google Calendar sign-in & sync", .meetings, "Google Calendar",
-              ["oauth", "sign in", "google calendar", "google account"]),
-        entry("meetings.reminders", "Meeting reminders", .meetings, "Reminders",
-              ["notification", "alert", "lead time", "before meeting"]),
-        entry("meetings.sound", "Reminder & join sounds", .meetings, "Sound",
-              ["quack", "audio", "notification sound", "chime"]),
-        entry("meetings.remindAtStart", "Remind on time (join now)", .meetings, "Reminders",
-              ["start", "join", "on time"]),
 
         // Stats & timer
         entry("stats.cpu", "Show CPU temperature in the menu bar", .stats, "CPU temperature",
@@ -64,7 +51,7 @@ enum SettingsSearchRegistry {
 
         // Permissions
         entry("permissions.list", "Permissions", .permissions, "Permissions",
-              ["accessibility", "screen recording", "calendar access", "privacy", "grant", "tcc"]),
+              ["accessibility", "screen recording", "privacy", "grant", "tcc"]),
         entry("permissions.status", "Diagnostics & status", .permissions, "Status",
               ["health", "debug", "version"]),
     ]

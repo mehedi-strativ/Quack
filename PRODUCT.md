@@ -13,8 +13,8 @@ status without switching away from their editor or terminal.
 ## Product Purpose
 
 Quack consolidates small macOS power tools into one quiet, always-available
-companion. Success means the user gets what they need — the next meeting,
-the right brightness, a window in place — without opening another window.
+companion. Success means the user gets what they need — the right brightness,
+the pointer behaving, the CPU temperature — without opening another window.
 
 ## Brand Personality
 

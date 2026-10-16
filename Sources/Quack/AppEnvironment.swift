@@ -4,19 +4,16 @@ import Combine
 import QuackKit
 import CSMC
 
-/// Central composition root. Owns the settings, the meeting store, every live
+/// Central composition root. Owns the settings, every live
 /// service, and the coordinator that starts/stops services as flags flip.
 /// Injected into the SwiftUI environment as a single `ObservableObject`.
 @MainActor
 final class AppEnvironment: ObservableObject {
     let settingsStore: SettingsStore
     let permissions: PermissionsManager
-    let meetingStore: MeetingStore
     let diagnostics = DiagnosticsStatus()
 
-    /// A reliably-ticking clock that drives the menu-bar countdown. A
-    /// `Timer.publish` placed inside a `MenuBarExtra` label does not fire
-    /// dependably, which froze the countdown; this timer lives on the main
+    /// A reliably-ticking clock for time-based UI. The timer lives on the main
     /// run loop in `.common` mode so it keeps firing during menu tracking too.
     @Published var now = Date()
     /// The currently selected settings tab (lifted here so features can deep-link
@@ -28,17 +25,10 @@ final class AppEnvironment: ObservableObject {
     private var clockTimer: Timer?
     private var activeObserver: NSObjectProtocol?
 
-    private let eventKitProvider: EventKitProvider
-    private let googleOAuth: GoogleOAuthService
-    private let googleCalendarProvider: GoogleCalendarProvider
-    private let composite: CompositeCalendarProvider
     let brightnessController: BrightnessController
     private let toasts = ToastPresenter()
-    private let quackSound = QuackSound()
     private let settingsWindow = SettingsWindowController()
 
-    private let calendarService: CalendarRefreshService
-    private let reminderScheduler: ReminderScheduler
     private let cursorService: CursorBrightnessService
     private let temperatureService: TemperatureStatusItem
     private let mouseService: MouseService
@@ -49,53 +39,19 @@ final class AppEnvironment: ObservableObject {
 
     init() {
         let settings = SettingsStore()
-        // Calendar is always on now (its toggle was removed); it powers the
-        // countdown, reminders, and the dropdown list.
-        settings.update { $0.calendarEnabled = true }
         let permissions = PermissionsManager()
-        let eventKitProvider = EventKitProvider(permissions: permissions)
-        let googleOAuth = GoogleOAuthService(
-            clientID: "783466472013-itdojrdr933jt0s0g1s47qb24g1ibnim.apps.googleusercontent.com",
-            clientSecret: "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"
-        )
-        let googleCalendarProvider = GoogleCalendarProvider(
-            oauth: googleOAuth,
-            enabled: { settings.settings.useGoogle },
-            calendarIDs: {
-                settings.settings.syncAllCalendars ? [] : settings.settings.selectedGoogleCalendarIDs
-            }
-        )
-        let composite = CompositeCalendarProvider(
-            providers: [googleCalendarProvider]
-        )
-        let store = MeetingStore(
-            provider: composite,
-            calendarIDs: {
-                settings.settings.syncAllCalendars ? [] : settings.settings.selectedGoogleCalendarIDs
-            }
-        )
         let brightness = BrightnessController()
 
         self.settingsStore = settings
         self.permissions = permissions
-        self.eventKitProvider = eventKitProvider
-        self.googleOAuth = googleOAuth
-        self.googleCalendarProvider = googleCalendarProvider
-        self.composite = composite
-        self.meetingStore = store
         self.brightnessController = brightness
 
-        self.calendarService = CalendarRefreshService(store: store, permissions: permissions)
-        self.reminderScheduler = ReminderScheduler(store: store, settings: settings, toasts: toasts, sound: quackSound)
         self.cursorService = CursorBrightnessService(controller: brightness, settings: settings, permissions: permissions, diagnostics: diagnostics)
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
         self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
 
         let services: [Feature: ManagedService] = [
-            .calendar: calendarService,
-            .reminders: reminderScheduler,
-            .menuBarCountdown: NullService(),   // title is driven reactively; no side effects
             .brightness: cursorService,
             .temperature: temperatureService,
             .mouse: mouseService,
@@ -106,9 +62,8 @@ final class AppEnvironment: ObservableObject {
         timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
-        // `AppEnvironment` refresh when settings / meetings / permissions change.
+        // `AppEnvironment` refresh when settings / permissions change.
         settings.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        store.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         permissions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         brightness.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         diagnostics.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
@@ -135,116 +90,22 @@ final class AppEnvironment: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
         clockTimer = timer
 
-        // Re-check permissions and reload the calendar when returning to the app
-        // (e.g. after granting access in System Settings).
+        // Re-check permissions when returning to the app (e.g. after granting
+        // access in System Settings).
         activeObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.permissions.refreshAll()
-                self?.refreshCalendarNow()
             }
         }
     }
 
 
-    /// Plays a sound for the settings preview button.
-    func previewSound(_ sound: NotificationSound) {
-        quackSound.play(sound)
-    }
-
-    /// Shows a sample "join now" toast so the user can confirm reminders appear
-    /// (independent of whether a real meeting is currently due).
-    func previewToast() {
-        let url = URL(string: "https://meet.google.com/abc-defg-hij")
-        let now = Date()
-        let f = DateFormatter(); f.dateFormat = "h:mm a"
-        toasts.show(ToastItem(
-            title: "Preview meeting",
-            relativeText: "now",
-            timeRange: "\(f.string(from: now)) – \(f.string(from: now.addingTimeInterval(1800)))",
-            colorHex: nil,
-            joinURL: url,
-            provider: MeetingProvider(url: url),
-            joinable: true,
-            isStart: true
-        ), dismissAfter: nil)   // mirror the real join-now toast: stays until dismissed
-        quackSound.play(NotificationSound.from(settingsStore.settings.joinAlertSound))
-    }
-
-    /// Shows a sample advance-reminder toast (plain notification, no Join button,
-    /// auto-dismiss) — what the 20/10/5-minute reminders look like.
-    func previewReminderToast() {
-        let url = URL(string: "https://meet.google.com/abc-defg-hij")
-        let now = Date()
-        let f = DateFormatter(); f.dateFormat = "h:mm a"
-        toasts.show(ToastItem(
-            title: "Preview meeting",
-            relativeText: "in 10 min",
-            timeRange: "\(f.string(from: now.addingTimeInterval(600))) – \(f.string(from: now.addingTimeInterval(2400)))",
-            colorHex: nil,
-            joinURL: url,
-            provider: MeetingProvider(url: url),
-            joinable: false,
-            isStart: false
-        ), dismissAfter: 6)
-        quackSound.play(NotificationSound.from(settingsStore.settings.notificationSound))
-    }
-
-    /// Re-reads the calendar now (e.g. when the menu opens) so the list is never
-    /// showing stale/empty data.
-    func refreshCalendarNow() {
-        guard settingsStore.settings.calendarEnabled else { return }
-        Task { @MainActor in
-            await meetingStore.refresh()
-            // The fetch above also asks macOS to sync remote sources, which is
-            // async — so fetch again a few seconds later to pick up an edit that
-            // had just synced from the cloud (Google/iCloud).
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            await meetingStore.refresh()
-        }
-    }
-
     /// Opens (and focuses) the Quack settings window, optionally selecting a tab.
     func showSettings(selecting tab: SettingsTab? = nil) {
         if let tab { settingsTab = tab }
         settingsWindow.show(env: self)
-    }
-
-    /// Fetches every event overlapping `window` for the agenda view, honoring the
-    /// user's calendar selection. Returns them sorted by start time with
-    /// conferencing links resolved. Empty on no access/error.
-    func events(in window: DateInterval) async -> [MeetingEvent] {
-        let fetched = (try? await composite.fetchEvents(window: window)) ?? []
-        let s = settingsStore.settings
-        let ids = s.syncAllCalendars ? [] : s.selectedGoogleCalendarIDs
-        return MeetingSelection.filter(fetched, window: window, calendarIDs: ids)
-            .map { $0.withConferencingURL(MeetingURLParser.joinURL(for: $0)) }
-            .sorted { $0.start < $1.start }
-    }
-
-    // MARK: - Google Calendar
-
-    var isGoogleAuthenticated: Bool {
-        get async { await googleOAuth.isAuthenticated }
-    }
-
-    func signInToGoogle() async throws {
-        try await googleOAuth.authenticate()
-        settingsStore.update { $0.useGoogle = true }
-    }
-
-    func signOutFromGoogle() async {
-        let googleIDs = Set(await googleCalendarProvider.availableCalendars().map(\.id))
-        await googleOAuth.signOut()
-        settingsStore.update {
-            $0.useGoogle = false
-            $0.selectedGoogleCalendarIDs.removeAll { googleIDs.contains($0) }
-        }
-    }
-
-    func availableGoogleCalendars() async -> [GoogleCalendarInfo] {
-        await googleCalendarProvider.availableCalendars()
     }
 
     /// Day statistics for the Dashboard card and the day-by-day view. Today
@@ -293,12 +154,4 @@ final class AppEnvironment: ObservableObject {
 
     /// The pointer-sensitivity unit (settings UI reads `liveApplyAvailable`).
     var mouseSensitivity: MouseSensitivityService { mouseService.sensitivity }
-}
-
-/// A no-op service used for features that are purely reactive (the menu-bar
-/// countdown is rendered from `MeetingStore`, so it needs no lifecycle).
-@MainActor
-private final class NullService: ManagedService {
-    func start() {}
-    func stop() {}
 }

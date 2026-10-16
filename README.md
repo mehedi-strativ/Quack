@@ -14,8 +14,8 @@
 </p>
 
 A native macOS menu-bar utility that bundles the little power-tools you'd
-otherwise install five apps for: meeting countdowns & click-to-join reminders,
-external-monitor brightness on the F1/F2 keys, and a CPU temperature readout.
+otherwise install a few apps for: external-monitor brightness on the F1/F2 keys,
+mouse tweaks, a CPU temperature readout, and activity/break tracking.
 
 Lives in the menu bar (no Dock icon). Every feature is individually toggleable,
 and services start **only** when their toggle is on.
@@ -26,9 +26,7 @@ and services start **only** when their toggle is on.
 
 | | Feature | What it does | Permission |
 |---|---|---|---|
-| 🦆 | **Menu bar** | Separate duck (opens Settings), a meeting countdown with a colored bar, and a CPU-temperature item | — |
-| 📅 | **Calendar** | Next/in-progress meeting + live countdown; events in the dropdown; pick which accounts/calendars sync | Calendar |
-| 🔔 | **Reminders** | Toast alerts at 20/10/5 min, plus **Join** alerts at 1 min and on-time (Zoom/Meet/Teams) — separate sounds each | Calendar |
+| 🦆 | **Menu bar** | Separate duck (opens Settings) and a CPU-temperature item | — |
 | ☀️ | **External brightness** | F1/F2 control whichever external display the cursor is on, over DDC — with software dimming **below** the hardware floor | Accessibility¹ |
 | 🌡️ | **CPU temperature** | Flame + live temperature (°C/°F) read from the Mac's sensors, à la `hot` | — |
 | 🖱️ | **Mouse** | Pointer-speed override, buttery smooth scrolling for wheel mice, and custom actions on buttons 4/5 (Mission Control, media keys, any shortcut…) | Accessibility² |
@@ -63,7 +61,7 @@ This quits any running copy, builds a release bundle, installs it to
 the duck → enable what you want.
 
 > **Always run via `install.sh` / the installed copy.** macOS ties Accessibility
-> & Calendar grants to the bundle id + signature at a fixed path. Running from
+> grants to the bundle id + signature at a fixed path. Running from
 > the build folder makes grants silently stop working. The stable
 > "Quack Local Signing" identity keeps grants across rebuilds.
 
@@ -84,9 +82,6 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
 - **Brightness** — cursor on an external display, press **F1/F2**. Past the
   monitor's minimum it keeps dimming with a software overlay. A native-style HUD
   shows the level.
-- **Reminders** — pick lead times under **Calendar → Reminders**; 20/10/5 are
-  plain notifications, 1-minute and on-time show a **Join** button. Each group
-  has its own sound (previewed on selection) and a **Preview** button.
 - **Mouse** — under **Mouse**: tracking-speed slider, smooth scrolling toggle,
   and per-button pickers for buttons 4/5 (incl. recording any keyboard shortcut).
 - **Temperature** — toggle under **CPU**; click the flame for thermal pressure +
@@ -100,7 +95,6 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
 
 ## 🔐 Permissions
 
-- **Calendar** — requested when you enable calendar features.
 - **Accessibility** — for F1/F2 routing and mouse features.
   Can't be granted programmatically: click **Grant**, flip Quack on in
   System Settings → Privacy & Security → Accessibility. Quack picks it up live.
@@ -113,17 +107,13 @@ Each Settings section has an **Open Settings** deep-link if you ever deny one.
 
 ```
 QuackKit (library, fully unit-tested — no system/UI deps)
-  Models/      MeetingEvent, QuackSettings, MeetingProvider
-  Calendar/    CalendarProvider, MeetingSelection, MeetingStore, MeetingURLParser
-  MenuBar/     CountdownFormatter
+  Models/      QuackSettings
   Display/     BrightnessMath
   Coordinator/ AppCoordinator, ManagedService, Feature
   Permissions/ PermissionStatusMapper · Settings/ SettingsStore
 
 Quack (executable — SwiftUI + AppKit)
-  MenuBar/   StatusItemController (duck + countdown), TemperatureStatusItem, MenuContentView
-  Calendar/  EventKitProvider, CalendarRefreshService
-  Reminders/ ReminderScheduler · Toast/ ToastPresenter
+  MenuBar/   StatusItemController (duck), TemperatureStatusItem · Toast/ ToastPresenter
   Display/   CursorBrightnessService, BrightnessKeyTap, BrightnessController,
              DisplayDimmer, BrightnessHUD, DDCControl
   Settings/  SettingsView

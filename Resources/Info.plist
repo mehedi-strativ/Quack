@@ -28,10 +28,6 @@
     <true/>
 
     <!-- Permission usage strings. -->
-    <key>NSCalendarsUsageDescription</key>
-    <string>Quack reads your calendar to show the next meeting and fire reminders.</string>
-    <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>Quack reads your calendar to show the next meeting and fire reminders.</string>
 
     <key>NSHumanReadableCopyright</key>
     <string>Quack — personal menu-bar utility.</string>

@@ -2,16 +2,6 @@ import Testing
 @testable import QuackKit
 
 @Suite struct PermissionStatusMapperTests {
-    @Test func calendarMapping() {
-        #expect(PermissionStatusMapper.calendar(fromEventKitRawValue: 0) == .notRequested)
-        #expect(PermissionStatusMapper.calendar(fromEventKitRawValue: 1) == .denied)   // restricted
-        #expect(PermissionStatusMapper.calendar(fromEventKitRawValue: 2) == .denied)   // denied
-        #expect(PermissionStatusMapper.calendar(fromEventKitRawValue: 3) == .granted)  // authorized
-        #expect(PermissionStatusMapper.calendar(fromEventKitRawValue: 4) == .denied)   // writeOnly
-        #expect(PermissionStatusMapper.calendar(fromEventKitRawValue: 5) == .granted)  // fullAccess
-    }
-
-
     @Test func accessibilityMapping() {
         #expect(PermissionStatusMapper.accessibility(isTrusted: true) == .granted)
         #expect(PermissionStatusMapper.accessibility(isTrusted: false) == .notRequested)
@@ -42,8 +32,7 @@ private final class SpyService: ManagedService {
         let store = SettingsStore(backing: InMemoryKeyValueStore(), key: "t")
         store.replace(with: initial)
         let services: [Feature: SpyService] = [
-            .calendar: SpyService(), .reminders: SpyService(), .menuBarCountdown: SpyService(),
-            .brightness: SpyService(),
+            .brightness: SpyService(), .temperature: SpyService(),
         ]
         let coord = AppCoordinator(store: store, services: services.mapValues { $0 as ManagedService })
         return (coord, store, services)
@@ -54,10 +43,8 @@ private final class SpyService: ManagedService {
         s.brightnessEnabled = false
         let (coord, _, services) = make(s)
         coord.activate()
-        #expect(services[.calendar]!.startCount == 1)
-        #expect(services[.reminders]!.startCount == 1)
-        #expect(services[.menuBarCountdown]!.startCount == 1)
         #expect(services[.brightness]!.startCount == 0)
+        #expect(services[.temperature]!.startCount == 0)
     }
 
     @Test func flipFlagStartsAndStopsService() {
@@ -72,17 +59,5 @@ private final class SpyService: ManagedService {
 
         store.update { $0.brightnessEnabled = false }
         #expect(services[.brightness]!.stopCount == 1)
-    }
-
-    @Test func remindersRequireCalendar() {
-        var s = QuackSettings()
-        s.calendarEnabled = false
-        s.remindersEnabled = true
-        let (coord, store, services) = make(s)
-        coord.activate()
-        #expect(services[.reminders]!.startCount == 0)   // calendar off -> reminders off
-
-        store.update { $0.calendarEnabled = true }
-        #expect(services[.reminders]!.startCount == 1)
     }
 }

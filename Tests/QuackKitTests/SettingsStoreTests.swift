@@ -6,19 +6,13 @@ import Foundation
 
     @Test func defaults() {
         let s = QuackSettings()
-        #expect(s.calendarEnabled)
-        #expect(s.remindersEnabled)
-        #expect(s.menuBarCountdownEnabled)
         #expect(!s.brightnessEnabled)
         #expect(!s.dimInactiveDisplay)
-        #expect(s.reminderLeadMinutes == [10, 5])
     }
 
     @Test func encodeDecodeRoundTrip() throws {
         var s = QuackSettings()
         s.brightnessEnabled = true
-        s.reminderLeadMinutes = [20, 10, 5]
-        s.selectedCalendarIDs = ["cal-1", "cal-2"]
         s.displayBrightness = ["DELL-1": 0.7]
         let data = try JSONEncoder().encode(s)
         let decoded = try JSONDecoder().decode(QuackSettings.self, from: data)
@@ -29,9 +23,6 @@ import Foundation
         let json = #"{"brightnessEnabled": true}"#.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(QuackSettings.self, from: json)
         #expect(decoded.brightnessEnabled)
-        #expect(decoded.reminderLeadMinutes == [10, 5])
-        #expect(decoded.calendarEnabled)
-        #expect(decoded.syncAllCalendars)   // new field defaults true for old blobs
     }
 
     @Test func persistsAndReloadsFromBacking() {

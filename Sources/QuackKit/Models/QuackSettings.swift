@@ -4,40 +4,13 @@ import Foundation
 /// `UserDefaults` key by `SettingsStore`.
 public struct QuackSettings: Codable, Equatable, Sendable {
     // MARK: Feature flags
-    public var calendarEnabled: Bool
-    public var remindersEnabled: Bool
-    public var menuBarCountdownEnabled: Bool
     public var brightnessEnabled: Bool
     /// Show CPU temperature (with a flame icon) in the menu bar.
     public var cpuTemperatureEnabled: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
-    /// Fire a "join now" reminder at the meeting's start time.
-    public var remindAtStart: Bool
     /// Show the temperature in Fahrenheit instead of Celsius.
     public var temperatureFahrenheit: Bool
-
-    // MARK: Menu-bar countdown
-    /// How many hours before a meeting to start showing the countdown in the menu bar.
-    public var countdownLeadHours: Int
-
-    // MARK: Reminders
-    /// Lead times (minutes before start) at which to fire a reminder.
-    public var reminderLeadMinutes: [Int]
-    /// Sound for advance reminders (20/10/5 min). See NotificationSound.
-    public var notificationSound: String
-    /// Sound for the join alerts (1-minute + on-time).
-    public var joinAlertSound: String
-
-    // MARK: Calendar
-    public var useEventKit: Bool
-    public var useGoogle: Bool
-    /// When true, sync every calendar and ignore `selectedCalendarIDs`.
-    public var syncAllCalendars: Bool
-    /// Explicit calendar selection used when `syncAllCalendars` is false.
-    public var selectedCalendarIDs: [String]
-    /// Google calendars to sync (used when `syncAllCalendars` is false).
-    public var selectedGoogleCalendarIDs: [String]
 
     // MARK: Brightness
     public var brightnessStepPercent: Int
@@ -80,23 +53,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var activityIdleResetMinutes: Int
 
     public init(
-        calendarEnabled: Bool = true,
-        remindersEnabled: Bool = true,
-        menuBarCountdownEnabled: Bool = true,
         brightnessEnabled: Bool = false,
         cpuTemperatureEnabled: Bool = false,
         hideDuckIcon: Bool = false,
-        remindAtStart: Bool = true,
         temperatureFahrenheit: Bool = false,
-        countdownLeadHours: Int = 8,
-        reminderLeadMinutes: [Int] = [10, 5],
-        notificationSound: String = "quack",
-        joinAlertSound: String = "quack",
-        useEventKit: Bool = true,
-        useGoogle: Bool = false,
-        syncAllCalendars: Bool = true,
-        selectedCalendarIDs: [String] = [],
-        selectedGoogleCalendarIDs: [String] = [],
         brightnessStepPercent: Int = 10,
         dimInactiveDisplay: Bool = false,
         displayBrightness: [String: Double] = [:],
@@ -115,23 +75,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         activityRepeatMinutes: Int = 10,
         activityIdleResetMinutes: Int = 5
     ) {
-        self.calendarEnabled = calendarEnabled
-        self.remindersEnabled = remindersEnabled
-        self.menuBarCountdownEnabled = menuBarCountdownEnabled
         self.brightnessEnabled = brightnessEnabled
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
         self.hideDuckIcon = hideDuckIcon
-        self.remindAtStart = remindAtStart
         self.temperatureFahrenheit = temperatureFahrenheit
-        self.countdownLeadHours = countdownLeadHours
-        self.reminderLeadMinutes = reminderLeadMinutes
-        self.notificationSound = notificationSound
-        self.joinAlertSound = joinAlertSound
-        self.useEventKit = useEventKit
-        self.useGoogle = useGoogle
-        self.syncAllCalendars = syncAllCalendars
-        self.selectedCalendarIDs = selectedCalendarIDs
-        self.selectedGoogleCalendarIDs = selectedGoogleCalendarIDs
         self.brightnessStepPercent = brightnessStepPercent
         self.dimInactiveDisplay = dimInactiveDisplay
         self.displayBrightness = displayBrightness
@@ -163,23 +110,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
             }
             return fallback
         }
-        calendarEnabled = v(.calendarEnabled, d.calendarEnabled)
-        remindersEnabled = v(.remindersEnabled, d.remindersEnabled)
-        menuBarCountdownEnabled = v(.menuBarCountdownEnabled, d.menuBarCountdownEnabled)
         brightnessEnabled = v(.brightnessEnabled, d.brightnessEnabled)
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
-        remindAtStart = v(.remindAtStart, d.remindAtStart)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)
-        countdownLeadHours = v(.countdownLeadHours, d.countdownLeadHours)
-        reminderLeadMinutes = v(.reminderLeadMinutes, d.reminderLeadMinutes)
-        notificationSound = v(.notificationSound, d.notificationSound)
-        joinAlertSound = v(.joinAlertSound, d.joinAlertSound)
-        useEventKit = v(.useEventKit, d.useEventKit)
-        useGoogle = v(.useGoogle, d.useGoogle)
-        syncAllCalendars = v(.syncAllCalendars, d.syncAllCalendars)
-        selectedCalendarIDs = v(.selectedCalendarIDs, d.selectedCalendarIDs)
-        selectedGoogleCalendarIDs = v(.selectedGoogleCalendarIDs, d.selectedGoogleCalendarIDs)
         brightnessStepPercent = v(.brightnessStepPercent, d.brightnessStepPercent)
         dimInactiveDisplay = v(.dimInactiveDisplay, d.dimInactiveDisplay)
         displayBrightness = v(.displayBrightness, d.displayBrightness)

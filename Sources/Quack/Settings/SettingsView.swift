@@ -4,7 +4,7 @@ import QuackKit
 /// The feature groups shown in the left sidebar. Tabs are named for what they
 /// control (self-describing), grouped by surface: menu bar, input, screen, app.
 enum SettingsTab: String, CaseIterable {
-    case dashboard, meetings, stats
+    case dashboard, stats
     case mouse
     case brightness
     case general, permissions
@@ -12,7 +12,6 @@ enum SettingsTab: String, CaseIterable {
     var title: String {
         switch self {
         case .dashboard: return "Dashboard"
-        case .meetings: return "Meetings"
         case .stats: return "Stats & Timer"
         case .mouse: return "Mouse"
         case .brightness: return "Brightness"
@@ -24,7 +23,6 @@ enum SettingsTab: String, CaseIterable {
     var icon: String {
         switch self {
         case .dashboard: return "square.grid.2x2"
-        case .meetings: return "calendar"
         case .stats: return "gauge.with.needle"
         case .mouse: return "computermouse"
         case .brightness: return "sun.max"
@@ -39,7 +37,6 @@ enum SettingsTab: String, CaseIterable {
     var color: Color {
         switch self {
         case .dashboard: return Color(hex: "#FFAA1F")!
-        case .meetings: return Color(hex: "#FF8A24")!
         case .stats: return Color(hex: "#FF6A3D")!
         case .mouse: return Color(hex: "#FF4F66")!
         case .brightness: return Color(hex: "#B455CC")!
@@ -61,7 +58,7 @@ private enum SidebarGroup: String, CaseIterable {
     var tabs: [SettingsTab] {
         switch self {
         case .top: return [.dashboard]
-        case .menuBar: return [.meetings, .stats]
+        case .menuBar: return [.stats]
         case .input: return [.mouse]
         case .screen: return [.brightness]
         case .app: return [.general, .permissions]
@@ -301,8 +298,6 @@ struct SettingsPane: View {
         switch tab {
         case .dashboard:
             DashboardView()
-        case .meetings:
-            MeetingsPane()
         default:
             Form {
                 switch tab {
@@ -319,12 +314,10 @@ struct SettingsPane: View {
                     MouseClickMonitorSection()
                 case .general:
                     SettingsSection()
-                    CalendarSection()
-                    RemindersSection()
                 case .permissions:
                     PermissionsSection()
                     StatusSection()
-                case .dashboard, .meetings:
+                case .dashboard:
                     EmptyView()
                 }
             }
@@ -355,18 +348,6 @@ private struct SpotlightChip: View {
     }
 }
 
-/// Meetings tab: the month agenda, full height. Calendar-sync and reminder
-/// settings live under the Settings tab.
-private struct MeetingsPane: View {
-    var body: some View {
-        CalendarAgendaView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// A subtle inline caption about how cross-app calendar edits sync. Plain
-/// secondary text (no tint, no border) so it sits quietly inside its card and
-/// scrolls with the content.
 // MARK: - Settings (app-level preferences)
 
 private struct SettingsSection: View {
@@ -380,7 +361,7 @@ private struct SettingsSection: View {
             Toggle("Launch Quack at login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { LaunchAtLogin.set($0) }
             Toggle("Hide the duck icon from the menu bar", isOn: s.binding(\.hideDuckIcon))
-            Text("The dropdown and settings are still reachable from the meeting countdown and temperature items.")
+            Text("Settings stay reachable from the temperature and activity items, or by opening Quack again.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
         }
         Section("Appearance") {
@@ -411,21 +392,18 @@ private struct SettingsSection: View {
 
 // MARK: - Dashboard (General tab)
 
-/// The Dashboard tab: a greeting, a sunrise-gradient "Next up" hero for the
-/// coming meeting (countdown + Join), then a grid of tinted stat cards — one
+/// The Dashboard tab: a greeting, then a grid of tinted stat cards — one
 /// per feature area, each in its signature color. Cards open their tab.
 private struct DashboardView: View {
     @EnvironmentObject var env: AppEnvironment
     private let columns = [GridItem(.adaptive(minimum: 230), spacing: 14)]
 
-    @State private var upcoming: [MeetingEvent] = []
     @State private var tempC: Double = -1
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 greeting
-                NextUpHero(upcoming: upcoming)
                 LazyVGrid(columns: columns, spacing: 14) {
                     DashCard(tab: .stats, title: "CPU", icon: "thermometer.medium") { cpuSummary }
                     if env.settingsStore.settings.timeAwarenessEnabled {
@@ -438,8 +416,6 @@ private struct DashboardView: View {
             .padding(20)
         }
         .background(.background)
-        .onAppear { env.refreshCalendarNow() }
-        .task { await loadUpcoming() }
         .task { await pollTemperature() }
     }
 
@@ -460,13 +436,6 @@ private struct DashboardView: View {
         case 17..<22: return "Good evening"
         default: return "Burning the midnight oil"
         }
-    }
-
-    private func loadUpcoming() async {
-        let now = env.now
-        let window = DateInterval(start: now, duration: 14 * 86_400)
-        let all = await env.events(in: window)
-        upcoming = Array(all.filter { $0.isAllDay || $0.end > now }.prefix(6))
     }
 
     private func pollTemperature() async {
@@ -558,127 +527,6 @@ private struct DashboardView: View {
     }()
 }
 
-/// The dashboard hero: the current-or-next timed meeting on the sunrise
-/// gradient — big countdown, title, Join button — plus the next few events.
-private struct NextUpHero: View {
-    @EnvironmentObject var env: AppEnvironment
-    let upcoming: [MeetingEvent]
-
-    private var now: Date { env.now }
-    private var next: MeetingEvent? {
-        upcoming.first { !$0.isAllDay && $0.end > now }
-    }
-    private var later: [MeetingEvent] {
-        Array(upcoming.filter { $0.id != next?.id }.prefix(3))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Next up", systemImage: "bolt.fill")
-                    .font(.system(size: 12, weight: .bold)).textCase(.uppercase)
-                    .opacity(0.9)
-                Spacer()
-                Button {
-                    env.settingsTab = .meetings
-                } label: {
-                    HStack(spacing: 3) {
-                        Text("Agenda")
-                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens the Meetings tab")
-            }
-            if let next {
-                headline(next)
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Clear runway")
-                        .font(.system(size: 28, weight: .heavy, design: .rounded))
-                    Text("No meetings in the next two weeks — go make something.")
-                        .font(.system(size: 13, weight: .medium)).opacity(0.9)
-                }
-            }
-            if !later.isEmpty {
-                VStack(spacing: 6) {
-                    ForEach(later) { laterRow($0) }
-                }
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(0.16)))
-            }
-        }
-        .foregroundStyle(.white)
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(LinearGradient.quackSunrise)
-                .shadow(color: .quackPink.opacity(0.35), radius: 14, y: 6)
-        )
-    }
-
-    private func headline(_ e: MeetingEvent) -> some View {
-        let live = e.isInProgress(at: now)
-        let countdown = live
-            ? "Live · ends in \(CountdownFormatter.relative(e.end.timeIntervalSince(now)))"
-            : "in \(CountdownFormatter.relative(e.start.timeIntervalSince(now)))"
-        let join = MeetingURLParser.joinURL(for: e)
-        return HStack(alignment: .bottom, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(countdown)
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                Text(e.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                Text(Self.time.string(from: e.start) + " – " + Self.time.string(from: e.end))
-                    .font(.system(size: 12, weight: .medium)).opacity(0.85)
-            }
-            Spacer(minLength: 0)
-            if let join {
-                Button { NSWorkspace.shared.open(join) } label: {
-                    Label("Join", systemImage: "video.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color.quackPink)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Capsule().fill(.white))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Join \(e.title)")
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private func laterRow(_ e: MeetingEvent) -> some View {
-        HStack(spacing: 9) {
-            Text(whenText(e))
-                .font(.system(size: 12, weight: .semibold)).monospacedDigit()
-                .frame(width: 92, alignment: .leading)
-            Text(e.title).font(.system(size: 13)).lineLimit(1)
-            Spacer(minLength: 4)
-            if e.conferencingURL != nil {
-                Image(systemName: "video.fill").font(.system(size: 10)).opacity(0.85)
-            }
-        }
-    }
-
-    /// "2:30 PM" for today, "Fri 2:30 PM" otherwise; "All day" variants too.
-    private func whenText(_ e: MeetingEvent) -> String {
-        let today = Calendar.current.isDateInToday(e.start)
-        if e.isAllDay { return today ? "All day" : "\(Self.wday.string(from: e.start)) · All day" }
-        let t = Self.time.string(from: e.start)
-        return today ? t : "\(Self.wday.string(from: e.start)) \(t)"
-    }
-
-    private static let time: DateFormatter = {
-        let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none; return f
-    }()
-    private static let wday: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "EEE"; return f
-    }()
-}
-
 /// A dashboard stat card in its feature's signature color: icon tile + title
 /// over a big headline value, on a soft tinted wash. Opens the matching tab.
 private struct DashCard<Content: View>: View {
@@ -725,483 +573,6 @@ private struct DashCard<Content: View>: View {
         .buttonStyle(.plain)
         .instantHover($hovering)
         .accessibilityLabel("\(title ?? tab.title). Opens \(tab.title) settings")
-    }
-}
-
-// MARK: - Calendar agenda (Calendar tab)
-
-/// A month-at-a-time agenda (Google "Schedule" style): a scrolling list grouped
-/// by day, each day a date column beside its events. Pages by month and jumps
-/// back to today. Reads events via `AppEnvironment.events(in:)`.
-private struct CalendarAgendaView: View {
-    @EnvironmentObject var env: AppEnvironment
-    @State private var anchor = Calendar.current.startOfDay(for: Date())
-    @State private var events: [MeetingEvent] = []
-    @State private var loading = false
-
-    private let cal = Calendar.current
-
-    private var monthInterval: DateInterval {
-        cal.dateInterval(of: .month, for: anchor) ?? DateInterval(start: anchor, duration: 30 * 86_400)
-    }
-
-    private var isCurrentMonth: Bool {
-        cal.isDate(anchor, equalTo: Date(), toGranularity: .month)
-    }
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            VStack(spacing: 0) {
-                header
-                Divider()
-                ScrollView { content }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .background(.background)
-            .task(id: anchor) {
-                await load()
-                guard isCurrentMonth else { return }
-                // `load()` just flipped `loading`/`events`, which is what
-                // switches `content` from the ProgressView branch to the
-                // LazyVStack — but that state change hasn't been applied to
-                // the rendered view tree yet at this exact point (SwiftUI
-                // commits it on a later run-loop turn), so a `scrollTo` called
-                // synchronously here targets an id that doesn't exist in the
-                // CURRENT tree and silently no-ops. Deferring past that commit
-                // (plus giving the pane a layout pass) is why this needs a
-                // hop, not a bare call.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    proxy.scrollTo(cal.startOfDay(for: Date()), anchor: .top)
-                }
-            }
-        }
-    }
-
-    // MARK: Header
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Button("Today") { withAnimation { anchor = cal.startOfDay(for: Date()) } }
-                .controlSize(.large)
-                .disabled(isCurrentMonth)
-            HStack(spacing: 2) {
-                stepMonth("chevron.left", by: -1)
-                stepMonth("chevron.right", by: 1)
-            }
-            Text(Self.month.string(from: anchor))
-                .font(.system(size: 19, weight: .semibold))
-            Spacer()
-        }
-        .padding(.horizontal, 20).padding(.vertical, 14)
-    }
-
-    private func stepMonth(_ icon: String, by months: Int) -> some View {
-        Button {
-            if let next = cal.date(byAdding: .month, value: months, to: anchor) {
-                withAnimation(.easeOut(duration: 0.15)) { anchor = next }
-            }
-        } label: {
-            Image(systemName: icon).font(.system(size: 14, weight: .semibold)).frame(width: 28, height: 26)
-        }
-        .buttonStyle(.borderless)
-    }
-
-    // MARK: Content
-
-    @ViewBuilder
-    private var content: some View {
-        if loading && events.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.top, 44)
-        } else if sections.isEmpty {
-            emptyState(icon: "calendar",
-                       title: "No events",
-                       subtitle: "Nothing scheduled this month.",
-                       action: nil)
-        } else {
-            LazyVStack(spacing: 0) {
-                ForEach(sections) { section in
-                    dayRow(section)
-                    Divider().padding(.leading, 84)
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
-
-    private func dayRow(_ section: DaySection) -> some View {
-        // On today's row, a red "now" line sits between what's over and what's
-        // next (after all-day events, which have no time of their own).
-        let nowIndex: Int? = cal.isDateInToday(section.dayStart)
-            ? section.events.firstIndex { !$0.isAllDay && $0.start > env.now } ?? section.events.count
-            : nil
-        return HStack(alignment: .top, spacing: 8) {
-            dayColumn(section.dayStart)
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(section.events.enumerated()), id: \.element.id) { i, event in
-                    if i == nowIndex { NowLine(now: env.now) }
-                    AgendaEventRow(event: event, now: env.now)
-                }
-                if nowIndex == section.events.count { NowLine(now: env.now) }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
-        }
-        .padding(.horizontal, 20)
-    }
-
-    private func dayColumn(_ day: Date) -> some View {
-        let isToday = cal.isDateInToday(day)
-        return VStack(spacing: 3) {
-            Text("\(cal.component(.day, from: day))")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isToday ? .white : .primary)
-                .frame(width: 32, height: 32)
-                .background(isToday ? AnyView(Circle().fill(Color.quackOrange)) : AnyView(Color.clear))
-            Text(Self.dayLabel.string(from: day).uppercased())
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(isToday ? Color.quackOrange : .secondary)
-        }
-        .frame(width: 56)
-        .padding(.top, 8)
-    }
-
-    private func emptyState(icon: String, title: String, subtitle: String,
-                            action: (String, () -> Void)?) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon).font(.system(size: 30)).foregroundStyle(.tertiary)
-            Text(title).font(.system(size: 15, weight: .semibold))
-            Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            if let action { Button(action.0) { action.1() }.padding(.top, 4) }
-        }
-        .frame(maxWidth: .infinity).padding(.top, 52).padding(.horizontal, 24)
-    }
-
-    /// Events grouped into day buckets (all events in the month, including past
-    /// ones, so navigating back shows history). All-day events sort first.
-    /// In the current month, today always gets a section (even with no events)
-    /// so the "now" line has somewhere to live.
-    private var sections: [DaySection] {
-        let grouped = Dictionary(grouping: events) { cal.startOfDay(for: $0.start) }
-        var result = grouped
-            .map { day, evs in
-                DaySection(dayStart: day, events: evs.sorted { a, b in
-                    a.isAllDay != b.isAllDay ? a.isAllDay : a.start < b.start
-                })
-            }
-            .sorted { $0.dayStart < $1.dayStart }
-        if isCurrentMonth {
-            let today = cal.startOfDay(for: env.now)
-            if !result.contains(where: { $0.dayStart == today }) {
-                result.append(DaySection(dayStart: today, events: []))
-                result.sort { $0.dayStart < $1.dayStart }
-            }
-        }
-        return result
-    }
-
-    private func load() async {
-        loading = true
-        events = await env.events(in: monthInterval)
-        loading = false
-    }
-
-    private static let month: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "LLLL yyyy"; return f
-    }()
-    private static let dayLabel: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "MMM, EEE"; return f
-    }()
-}
-
-/// The red "now" marker on today's agenda row: date-and-time stamp, a dot, and
-/// a rule across the remaining width. Rides `env.now` so it moves on its own.
-private struct NowLine: View {
-    let now: Date
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(Self.stamp.string(from: now))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.red)
-            Circle().fill(.red).frame(width: 6, height: 6)
-            Rectangle().fill(.red).frame(height: 1.5)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 2)
-        .accessibilityLabel("Now: \(Self.stamp.string(from: now))")
-    }
-
-    private static let stamp: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("MMM d, j:mm")
-        return f
-    }()
-}
-
-/// One agenda line: calendar-color dot, time range, title, location, join icon.
-private struct AgendaEventRow: View {
-    let event: MeetingEvent
-    let now: Date
-    @State private var hovering = false
-
-    private var isPast: Bool { event.end <= now && !event.isInProgress(at: now) }
-
-    var body: some View {
-        Button { if let u = event.conferencingURL { NSWorkspace.shared.open(u) } } label: {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(Color(hex: event.calendarColorHex) ?? .accentColor)
-                    .frame(width: 10, height: 10)
-                Text(timeText)
-                    .font(.system(size: 13)).foregroundStyle(.secondary)
-                    .frame(width: 108, alignment: .leading)
-                Text(event.title).font(.system(size: 14)).lineLimit(1)
-                if let loc = event.location, !loc.isEmpty {
-                    Text(loc).font(.system(size: 12)).foregroundStyle(.tertiary).lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if event.conferencingURL != nil {
-                    Image(systemName: "video.fill").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 7).fill(hovering ? Color.primary.opacity(0.07) : .clear))
-            .contentShape(Rectangle())
-            .opacity(isPast ? 0.5 : 1)
-        }
-        .buttonStyle(.plain)
-        .instantHover($hovering)
-    }
-
-    private var timeText: String {
-        if event.isAllDay { return "All day" }
-        return "\(Self.time.string(from: event.start)) – \(Self.time.string(from: event.end))"
-    }
-
-    private static let time: DateFormatter = {
-        let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none; return f
-    }()
-}
-
-// MARK: - Calendar
-
-private struct CalendarSection: View {
-    @EnvironmentObject var env: AppEnvironment
-    @State private var googleCalendars: [GoogleCalendarInfo] = []
-    @State private var authInProgress = false
-    @State private var authError: String?
-    @State private var isAuthed = false
-    @State private var accountEmail: String?
-
-    var body: some View {
-        let s = env.settingsStore
-        Section {
-            Toggle("Show meeting countdown in the menu bar", isOn: s.binding(\.menuBarCountdownEnabled))
-            if s.settings.menuBarCountdownEnabled {
-                Picker("Show countdown starting", selection: s.binding(\.countdownLeadHours)) {
-                    ForEach([1, 2, 4, 8, 12, 24], id: \.self) { h in
-                        Text("\(h) hour\(h == 1 ? "" : "s") before").tag(h)
-                    }
-                }
-                .padding(.leading, 14)
-            }
-        }
-
-        Section {
-            if isAuthed {
-                GoogleAccountCard(email: accountEmail) { Task { await signOut() } }
-                Toggle("Sync Google Calendar", isOn: s.binding(\.useGoogle))
-                if s.settings.useGoogle {
-                    if googleCalendars.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Loading calendars…")
-                                .font(.system(size: 12)).foregroundStyle(.secondary)
-                            ProgressView().scaleEffect(0.7).frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.vertical, 4)
-                    } else {
-                        ForEach(googleCalendars) { cal in
-                            Toggle(cal.title, isOn: googleCalendarBinding(cal.id))
-                                .padding(.leading, 14)
-                        }
-                    }
-                }
-            } else {
-                Button(authInProgress ? "Opening browser…" : "Sign in with Google") { signIn() }
-                    .disabled(authInProgress)
-            }
-        } header: {
-            Text("Calendar accounts")
-        } footer: {
-            if let error = authError {
-                Text(error).font(.system(size: 11)).foregroundStyle(.red)
-            }
-            if authInProgress {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.6)
-                    Text("Opening browser for Google sign-in…")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .task {
-            isAuthed = await env.isGoogleAuthenticated
-            if isAuthed { await loadCalendars() }
-        }
-    }
-
-    private func signIn() {
-        authError = nil
-        authInProgress = true
-        Task {
-            do {
-                try await env.signInToGoogle()
-                isAuthed = true
-                await loadCalendars()
-            } catch {
-                authError = error.localizedDescription
-                isAuthed = await env.isGoogleAuthenticated
-            }
-            authInProgress = false
-        }
-    }
-
-    private func signOut() async {
-        await env.signOutFromGoogle()
-        isAuthed = false
-        googleCalendars = []
-        accountEmail = nil
-    }
-
-    private func loadCalendars() async {
-        guard await env.isGoogleAuthenticated else { return }
-        googleCalendars = await env.availableGoogleCalendars()
-        accountEmail = googleCalendars.first(where: \.isPrimary)?.id
-    }
-
-    private func googleCalendarBinding(_ id: String) -> Binding<Bool> {
-        let s = env.settingsStore
-        return Binding(
-            get: { s.settings.syncAllCalendars || s.settings.selectedGoogleCalendarIDs.contains(id) },
-            set: { on in
-                s.update {
-                    if on { $0.selectedGoogleCalendarIDs.append(id) }
-                    else { $0.selectedGoogleCalendarIDs.removeAll { $0 == id } }
-                }
-            }
-        )
-    }
-}
-
-// MARK: - Google account card
-
-private struct GoogleAccountCard: View {
-    let email: String?
-    let onSignOut: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            // Google "G" logo mark
-            ZStack {
-                Circle().fill(Color(nsColor: .windowBackgroundColor))
-                    .frame(width: 32, height: 32)
-                    .overlay(Circle().stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
-                Text("G")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(red: 0.26, green: 0.52, blue: 0.96),
-                                     Color(red: 0.92, green: 0.26, blue: 0.21)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                    )
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Google Account")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                if let email {
-                    Text(email)
-                        .font(.system(size: 13, weight: .medium))
-                } else {
-                    Text("Loading…")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 0)
-            Button("Sign out", action: onSignOut)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - Reminders
-
-private struct RemindersSection: View {
-    @EnvironmentObject var env: AppEnvironment
-    var body: some View {
-        let s = env.settingsStore
-        Group {
-            Section("Reminders") {
-                Toggle("Meeting reminders", isOn: s.binding(\.remindersEnabled))
-                if s.settings.remindersEnabled {
-                    if !s.settings.calendarEnabled {
-                        Text("Requires Calendar to be enabled.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                    }
-                    // Advance notifications (no Join button).
-                    ForEach([20, 10, 5], id: \.self) { lead in
-                        Toggle("\(lead) minutes before", isOn: leadBinding(lead))
-                            .padding(.leading, 14)
-                    }
-                    Button("Preview notification") { env.previewReminderToast() }
-                        .padding(.leading, 14)
-
-                    // Join-now alerts (with the Join button).
-                    Toggle("1 minute before", isOn: leadBinding(1))
-                        .padding(.leading, 14)
-                    Toggle("On time", isOn: s.binding(\.remindAtStart))
-                        .padding(.leading, 14)
-                    Button("Preview join alert") { env.previewToast() }
-                        .padding(.leading, 14)
-                }
-            }
-
-            if s.settings.remindersEnabled {
-                Section("Sound") {
-                    soundPicker("Notification sound", binding: s.binding(\.notificationSound))
-                    soundPicker("Join alert sound", binding: s.binding(\.joinAlertSound))
-                }
-            }
-        }
-    }
-
-    /// A sound picker that previews the sound as soon as one is chosen.
-    @ViewBuilder
-    private func soundPicker(_ label: String, binding: Binding<String>) -> some View {
-        Picker(label, selection: binding) {
-            ForEach(NotificationSound.allCases) { sound in
-                Text(sound.displayName).tag(sound.rawValue)
-            }
-        }
-        .onChange(of: binding.wrappedValue) { env.previewSound(NotificationSound.from($0)) }
-    }
-
-    private func leadBinding(_ lead: Int) -> Binding<Bool> {
-        let s = env.settingsStore
-        return Binding(
-            get: { s.settings.reminderLeadMinutes.contains(lead) },
-            set: { isOn in
-                s.update {
-                    var leads = Set($0.reminderLeadMinutes)
-                    if isOn { leads.insert(lead) } else { leads.remove(lead) }
-                    $0.reminderLeadMinutes = leads.sorted(by: >)
-                }
-            }
-        )
     }
 }
 
@@ -1641,26 +1012,9 @@ private struct StatusSection: View {
                 Text("\(d.externalDisplayCount) screen(s), \(d.ddcServiceCount) DDC")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
-            HStack(alignment: .top) {
-                Text("Next meeting")
-                Spacer()
-                Text(nextMeetingDescription).font(.system(size: 12)).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            }
             Text("\"Active\" means the feature is receiving input. If it says \"needs Accessibility\", grant it above — it switches to listening within a second, no relaunch.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
         }
-    }
-
-    private var nextMeetingDescription: String {
-        let now = env.now
-        guard let m = QuackKit.MeetingSelection.currentOrNext(from: env.meetingStore.upcoming, now: now) else {
-            return "none (\(env.meetingStore.upcoming.count) upcoming)"
-        }
-        let f = DateFormatter(); f.timeStyle = .medium; f.dateStyle = .none
-        let secs = Int(m.start.timeIntervalSince(now))
-        let state = m.isInProgress(at: now) ? "in progress" : (secs > 0 ? "in \(secs)s" : "started \(-secs)s ago")
-        return "\(m.title)\nstarts \(f.string(from: m.start)) · \(state)"
     }
 
     private func row(_ title: String, _ on: Bool, onText: String, offText: String) -> some View {

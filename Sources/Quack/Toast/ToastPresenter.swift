@@ -6,16 +6,11 @@ import QuackKit
 struct ToastItem: Identifiable {
     let id = UUID()
     let title: String
-    let relativeText: String   // "in 10 min" / "now"
-    let timeRange: String      // "4:22 – 5:07 PM"
-    let colorHex: String?
-    let joinURL: URL?
-    let provider: MeetingProvider
-    let joinable: Bool         // show the Join button (1-min + on-time reminders)
-    let isStart: Bool          // a "join now" toast vs. an advance reminder
+    let relativeText: String   // pill text, e.g. "active 50m"
+    let timeRange: String      // secondary line
 }
 
-/// Shows stacked, top-right toast notifications (Notion-Calendar style) as
+/// Shows stacked, top-right toast notifications as
 /// borderless floating panels, independent of the system notification center.
 @MainActor
 final class ToastPresenter {
@@ -81,10 +76,6 @@ final class ToastPresenter {
         let view = ToastView(
             item: item,
             autoDismiss: autoDismiss,
-            onJoin: { [weak self, weak panel] in
-                if let url = item.joinURL { NSWorkspace.shared.open(url) }
-                if let panel { self?.dismissPanel(panel) }
-            },
             onClose: { [weak self, weak panel] in
                 if let panel { self?.dismissPanel(panel) }
             }
@@ -122,22 +113,18 @@ final class ToastPresenter {
 private struct ToastView: View {
     let item: ToastItem
     let autoDismiss: TimeInterval?
-    let onJoin: () -> Void
     let onClose: () -> Void
 
     @State private var hovering = false
-    @State private var pulsing = false
     @State private var drain: CGFloat = 1
     @State private var appeared = false
 
     private let radius: CGFloat = 18
-    /// Calendar colour when known, otherwise the system accent. One accent for
-    /// the whole card — badge, pill and Join button all share it.
-    private var accent: Color { Color(hex: item.colorHex) ?? .accentColor }
+    private var accent: Color { .accentColor }
 
     var body: some View {
         HStack(spacing: 12) {
-            ProviderBadge(provider: item.provider, accent: accent)
+            Badge(accent: accent)
             VStack(alignment: .leading, spacing: 5) {
                 Text(item.title)
                     .font(.system(size: 14.5, weight: .semibold))
@@ -149,10 +136,6 @@ private struct ToastView: View {
                         .foregroundStyle(.secondary)
                 }
                 .fixedSize()   // time line is always shown in full
-            }
-            Spacer(minLength: 12)
-            if item.joinable, item.joinURL != nil {
-                JoinButton(provider: item.provider, accent: accent, onJoin: onJoin)
             }
         }
         .padding(.leading, 13)
@@ -185,21 +168,9 @@ private struct ToastView: View {
         }
     }
 
-    /// "now" / "in 10 min" — a tinted pill, with a pulsing dot once the meeting
-    /// is live.
+    /// A tinted pill with the headline figure.
     private var relativePill: some View {
         HStack(spacing: 4.5) {
-            if item.isStart {
-                Circle()
-                    .fill(accent)
-                    .frame(width: 5, height: 5)
-                    .opacity(pulsing ? 0.25 : 1)
-                    .onAppear {
-                        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                            pulsing = true
-                        }
-                    }
-            }
             Text(item.relativeText)
         }
         .font(.system(size: 11.5, weight: .semibold))
@@ -240,9 +211,8 @@ private struct ToastView: View {
     }
 }
 
-/// Rounded provider glyph tile.
-private struct ProviderBadge: View {
-    let provider: MeetingProvider
+/// Rounded glyph tile.
+private struct Badge: View {
     let accent: Color
 
     var body: some View {
@@ -250,41 +220,9 @@ private struct ProviderBadge: View {
             .fill(accent.opacity(0.14))
             .frame(width: 32, height: 32)
             .overlay(
-                Image(systemName: provider.glyph)
+                Image(systemName: "cup.and.saucer.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(accent)
             )
     }
 }
-
-/// A filled "Join <provider>" button that opens the meeting.
-private struct JoinButton: View {
-    let provider: MeetingProvider
-    let accent: Color
-    let onJoin: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: onJoin) {
-            HStack(spacing: 6) {
-                Image(systemName: "video.fill").font(.system(size: 11, weight: .bold))
-                Text(provider.joinLabel)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 7)
-            .background(Capsule().fill(accent.opacity(hovering ? 1 : 0.9)))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .fixedSize()
-        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
-    }
-}
-
-private extension MeetingProvider {
-    var glyph: String { self == .generic ? "calendar" : "video.fill" }
-}
-

@@ -55,7 +55,6 @@ if [ -n "${CURRENT_FINGERPRINT}" ] && [ "${CURRENT_FINGERPRINT}" = "${LAST_FINGE
 else
     echo "▸ Signing identity changed (or first install) — clearing stale grants (you'll re-grant)."
     tccutil reset Accessibility "${BUNDLE_ID}" 2>/dev/null || true
-    tccutil reset Calendar "${BUNDLE_ID}" 2>/dev/null || true
     tccutil reset ListenEvent "${BUNDLE_ID}" 2>/dev/null || true
     tccutil reset ScreenCapture "${BUNDLE_ID}" 2>/dev/null || true
     [ -n "${CURRENT_FINGERPRINT}" ] && echo "${CURRENT_FINGERPRINT}" > "${FINGERPRINT_FILE}"
@@ -71,7 +70,6 @@ cat <<EOF
 Next steps (one-time, per install):
   1. Click the duck in the menu bar → Settings…
   2. Enable the features you want. When prompted, grant:
-       • Calendar       — for meetings & reminders
        • Accessibility  — for F1/F2 external brightness and mouse features
      For Accessibility: System Settings → Privacy & Security → Accessibility,
      toggle "Quack" ON. Quack picks it up automatically (no relaunch needed).

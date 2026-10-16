@@ -4,8 +4,7 @@ import Combine
 /// Observes `SettingsStore` and starts/stops feature services as flags flip.
 ///
 /// This guarantees no permission prompt fires for a disabled feature: a
-/// service is only ever `start()`ed when its flag is on. Reminders depend on
-/// the calendar feature, so they are gated on both flags.
+/// service is only ever `start()`ed when its flag is on.
 @MainActor
 public final class AppCoordinator {
     private let store: SettingsStore
@@ -38,15 +37,9 @@ public final class AppCoordinator {
         running.removeAll()
     }
 
-    /// Whether a feature's service should currently be running. Reminders
-    /// additionally require the calendar feature.
+    /// Whether a feature's service should currently be running.
     public func shouldRun(_ feature: Feature, in settings: QuackSettings) -> Bool {
-        switch feature {
-        case .reminders:
-            return settings.remindersEnabled && settings.calendarEnabled
-        default:
-            return feature.isEnabled(in: settings)
-        }
+        feature.isEnabled(in: settings)
     }
 
     private func reconcile(with settings: QuackSettings) {

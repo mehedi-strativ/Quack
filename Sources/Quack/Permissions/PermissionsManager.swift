@@ -1,5 +1,4 @@
 import Foundation
-import EventKit
 import ApplicationServices
 import AppKit
 import CoreGraphics
@@ -21,14 +20,8 @@ final class PermissionsManager: ObservableObject {
     // MARK: Refresh
 
     func refreshAll() {
-        refreshCalendar()
         refreshAccessibility()
         refreshScreenRecording()
-    }
-
-    func refreshCalendar() {
-        let raw = Int(EKEventStore.authorizationStatus(for: .event).rawValue)
-        statuses[.calendar] = PermissionStatusMapper.calendar(fromEventKitRawValue: raw)
     }
 
     func refreshAccessibility() {
@@ -44,32 +37,6 @@ final class PermissionsManager: ObservableObject {
     }
 
     // MARK: Requests
-
-    /// Opens System Settings → Privacy & Security → Calendars. Needed when the
-    /// system won't re-show the prompt (already shown this session, or denied).
-    func openCalendarSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    @discardableResult
-    func requestCalendarAccess() async -> Bool {
-        // Transient store: a long-lived EKEventStore pins the process's calendar
-        // cache, so the running app kept serving stale data (only a relaunch,
-        // i.e. a new process, saw edits). No long-lived store anywhere now.
-        let store = EKEventStore()
-        let granted: Bool
-        if #available(macOS 14.0, *) {
-            granted = (try? await store.requestFullAccessToEvents()) ?? false
-        } else {
-            granted = await withCheckedContinuation { cont in
-                store.requestAccess(to: .event) { ok, _ in cont.resume(returning: ok) }
-            }
-        }
-        refreshCalendar()
-        return granted
-    }
 
     /// Accessibility cannot be granted programmatically. Prompt the system to
     /// surface its dialog, then poll until the user flips the switch.
@@ -93,7 +60,6 @@ final class PermissionsManager: ObservableObject {
         let anchor: String
         switch kind {
         case .accessibility: anchor = "Privacy_Accessibility"
-        case .calendar: anchor = "Privacy_Calendars"
         case .screenRecording: anchor = "Privacy_ScreenCapture"
         }
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {

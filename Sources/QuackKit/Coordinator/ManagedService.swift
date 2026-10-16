@@ -12,9 +12,6 @@ public protocol ManagedService: AnyObject {
 /// Which feature flag controls a given service. Used by `AppCoordinator` to
 /// decide which services should be running for a settings value.
 public enum Feature: CaseIterable, Sendable {
-    case calendar
-    case reminders
-    case menuBarCountdown
     case brightness
     case temperature
     case mouse
@@ -22,9 +19,6 @@ public enum Feature: CaseIterable, Sendable {
 
     public func isEnabled(in settings: QuackSettings) -> Bool {
         switch self {
-        case .calendar: return settings.calendarEnabled
-        case .reminders: return settings.remindersEnabled
-        case .menuBarCountdown: return settings.menuBarCountdownEnabled
         case .brightness: return settings.brightnessEnabled
         case .temperature: return settings.cpuTemperatureEnabled
         case .mouse:

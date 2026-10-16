@@ -182,11 +182,6 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
             title: "Time for a break 🦆",
             relativeText: "active \(ActivityFormat.compact(activeSeconds))",
             timeRange: "Step away for \(k) min to reset the timer",
-            colorHex: nil,
-            joinURL: nil,
-            provider: .generic,
-            joinable: false,
-            isStart: false
         ), dismissAfter: 8)
     }
 

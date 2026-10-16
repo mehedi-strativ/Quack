@@ -32,14 +32,13 @@ let package = Package(
             ]
         ),
         // The app target: SwiftUI + AppKit + system frameworks. Wires QuackKit
-        // logic to live services (EventKit, UserNotifications, IOKit DDC, AX).
+        // logic to live services (IOKit DDC, AX).
         .executableTarget(
             name: "Quack",
             dependencies: ["QuackKit", "CDDC", "CSMC"],
             linkerSettings: [
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("AppKit"),
-                .linkedFramework("EventKit"),
                 .linkedFramework("UserNotifications"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("ApplicationServices"),
