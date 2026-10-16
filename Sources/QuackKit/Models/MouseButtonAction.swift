@@ -43,8 +43,7 @@ public enum MouseButtonAction: String, CaseIterable, Codable, Sendable {
 }
 
 /// A recorded keyboard shortcut for `MouseButtonAction.customShortcut`.
-/// `modifiers` uses the same bitmask convention as `windowShortcutModifiers`
-/// for the first four bits (bit0 ⌘, bit1 ⌥, bit2 ⌃, bit3 ⇧), plus bit4 for fn
+/// `modifiers` is a bitmask: bit0 ⌘, bit1 ⌥, bit2 ⌃, bit3 ⇧, plus bit4 for fn
 /// — added so mouse shortcuts can compose Fn-modified combos.
 public struct MouseShortcut: Codable, Equatable, Sendable {
     public var keyCode: Int

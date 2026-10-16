@@ -6,7 +6,7 @@ A native macOS menu-bar utility (SwiftPM, no Xcode project). Build/run with
 ## ⚠️ CRITICAL: CGEvent input taps must not freeze the Mac
 
 Quack intercepts input with active `CGEvent` taps (F1/F2 brightness routing,
-⌘⌥+arrow window shortcuts, two-finger swipe). Done naively, **toggling Quack's
+mouse buttons, smooth scroll). Done naively, **toggling Quack's
 Accessibility permission freezes the entire Mac** (all mouse/keyboard input
 hangs). This cost ~15 debugging rounds. Follow BOTH rules for every tap:
 
@@ -31,7 +31,7 @@ hangs). This cost ~15 debugging rounds. Follow BOTH rules for every tap:
      next grant and that reactivation freezes input.
 
 **Reference implementation:** `CursorBrightnessService.reinstallKeyTap`. Each tap
-is individually switchable in `Sources/Quack/Windows/InputTaps.swift`.
+is individually switchable in `Sources/Quack/Mouse/InputTaps.swift`.
 `.listenOnly` taps don't gate input (can't freeze), but use the same lifecycle
 for consistency.
 

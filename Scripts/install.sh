@@ -72,7 +72,7 @@ Next steps (one-time, per install):
   1. Click the duck in the menu bar → Settings…
   2. Enable the features you want. When prompted, grant:
        • Calendar       — for meetings & reminders
-       • Accessibility  — for F1/F2 external brightness AND the two-finger swipe
+       • Accessibility  — for F1/F2 external brightness and mouse features
      For Accessibility: System Settings → Privacy & Security → Accessibility,
      toggle "Quack" ON. Quack picks it up automatically (no relaunch needed).
 

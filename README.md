@@ -15,8 +15,7 @@
 
 A native macOS menu-bar utility that bundles the little power-tools you'd
 otherwise install five apps for: meeting countdowns & click-to-join reminders,
-external-monitor brightness on the F1/F2 keys, window management by keyboard and
-trackpad, and a CPU temperature readout.
+external-monitor brightness on the F1/F2 keys, and a CPU temperature readout.
 
 Lives in the menu bar (no Dock icon). Every feature is individually toggleable,
 and services start **only** when their toggle is on.
@@ -31,8 +30,6 @@ and services start **only** when their toggle is on.
 | 📅 | **Calendar** | Next/in-progress meeting + live countdown; events in the dropdown; pick which accounts/calendars sync | Calendar |
 | 🔔 | **Reminders** | Toast alerts at 20/10/5 min, plus **Join** alerts at 1 min and on-time (Zoom/Meet/Teams) — separate sounds each | Calendar |
 | ☀️ | **External brightness** | F1/F2 control whichever external display the cursor is on, over DDC — with software dimming **below** the hardware floor | Accessibility¹ |
-| 🪟 | **Window shortcuts** | ⌘⌥ + arrows: fill / move to the screen below / left & right halves (press again → adjacent monitor) | Accessibility |
-| ✋ | **Window swipe** | Two-finger title-bar swipe: ↑ fullscreen, ↓ minimize, ←→ snap to half | Accessibility |
 | 🌡️ | **CPU temperature** | Flame + live temperature (°C/°F) read from the Mac's sensors, à la `hot` | — |
 | 🖱️ | **Mouse** | Pointer-speed override, buttery smooth scrolling for wheel mice, and custom actions on buttons 4/5 (Mission Control, media keys, any shortcut…) | Accessibility² |
 | ⏳ | **Time awareness** | Menu-bar timer of continuous activity with a per-app breakdown; break reminders; daily statistics with a 30-day day-by-day view | — |
@@ -87,10 +84,6 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
 - **Brightness** — cursor on an external display, press **F1/F2**. Past the
   monitor's minimum it keeps dimming with a software overlay. A native-style HUD
   shows the level.
-- **Window shortcuts** — `⌘⌥ + ↑` fill, `↓` move to the screen below, `←`/`→`
-  left/right half; press a direction again to jump to the adjacent monitor.
-- **Window swipe** — point at a title bar, swipe two fingers: up = fullscreen,
-  down = minimize, left/right = snap to that half.
 - **Reminders** — pick lead times under **Calendar → Reminders**; 20/10/5 are
   plain notifications, 1-minute and on-time show a **Join** button. Each group
   has its own sound (previewed on selection) and a **Preview** button.
@@ -108,7 +101,7 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
 ## 🔐 Permissions
 
 - **Calendar** — requested when you enable calendar features.
-- **Accessibility** — for F1/F2 routing, window shortcuts, and swipe.
+- **Accessibility** — for F1/F2 routing and mouse features.
   Can't be granted programmatically: click **Grant**, flip Quack on in
   System Settings → Privacy & Security → Accessibility. Quack picks it up live.
 
@@ -123,7 +116,7 @@ QuackKit (library, fully unit-tested — no system/UI deps)
   Models/      MeetingEvent, QuackSettings, MeetingProvider
   Calendar/    CalendarProvider, MeetingSelection, MeetingStore, MeetingURLParser
   MenuBar/     CountdownFormatter
-  Display/     ScreenGeometry, TrackpadSwipe, BrightnessMath
+  Display/     BrightnessMath
   Coordinator/ AppCoordinator, ManagedService, Feature
   Permissions/ PermissionStatusMapper · Settings/ SettingsStore
 
@@ -133,8 +126,6 @@ Quack (executable — SwiftUI + AppKit)
   Reminders/ ReminderScheduler · Toast/ ToastPresenter
   Display/   CursorBrightnessService, BrightnessKeyTap, BrightnessController,
              DisplayDimmer, BrightnessHUD, DDCControl
-  Windows/   HotkeyMonitor, GestureMonitor, EventTapThread, WindowMover,
-             AXHelpers, InputTaps
   Settings/  SettingsView
 
 C targets (private-API shims, no sandbox)
@@ -164,6 +155,6 @@ xcrun notarytool submit build/Quack.dmg --apple-id you@example.com --team-id TEA
 xcrun stapler staple build/Quack.dmg
 ```
 
-**No App Sandbox** by design — it would block DDC over IOKit and cross-app
-Accessibility window moves — so Quack ships as a notarized DMG, not via the App
+**No App Sandbox** by design — it would block DDC over IOKit and global
+event taps — so Quack ships as a notarized DMG, not via the App
 Store.

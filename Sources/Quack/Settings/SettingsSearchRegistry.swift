@@ -46,18 +46,6 @@ enum SettingsSearchRegistry {
         entry("mouse.clickMonitor", "Click monitor", .mouse, "Click monitor",
               ["log", "live", "test buttons", "which button", "debug"]),
 
-        // Gestures
-        entry("gestures.swipe", "Two-finger swipe on the title bar", .gestures, "Window swipe",
-              ["trackpad", "move window", "throw", "flick", "snap half"]),
-        entry("gestures.swipeSensitivity", "Swipe sensitivity", .gestures, "Window swipe",
-              ["speed", "threshold", "velocity"]),
-
-        // Shortcuts
-        entry("shortcuts.windows", "Window management shortcuts", .shortcuts, "Keyboard shortcuts",
-              ["command option arrow", "snap", "halves", "maximize", "hotkey", "keybinding"]),
-        entry("shortcuts.modifiers", "Shortcut modifier keys", .shortcuts, "Keyboard shortcuts",
-              ["command", "option", "control", "shift", "customize"]),
-
         // Brightness
         entry("brightness.f1f2", "Control external brightness with F1 / F2", .brightness, "External-display brightness",
               ["monitor", "ddc", "display", "function keys", "dim"]),

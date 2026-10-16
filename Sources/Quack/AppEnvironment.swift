@@ -40,8 +40,6 @@ final class AppEnvironment: ObservableObject {
     private let calendarService: CalendarRefreshService
     private let reminderScheduler: ReminderScheduler
     private let cursorService: CursorBrightnessService
-    private let gestureService: GestureMonitor
-    private let hotkeyService: HotkeyMonitor
     private let temperatureService: TemperatureStatusItem
     private let mouseService: MouseService
     private let timeAwarenessService: TimeAwarenessService
@@ -90,8 +88,6 @@ final class AppEnvironment: ObservableObject {
         self.calendarService = CalendarRefreshService(store: store, permissions: permissions)
         self.reminderScheduler = ReminderScheduler(store: store, settings: settings, toasts: toasts, sound: quackSound)
         self.cursorService = CursorBrightnessService(controller: brightness, settings: settings, permissions: permissions, diagnostics: diagnostics)
-        self.gestureService = GestureMonitor(settings: settings, permissions: permissions, diagnostics: diagnostics)
-        self.hotkeyService = HotkeyMonitor(settings: settings, permissions: permissions)
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
         self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
@@ -101,8 +97,6 @@ final class AppEnvironment: ObservableObject {
             .reminders: reminderScheduler,
             .menuBarCountdown: NullService(),   // title is driven reactively; no side effects
             .brightness: cursorService,
-            .windowSwipe: gestureService,
-            .windowShortcuts: hotkeyService,
             .temperature: temperatureService,
             .mouse: mouseService,
             .timeAwareness: timeAwarenessService,

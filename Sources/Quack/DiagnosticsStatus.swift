@@ -6,7 +6,6 @@ import Combine
 /// digging through logs.
 @MainActor
 final class DiagnosticsStatus: ObservableObject {
-    @Published var swipeTapInstalled = false
     @Published var brightnessKeyTapInstalled = false
     @Published var externalDisplayCount = 0
     @Published var ddcServiceCount = 0

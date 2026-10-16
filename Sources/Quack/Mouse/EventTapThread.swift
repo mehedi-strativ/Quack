@@ -64,7 +64,7 @@ final class EventTapThread {
             },
             userInfo: refcon
         ) else {
-            Log.swipe.error("Failed to create event tap '\(self.label, privacy: .public)' (Accessibility not effective?)")
+            Log.tap.error("Failed to create event tap '\(self.label, privacy: .public)' (Accessibility not effective?)")
             return
         }
 
@@ -75,7 +75,7 @@ final class EventTapThread {
         self.tap = tap
         self.source = source
         lock.lock(); runLoopRef = rl; lock.unlock()
-        Log.swipe.log("Event tap '\(self.label, privacy: .public)' installed (dedicated thread)")
+        Log.tap.log("Event tap '\(self.label, privacy: .public)' installed (dedicated thread)")
 
         CFRunLoopRun()   // blocks until stop()
 

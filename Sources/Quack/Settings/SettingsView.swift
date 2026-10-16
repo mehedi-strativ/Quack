@@ -5,7 +5,7 @@ import QuackKit
 /// control (self-describing), grouped by surface: menu bar, input, screen, app.
 enum SettingsTab: String, CaseIterable {
     case dashboard, meetings, stats
-    case mouse, gestures, shortcuts
+    case mouse
     case brightness
     case general, permissions
 
@@ -15,8 +15,6 @@ enum SettingsTab: String, CaseIterable {
         case .meetings: return "Meetings"
         case .stats: return "Stats & Timer"
         case .mouse: return "Mouse"
-        case .gestures: return "Gestures"
-        case .shortcuts: return "Shortcuts"
         case .brightness: return "Brightness"
         case .general: return "Settings"
         case .permissions: return "Permissions"
@@ -29,8 +27,6 @@ enum SettingsTab: String, CaseIterable {
         case .meetings: return "calendar"
         case .stats: return "gauge.with.needle"
         case .mouse: return "computermouse"
-        case .gestures: return "hand.draw"
-        case .shortcuts: return "keyboard"
         case .brightness: return "sun.max"
         case .general: return "gearshape"
         case .permissions: return "lock.shield"
@@ -46,8 +42,6 @@ enum SettingsTab: String, CaseIterable {
         case .meetings: return Color(hex: "#FF8A24")!
         case .stats: return Color(hex: "#FF6A3D")!
         case .mouse: return Color(hex: "#FF4F66")!
-        case .gestures: return Color(hex: "#F2478C")!
-        case .shortcuts: return Color(hex: "#D84AB0")!
         case .brightness: return Color(hex: "#B455CC")!
         case .general: return Color(hex: "#8F5FE0")!
         case .permissions: return Color(hex: "#6C67F0")!
@@ -68,7 +62,7 @@ private enum SidebarGroup: String, CaseIterable {
         switch self {
         case .top: return [.dashboard]
         case .menuBar: return [.meetings, .stats]
-        case .input: return [.mouse, .gestures, .shortcuts]
+        case .input: return [.mouse]
         case .screen: return [.brightness]
         case .app: return [.general, .permissions]
         }
@@ -318,10 +312,6 @@ struct SettingsPane: View {
                     TemperatureSection()
                     TimeAwarenessStatsSection()
                     TimeAwarenessSection()
-                case .gestures:
-                    WindowSwipeSection()
-                case .shortcuts:
-                    KeyboardShortcutsSection()
                 case .mouse:
                     MousePointerSection()
                     MouseScrollSection()
@@ -442,7 +432,6 @@ private struct DashboardView: View {
                         DashCard(tab: .stats, title: "Focus", icon: "bolt.fill") { timeSummary }
                     }
                     DashCard(tab: .brightness) { displaySummary }
-                    DashCard(tab: .gestures, title: "Windows", icon: "macwindow.on.rectangle") { windowsSummary }
                     DashCard(tab: .permissions) { permissionsSummary }
                 }
             }
@@ -531,20 +520,6 @@ private struct DashboardView: View {
             gist("On", "F1 / F2 · \(n) external display\(n == 1 ? "" : "s")", tint: .green)
         } else {
             gist("Off", "Control external brightness with F1 / F2", tint: .secondary)
-        }
-    }
-
-    private var windowsSummary: some View {
-        let s = env.settingsStore.settings
-        var on: [String] = []
-        if s.windowShortcutsEnabled { on.append("Shortcuts") }
-        if s.windowSwipeEnabled { on.append("Swipe") }
-        return Group {
-            if on.isEmpty {
-                gist("Off", "Shortcuts & swipe gestures", tint: .secondary)
-            } else {
-                gist("On", on.joined(separator: " · "), tint: .green)
-            }
         }
     }
 
@@ -1163,64 +1138,6 @@ private struct GoogleAccountCard: View {
     }
 }
 
-// MARK: - Keyboard shortcuts
-
-private struct KeyboardShortcutsSection: View {
-    @EnvironmentObject var env: AppEnvironment
-
-    // Bit values matching QuackSettings.windowShortcutModifiers.
-    private let modifiers: [(name: String, symbol: String, bit: Int)] = [
-        ("Control", "⌃", 0b0100), ("Option", "⌥", 0b0010),
-        ("Shift", "⇧", 0b1000), ("Command", "⌘", 0b0001),
-    ]
-
-    var body: some View {
-        let s = env.settingsStore
-        Section("Keyboard shortcuts") {
-            Toggle("Window management shortcuts", isOn: s.binding(\.windowShortcutsEnabled))
-            if s.settings.windowShortcutsEnabled {
-                LabeledContent("Modifier") {
-                    HStack(spacing: 6) {
-                        ForEach(modifiers, id: \.bit) { mod in
-                            Toggle(mod.symbol, isOn: bitBinding(mod.bit))
-                                .toggleStyle(.button)
-                        }
-                    }
-                }
-                if modifierString.isEmpty {
-                    Text("Pick at least one modifier.").font(.system(size: 12)).foregroundStyle(.orange)
-                } else {
-                    Text("\(modifierString) + arrows:  ↑ maximize (press again → monitor above) · ↓ move to the monitor below · ← left half (again → monitor left) · → right half (again → monitor right).")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                if env.permissions.status(for: .accessibility) != .granted {
-                    HStack {
-                        Text("Requires Accessibility permission.").font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Grant") { env.permissions.requestAccessibilityAccess() }
-                    }
-                }
-            }
-        }
-    }
-
-    private var modifierString: String {
-        let m = env.settingsStore.settings.windowShortcutModifiers
-        return modifiers.filter { m & $0.bit != 0 }.map(\.symbol).joined()
-    }
-
-    private func bitBinding(_ bit: Int) -> Binding<Bool> {
-        let s = env.settingsStore
-        return Binding(
-            get: { s.settings.windowShortcutModifiers & bit != 0 },
-            set: { on in
-                s.update {
-                    if on { $0.windowShortcutModifiers |= bit } else { $0.windowShortcutModifiers &= ~bit }
-                }
-            }
-        )
-    }
-}
-
 // MARK: - Reminders
 
 private struct RemindersSection: View {
@@ -1453,39 +1370,6 @@ private struct TimeAwarenessSection: View {
                         value: s.binding(\.activityIdleResetMinutes), in: 1...30, step: 1)
                 Text("\"Away\" means no keyboard or mouse input — the screen being locked or the Mac asleep counts immediately.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-// MARK: - Window swipe
-
-private struct WindowSwipeSection: View {
-    @EnvironmentObject var env: AppEnvironment
-
-    var body: some View {
-        let s = env.settingsStore
-        Section("Window swipe") {
-            Toggle("Manage windows with a two-finger swipe on the title bar",
-                   isOn: s.binding(\.windowSwipeEnabled))
-            Text("Point at a window's title bar, then hold ⌘ and swipe two fingers: up to fill the screen, down to minimize.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-            if s.settings.windowSwipeEnabled {
-                Toggle("Swipe left or right to snap to half-screen",
-                       isOn: s.binding(\.windowSnapEnabled))
-                Text("Hold ⌘ and swipe left or right to align the window to that half of the current screen.")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                HStack {
-                    Text("Sensitivity")
-                    Slider(value: s.binding(\.swipeSensitivity), in: 0...1)
-                }
-                if env.permissions.status(for: .accessibility) != .granted {
-                    HStack {
-                        Text("Requires Accessibility permission.")
-                            .font(.system(size: 12)).foregroundStyle(.orange)
-                        Button("Grant") { env.permissions.requestAccessibilityAccess() }
-                    }
-                }
             }
         }
     }
@@ -1749,8 +1633,6 @@ private struct StatusSection: View {
     var body: some View {
         let d = env.diagnostics
         Section("Status") {
-            row("Window-swipe active", d.swipeTapInstalled,
-                onText: "listening", offText: env.settingsStore.settings.windowSwipeEnabled ? "needs Accessibility" : "off")
             row("Brightness keys active", d.brightnessKeyTapInstalled,
                 onText: "listening", offText: env.settingsStore.settings.brightnessEnabled ? "needs Accessibility" : "off")
             HStack {

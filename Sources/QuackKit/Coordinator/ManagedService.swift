@@ -16,8 +16,6 @@ public enum Feature: CaseIterable, Sendable {
     case reminders
     case menuBarCountdown
     case brightness
-    case windowSwipe
-    case windowShortcuts
     case temperature
     case mouse
     case timeAwareness
@@ -28,8 +26,6 @@ public enum Feature: CaseIterable, Sendable {
         case .reminders: return settings.remindersEnabled
         case .menuBarCountdown: return settings.menuBarCountdownEnabled
         case .brightness: return settings.brightnessEnabled
-        case .windowSwipe: return settings.windowSwipeEnabled
-        case .windowShortcuts: return settings.windowShortcutsEnabled
         case .temperature: return settings.cpuTemperatureEnabled
         case .mouse:
             return settings.mouseSensitivityEnabled

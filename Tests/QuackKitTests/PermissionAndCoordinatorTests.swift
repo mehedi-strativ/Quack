@@ -43,7 +43,7 @@ private final class SpyService: ManagedService {
         store.replace(with: initial)
         let services: [Feature: SpyService] = [
             .calendar: SpyService(), .reminders: SpyService(), .menuBarCountdown: SpyService(),
-            .brightness: SpyService(), .windowSwipe: SpyService(),
+            .brightness: SpyService(),
         ]
         let coord = AppCoordinator(store: store, services: services.mapValues { $0 as ManagedService })
         return (coord, store, services)
@@ -52,14 +52,12 @@ private final class SpyService: ManagedService {
     @Test func startsOnlyEnabledFeaturesOnActivate() {
         var s = QuackSettings()
         s.brightnessEnabled = false
-        s.windowSwipeEnabled = false
         let (coord, _, services) = make(s)
         coord.activate()
         #expect(services[.calendar]!.startCount == 1)
         #expect(services[.reminders]!.startCount == 1)
         #expect(services[.menuBarCountdown]!.startCount == 1)
         #expect(services[.brightness]!.startCount == 0)
-        #expect(services[.windowSwipe]!.startCount == 0)
     }
 
     @Test func flipFlagStartsAndStopsService() {

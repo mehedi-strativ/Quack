@@ -10,9 +10,8 @@ import Foundation
         #expect(s.remindersEnabled)
         #expect(s.menuBarCountdownEnabled)
         #expect(!s.brightnessEnabled)
-        #expect(!s.windowSwipeEnabled)
+        #expect(!s.dimInactiveDisplay)
         #expect(s.reminderLeadMinutes == [10, 5])
-        #expect(abs(s.swipeSensitivity - 0.5) < 0.0001)
     }
 
     @Test func encodeDecodeRoundTrip() throws {
@@ -38,20 +37,20 @@ import Foundation
     @Test func persistsAndReloadsFromBacking() {
         let backing = InMemoryKeyValueStore()
         let store = SettingsStore(backing: backing, key: "test")
-        store.update { $0.brightnessEnabled = true; $0.swipeSensitivity = 0.9 }
+        store.update { $0.brightnessEnabled = true; $0.dimInactiveDisplay = true }
 
         let reloaded = SettingsStore(backing: backing, key: "test")
         #expect(reloaded.settings.brightnessEnabled)
-        #expect(abs(reloaded.settings.swipeSensitivity - 0.9) < 0.0001)
+        #expect(reloaded.settings.dimInactiveDisplay)
     }
 
     @Test func updatePublishesOnlyOnRealChange() {
         let store = SettingsStore(backing: InMemoryKeyValueStore(), key: "test")
         var published = 0
         let c = store.$settings.dropFirst().sink { _ in published += 1 }
-        store.update { $0.windowSwipeEnabled = true }
-        store.update { $0.windowSwipeEnabled = true }   // no-op -> no publish
-        store.update { $0.windowSwipeEnabled = false }
+        store.update { $0.dimInactiveDisplay = true }
+        store.update { $0.dimInactiveDisplay = true }   // no-op -> no publish
+        store.update { $0.dimInactiveDisplay = false }
         c.cancel()
         #expect(published == 2)
     }
