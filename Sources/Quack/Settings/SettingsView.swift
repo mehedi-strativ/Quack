@@ -37,19 +37,20 @@ enum SettingsTab: String, CaseIterable {
         }
     }
 
-    /// Each feature area's signature color — used for its sidebar tile and
-    /// dashboard card so every area reads at a glance.
+    /// Each feature area's signature color — one step along a warm-to-violet
+    /// "sunrise" ramp in sidebar order, all at matched saturation/brightness,
+    /// so the tiles read as one family rather than a rainbow.
     var color: Color {
         switch self {
-        case .dashboard: return .quackOrange
-        case .meetings: return .quackPink
-        case .stats: return Color(hex: "#FF9500")!
-        case .mouse: return Color(hex: "#7C5CFF")!
-        case .gestures: return Color(hex: "#00B8F0")!
-        case .shortcuts: return Color(hex: "#3D7BFF")!
-        case .brightness: return Color(hex: "#F5B700")!
-        case .general: return Color(hex: "#8A8FA3")!
-        case .permissions: return Color(hex: "#20C35A")!
+        case .dashboard: return Color(hex: "#FFAA1F")!
+        case .meetings: return Color(hex: "#FF8A24")!
+        case .stats: return Color(hex: "#FF6A3D")!
+        case .mouse: return Color(hex: "#FF4F66")!
+        case .gestures: return Color(hex: "#F2478C")!
+        case .shortcuts: return Color(hex: "#D84AB0")!
+        case .brightness: return Color(hex: "#B455CC")!
+        case .general: return Color(hex: "#8F5FE0")!
+        case .permissions: return Color(hex: "#6C67F0")!
         }
     }
 }
@@ -126,11 +127,14 @@ struct SettingsRootView: View {
                 ForEach(SidebarGroup.allCases, id: \.self) { group in
                     Section {
                         ForEach(group.tabs, id: \.self) { tab in
-                            Label {
-                                Text(tab.title)
-                            } icon: {
-                                IconTile(symbol: tab.icon, color: tab.color)
+                            // HStack, not Label: the sidebar Label's icon slot is
+                            // fixed ~20pt wide and clips a larger tile.
+                            HStack(spacing: 8) {
+                                IconTile(symbol: tab.icon, color: tab.color, size: 22)
+                                Text(tab.title).font(.system(size: 14, weight: .medium))
                             }
+                            .padding(.vertical, 2)
+                            .accessibilityElement(children: .combine)
                             .tag(tab)
                         }
                     } header: {
@@ -970,7 +974,7 @@ private struct AgendaEventRow: View {
 
     var body: some View {
         Button { if let u = event.conferencingURL { NSWorkspace.shared.open(u) } } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Circle()
                     .fill(Color(hex: event.calendarColorHex) ?? .accentColor)
                     .frame(width: 10, height: 10)
@@ -1123,7 +1127,7 @@ private struct GoogleAccountCard: View {
     let onSignOut: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             // Google "G" logo mark
             ZStack {
                 Circle().fill(Color(nsColor: .windowBackgroundColor))
