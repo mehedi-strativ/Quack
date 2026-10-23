@@ -25,7 +25,10 @@ public struct ProcessSample: Equatable, Sendable {
 public struct AppUsage: Identifiable, Equatable, Sendable {
     /// The `.app` bundle path, or "pid:<n>" for a process outside any bundle.
     public var id: String
+    /// Human-readable name ("Siri Suggestions" rather than "suggestd").
     public var name: String
+    /// The raw executable or bundle name, as Activity Monitor shows it.
+    public var processName: String
     public var bundlePath: String?
     public var pids: [Int32]
     /// 100 = one full core (like Activity Monitor), so it can exceed 100.
@@ -50,7 +53,9 @@ public enum ProcessUsage {
     /// to quit these. /usr/bin stays quittable (scripts, `yes`, compilers).
     // ponytail: path heuristic, not ownership; switch to a uid check if a user-owned daemon slips through.
     public static func isSystemPath(_ path: String) -> Bool {
-        ["/System/", "/usr/libexec/", "/usr/sbin/", "/sbin/", "/Library/Apple/"]
+        // Built-in user apps (Photos, Mail, Safari…) live under /System but quit fine.
+        if path.contains("/System/Applications/") { return false }
+        return ["/System/", "/usr/libexec/", "/usr/sbin/", "/sbin/", "/Library/Apple/"]
             .contains { path.hasPrefix($0) }
     }
 
@@ -74,13 +79,16 @@ public enum ProcessUsage {
             }
             let bundle = appBundlePath(forExecutable: s.path)
             let key = bundle ?? "pid:\(s.pid)"
+            let raw = rawName(bundle ?? s.path)
+            let system = isSystemPath(bundle ?? s.path)
             var app = apps[key] ?? AppUsage(
                 id: key,
-                name: displayName(bundle ?? s.path),
+                name: system ? (systemNames[raw] ?? raw) : raw,
+                processName: raw,
                 bundlePath: bundle,
                 pids: [],
                 cpuPercent: 0, gpuPercent: 0, watts: 0, memoryBytes: 0,
-                isSystem: isSystemPath(bundle ?? s.path)
+                isSystem: system
             )
             app.pids.append(s.pid)
             app.cpuPercent += cpu / intervalNs * 100
@@ -92,8 +100,52 @@ public enum ProcessUsage {
         return Array(apps.values)
     }
 
-    private static func displayName(_ path: String) -> String {
+    private static func rawName(_ path: String) -> String {
         let last = (path as NSString).lastPathComponent
         return last.hasSuffix(".app") ? String(last.dropLast(4)) : last
     }
+
+    /// What the macOS processes that most often heat a Mac actually do.
+    /// macOS has no API for this; unknown ones keep their raw name.
+    // ponytail: hand-picked list of usual suspects; extend when a new cryptic name shows up on top.
+    static let systemNames: [String: String] = [
+        "suggestd": "Siri Suggestions",
+        "knowledgeconstructiond": "Siri Knowledge",
+        "intelligenceplatformd": "Apple Intelligence",
+        "generativeexperiencesd": "Apple Intelligence",
+        "mds": "Spotlight Indexing",
+        "mds_stores": "Spotlight Indexing",
+        "mdworker": "Spotlight Indexing",
+        "mdworker_shared": "Spotlight Indexing",
+        "mdbulkimport": "Spotlight Indexing",
+        "corespotlightd": "Spotlight Indexing",
+        "mediaanalysisd": "Photos Analysis",
+        "photoanalysisd": "Photos Analysis",
+        "photolibraryd": "Photos Library",
+        "cloudphotod": "iCloud Photos Sync",
+        "bird": "iCloud Drive Sync",
+        "cloudd": "iCloud Sync",
+        "fileproviderd": "File Sync (iCloud, Drive…)",
+        "backupd": "Time Machine Backup",
+        "backupd-helper": "Time Machine Backup",
+        "softwareupdated": "Software Update",
+        "nsurlsessiond": "Background Downloads",
+        "syspolicyd": "Gatekeeper App Checks",
+        "XprotectService": "XProtect Malware Scan",
+        "trustd": "Certificate Checks",
+        "secd": "Keychain",
+        "WindowServer": "Screen Drawing (WindowServer)",
+        "coreaudiod": "Audio",
+        "bluetoothd": "Bluetooth",
+        "sharingd": "AirDrop & Handoff",
+        "locationd": "Location Services",
+        "searchpartyd": "Find My",
+        "ReportCrash": "Crash Reporter",
+        "screencapture": "Screenshot",
+        "WiFiAgent": "Wi-Fi",
+        "Wi-Fi": "Wi-Fi Menu",
+        "com.apple.WebKit.WebContent": "Web Page (Safari & apps)",
+        "com.apple.WebKit.GPU": "Web Graphics (Safari & apps)",
+        "com.apple.WebKit.Networking": "Web Networking (Safari & apps)",
+    ]
 }

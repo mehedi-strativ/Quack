@@ -21,7 +21,7 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
     private var lastTempC: Double = -1
     /// Samples processes only while the popover is open.
     private var processTimer: Timer?
-    private var lastSample: (samples: [ProcessSample], at: Date)?
+    private var lastSample: (samples: [ProcessSample], load: SystemLoad, at: Date)?
 
     private let model = TemperatureModel()
     private let popover = NSPopover()
@@ -105,6 +105,7 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
     private func startProcessSampling() {
         stopProcessSampling()
         model.topApps = []
+        model.cpuPercent = nil
         let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.sampleProcesses() }
         }
@@ -118,11 +119,12 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
         lastSample = nil
     }
 
-    /// Walks every process off the main thread, then diffs against the
-    /// previous walk to get per-app rates.
+    /// Walks every process and reads machine-wide load off the main thread,
+    /// then diffs against the previous walk to get rates.
     private func sampleProcesses() {
         DispatchQueue.global(qos: .utility).async {
             let samples = ProcessSampler.sample()
+            let load = ProcessSampler.systemLoad()
             let now = Date()
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.processTimer != nil else { return }   // closed meanwhile
@@ -130,8 +132,14 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
                     self.model.topApps = ProcessUsage.aggregate(
                         previous: prev.samples, current: samples,
                         interval: now.timeIntervalSince(prev.at))
+                    let total = load.cpuTotalTicks &- prev.load.cpuTotalTicks
+                    if total > 0 {
+                        self.model.cpuPercent = Double(load.cpuBusyTicks &- prev.load.cpuBusyTicks) / Double(total) * 100
+                    }
                 }
-                self.lastSample = (samples, now)
+                self.model.gpuPercent = load.gpuPercent
+                self.model.memoryPercent = load.memoryPercent
+                self.lastSample = (samples, load, now)
             }
         }
     }

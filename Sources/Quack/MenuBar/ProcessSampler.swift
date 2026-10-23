@@ -3,6 +3,15 @@ import Foundation
 import IOKit
 import QuackKit
 
+/// Whole-machine load at one instant. CPU is cumulative ticks (diff two
+/// samples for a percentage); GPU and memory are already percentages.
+struct SystemLoad {
+    var cpuBusyTicks: UInt64 = 0
+    var cpuTotalTicks: UInt64 = 0
+    var gpuPercent: Double?
+    var memoryPercent: Double?
+}
+
 /// Reads every visible process's cumulative CPU time, energy and memory
 /// (libproc) plus GPU time (IORegistry AGX user clients). Blocking — call off
 /// the main thread. Processes we may not inspect (other users') are skipped.
@@ -13,6 +22,47 @@ enum ProcessSampler {
         mach_timebase_info(&tb)
         return Double(tb.numer) / Double(tb.denom)
     }()
+
+    private static let host = mach_host_self()
+
+    /// CPU ticks across all cores, GPU "Device Utilization %", and memory used
+    /// the way Activity Monitor counts it (app + wired + compressed).
+    static func systemLoad() -> SystemLoad {
+        var load = SystemLoad()
+
+        var cpu = host_cpu_load_info()
+        var cpuCount = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info>.stride / MemoryLayout<integer_t>.stride)
+        let cpuOK = withUnsafeMutablePointer(to: &cpu) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(cpuCount)) {
+                host_statistics(host, HOST_CPU_LOAD_INFO, $0, &cpuCount)
+            }
+        } == KERN_SUCCESS
+        if cpuOK {
+            let t = cpu.cpu_ticks   // user, system, idle, nice
+            load.cpuBusyTicks = UInt64(t.0) + UInt64(t.1) + UInt64(t.3)
+            load.cpuTotalTicks = load.cpuBusyTicks + UInt64(t.2)
+        }
+
+        var vm = vm_statistics64()
+        var vmCount = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.stride / MemoryLayout<integer_t>.stride)
+        let vmOK = withUnsafeMutablePointer(to: &vm) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(vmCount)) {
+                host_statistics64(host, HOST_VM_INFO64, $0, &vmCount)
+            }
+        } == KERN_SUCCESS
+        if vmOK {
+            let appPages = max(Double(vm.internal_page_count) - Double(vm.purgeable_count), 0)
+            let used = (appPages + Double(vm.wire_count) + Double(vm.compressor_page_count)) * Double(getpagesize())
+            load.memoryPercent = min(used / Double(ProcessInfo.processInfo.physicalMemory) * 100, 100)
+        }
+
+        forEachEntry(IOServiceMatching("IOAccelerator")) { accel in
+            guard let stats = property(accel, "PerformanceStatistics") as? [String: Any],
+                  let util = (stats["Device Utilization %"] as? NSNumber)?.doubleValue else { return }
+            load.gpuPercent = max(load.gpuPercent ?? 0, util)
+        }
+        return load
+    }
 
     static func sample() -> [ProcessSample] {
         let gpu = gpuTimes()

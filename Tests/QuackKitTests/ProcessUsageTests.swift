@@ -38,10 +38,20 @@ import Testing
         #expect(ProcessUsage.aggregate(previous: prev, current: cur, interval: 1)[0].cpuPercent == 0)
     }
 
+    @Test func systemDaemonsGetFriendlyNames() {
+        let path = "/System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/suggestd"
+        let app = ProcessUsage.aggregate(previous: [], current: [ProcessSample(pid: 5, path: path, cpuTimeNs: 0)], interval: 1)[0]
+        #expect(app.name == "Siri Suggestions" && app.processName == "suggestd" && app.isSystem)
+        // A user's own binary with a colliding name keeps it.
+        let own = ProcessUsage.aggregate(previous: [], current: [ProcessSample(pid: 6, path: "/Users/me/bin/suggestd", cpuTimeNs: 0)], interval: 1)[0]
+        #expect(own.name == "suggestd")
+    }
+
     @Test func systemPathsAreProtected() {
         #expect(ProcessUsage.isSystemPath("/System/Library/CoreServices/loginwindow.app"))
         #expect(ProcessUsage.isSystemPath("/usr/libexec/trustd"))
         #expect(!ProcessUsage.isSystemPath("/usr/bin/yes"))
         #expect(!ProcessUsage.isSystemPath("/Applications/Safari.app"))
+        #expect(!ProcessUsage.isSystemPath("/System/Applications/Photos.app"))
     }
 }

@@ -8,6 +8,10 @@ final class TemperatureModel: ObservableObject {
     @Published var tempC: Double = -1
     @Published var fahrenheit = false
     @Published var thermalState: ProcessInfo.ThermalState = .nominal
+    /// Machine-wide load, 0–100; nil until measured (CPU needs two samples).
+    @Published var cpuPercent: Double?
+    @Published var gpuPercent: Double?
+    @Published var memoryPercent: Double?
     /// Per-app usage over the last sampling interval; empty until measured.
     @Published var topApps: [AppUsage] = []
     @Published var sortKey: ProcessSortKey = .cpu
@@ -53,6 +57,12 @@ struct TemperaturePopover: View {
                 value: pressureText, color: pressureColor)
             row(icon: "thermometer.medium", label: "Temperature",
                 value: tempText, color: .primary)
+            row(icon: "cpu", label: "CPU",
+                value: percentText(model.cpuPercent), color: loadColor(model.cpuPercent))
+            row(icon: "square.3.layers.3d", label: "GPU",
+                value: percentText(model.gpuPercent), color: loadColor(model.gpuPercent))
+            row(icon: "memorychip", label: "Memory",
+                value: percentText(model.memoryPercent), color: loadColor(model.memoryPercent))
 
             Divider()
 
@@ -131,6 +141,17 @@ struct TemperaturePopover: View {
         return "\(Int(v.rounded()))°\(model.fahrenheit ? "F" : "C")"
     }
 
+    private func percentText(_ p: Double?) -> String {
+        p.map { "\(Int($0.rounded()))%" } ?? "—"
+    }
+
+    private func loadColor(_ p: Double?) -> Color {
+        guard let p else { return .primary }
+        if p >= 90 { return .red }
+        if p >= 70 { return .orange }
+        return .primary
+    }
+
     private var pressureText: String {
         switch model.thermalState {
         case .nominal: return "Nominal"
@@ -151,8 +172,8 @@ struct TemperaturePopover: View {
     }
 }
 
-/// One app in the "Using the most" list. Hover reveals Quit (hidden for
-/// macOS's own processes, which can't be quit safely).
+/// One app in the "Using the most" list. Hover reveals Quit; macOS's own
+/// processes get an Apple icon instead and can't be quit.
 private struct ProcessRow: View {
     let app: AppUsage
     let value: String
@@ -177,10 +198,15 @@ private struct ProcessRow: View {
         .background(hovering ? Color.primary.opacity(0.08) : .clear,
                     in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .instantHover($hovering)
+        .help(app.isSystem
+              ? "Part of macOS (“\(app.processName)”), so it can't be quit here."
+              : app.processName)
     }
 
     @ViewBuilder private var icon: some View {
-        if let path = app.bundlePath {
+        if app.isSystem {
+            Image(systemName: "apple.logo").foregroundStyle(.secondary)
+        } else if let path = app.bundlePath {
             Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable()
         } else {
             Image(systemName: "terminal").foregroundStyle(.secondary)
