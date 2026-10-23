@@ -7,9 +7,10 @@ import CSMC
 /// A separate menu-bar status item showing CPU temperature with a flame icon
 /// (à la the `hot` app). Reads the SMC via `CSMC`, polls on a background queue,
 /// and tints orange/red as the chip heats up. Clicking it opens a popover with
-/// thermal pressure, temperature, and a Settings action. Opt-in.
+/// thermal pressure, temperature, the apps using the most CPU/GPU/memory (with
+/// Quit), and a Settings action. Opt-in.
 @MainActor
-final class TemperatureStatusItem: NSObject, ManagedService {
+final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
     private let settings: SettingsStore
     /// Set by AppEnvironment after construction (opens the Settings window).
     var onOpenSettings: (() -> Void)?
@@ -18,6 +19,9 @@ final class TemperatureStatusItem: NSObject, ManagedService {
     private var timer: Timer?
     private var cancellable: AnyCancellable?
     private var lastTempC: Double = -1
+    /// Samples processes only while the popover is open.
+    private var processTimer: Timer?
+    private var lastSample: (samples: [ProcessSample], at: Date)?
 
     private let model = TemperatureModel()
     private let popover = NSPopover()
@@ -48,8 +52,13 @@ final class TemperatureStatusItem: NSObject, ManagedService {
             }
             popover.behavior = .transient
             popover.animates = false
+            popover.delegate = self
             popover.contentViewController = NSHostingController(
-                rootView: TemperaturePopover(model: model) { [weak self] in self?.openSettings() }
+                rootView: TemperaturePopover(
+                    model: model,
+                    onSettings: { [weak self] in self?.openSettings() },
+                    onQuit: { [weak self] app, force in self?.quit(app, force: force) }
+                )
             )
             statusItem = item
         }
@@ -69,6 +78,7 @@ final class TemperatureStatusItem: NSObject, ManagedService {
 
     func stop() {
         timer?.invalidate(); timer = nil
+        stopProcessSampling()
         cancellable = nil
         if popover.isShown { popover.performClose(nil) }
         statusItem?.isVisible = false
@@ -80,8 +90,63 @@ final class TemperatureStatusItem: NSObject, ManagedService {
             popover.performClose(nil)
         } else {
             refresh()
+            startProcessSampling()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    nonisolated func popoverDidClose(_ notification: Notification) {
+        MainActor.assumeIsolated { stopProcessSampling() }
+    }
+
+    // MARK: Top processes
+
+    private func startProcessSampling() {
+        stopProcessSampling()
+        model.topApps = []
+        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sampleProcesses() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        processTimer = timer
+        sampleProcesses()   // baseline; the first rates land on the next tick
+    }
+
+    private func stopProcessSampling() {
+        processTimer?.invalidate(); processTimer = nil
+        lastSample = nil
+    }
+
+    /// Walks every process off the main thread, then diffs against the
+    /// previous walk to get per-app rates.
+    private func sampleProcesses() {
+        DispatchQueue.global(qos: .utility).async {
+            let samples = ProcessSampler.sample()
+            let now = Date()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.processTimer != nil else { return }   // closed meanwhile
+                if let prev = self.lastSample {
+                    self.model.topApps = ProcessUsage.aggregate(
+                        previous: prev.samples, current: samples,
+                        interval: now.timeIntervalSince(prev.at))
+                }
+                self.lastSample = (samples, now)
+            }
+        }
+    }
+
+    /// Quits a regular app the polite way (it may ask to save); a bare process
+    /// or a bundle with no running app gets SIGTERM. `force` = ⌥-click.
+    private func quit(_ app: AppUsage, force: Bool) {
+        guard !app.isSystem else { return }
+        let running = app.pids.lazy
+            .compactMap { NSRunningApplication(processIdentifier: $0) }
+            .first { $0.bundleURL?.path == app.bundlePath }
+        if let running {
+            _ = force ? running.forceTerminate() : running.terminate()
+        } else {
+            for pid in app.pids { kill(pid, force ? SIGKILL : SIGTERM) }
         }
     }
 

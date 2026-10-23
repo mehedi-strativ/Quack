@@ -1,5 +1,6 @@
 import SwiftUI
-import Foundation
+import AppKit
+import QuackKit
 
 /// Live data for the temperature popover, updated by `TemperatureStatusItem`.
 @MainActor
@@ -7,13 +8,43 @@ final class TemperatureModel: ObservableObject {
     @Published var tempC: Double = -1
     @Published var fahrenheit = false
     @Published var thermalState: ProcessInfo.ThermalState = .nominal
+    /// Per-app usage over the last sampling interval; empty until measured.
+    @Published var topApps: [AppUsage] = []
+    @Published var sortKey: ProcessSortKey = .cpu
+}
+
+/// What the "Using the most" list ranks by. CPU first: CPU and GPU work is
+/// what heats the chip; memory barely does.
+enum ProcessSortKey: String, CaseIterable, Identifiable {
+    case cpu = "CPU", gpu = "GPU", power = "Power", memory = "Memory"
+    var id: Self { self }
+
+    func value(_ a: AppUsage) -> Double {
+        switch self {
+        case .cpu: return a.cpuPercent
+        case .gpu: return a.gpuPercent
+        case .power: return a.watts
+        case .memory: return Double(a.memoryBytes)
+        }
+    }
+
+    func text(_ a: AppUsage) -> String {
+        switch self {
+        case .cpu: return "\(Int(a.cpuPercent.rounded()))%"
+        case .gpu: return "\(Int(a.gpuPercent.rounded()))%"
+        case .power: return String(format: "%.1f W", a.watts)
+        case .memory: return ByteCountFormatter.string(fromByteCount: Int64(a.memoryBytes), countStyle: .memory)
+        }
+    }
 }
 
 /// The popover shown when the flame menu-bar item is clicked: thermal pressure,
-/// temperature, and a Settings action.
+/// temperature, the apps working the chip hardest (with Quit), and Settings.
 struct TemperaturePopover: View {
     @ObservedObject var model: TemperatureModel
     let onSettings: () -> Void
+    /// Quits an app; `force` when ⌥ was held.
+    let onQuit: (AppUsage, _ force: Bool) -> Void
     @State private var hoveringSettings = false
 
     var body: some View {
@@ -22,6 +53,10 @@ struct TemperaturePopover: View {
                 value: pressureText, color: pressureColor)
             row(icon: "thermometer.medium", label: "Temperature",
                 value: tempText, color: .primary)
+
+            Divider()
+
+            topAppsSection
 
             Divider()
 
@@ -42,7 +77,42 @@ struct TemperaturePopover: View {
             .padding(.horizontal, -6)
         }
         .padding(14)
-        .frame(width: 250, alignment: .leading)
+        .frame(width: 320, alignment: .leading)
+    }
+
+    @ViewBuilder private var topAppsSection: some View {
+        HStack {
+            Text("Using the most").font(.system(size: 13, weight: .semibold))
+            Spacer()
+            Button("Activity Monitor") {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app"))
+            }
+            .buttonStyle(.link).font(.system(size: 11))
+        }
+        Picker("Sort by", selection: $model.sortKey) {
+            ForEach(ProcessSortKey.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented).labelsHidden()
+
+        if model.topApps.isEmpty {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Measuring…").foregroundStyle(.secondary)
+            }
+            .font(.system(size: 12)).frame(maxWidth: .infinity, minHeight: 60)
+        } else {
+            VStack(spacing: 2) {
+                ForEach(ranked) { app in
+                    ProcessRow(app: app, value: model.sortKey.text(app), onQuit: onQuit)
+                }
+            }
+            .padding(.horizontal, -6)
+        }
+    }
+
+    private var ranked: [AppUsage] {
+        let key = model.sortKey
+        return Array(model.topApps.sorted { key.value($0) > key.value($1) }.prefix(5))
     }
 
     private func row(icon: String, label: String, value: String, color: Color) -> some View {
@@ -77,6 +147,43 @@ struct TemperaturePopover: View {
         case .fair: return .orange
         case .serious, .critical: return .red
         @unknown default: return .primary
+        }
+    }
+}
+
+/// One app in the "Using the most" list. Hover reveals Quit (hidden for
+/// macOS's own processes, which can't be quit safely).
+private struct ProcessRow: View {
+    let app: AppUsage
+    let value: String
+    let onQuit: (AppUsage, _ force: Bool) -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            icon.frame(width: 18, height: 18)
+            Text(app.name).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 8)
+            if hovering && !app.isSystem {
+                Button("Quit") { onQuit(app, NSEvent.modifierFlags.contains(.option)) }
+                    .controlSize(.small)
+                    .help("Quit \(app.name). Hold ⌥ to force quit.")
+            }
+            Text(value).monospacedDigit().fontWeight(.semibold)
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 6)
+        .frame(height: 26)
+        .background(hovering ? Color.primary.opacity(0.08) : .clear,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .instantHover($hovering)
+    }
+
+    @ViewBuilder private var icon: some View {
+        if let path = app.bundlePath {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable()
+        } else {
+            Image(systemName: "terminal").foregroundStyle(.secondary)
         }
     }
 }
