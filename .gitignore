@@ -16,3 +16,5 @@ build/
 
 # Local git worktrees used for isolated feature work
 .worktrees/
+
+.vscode
