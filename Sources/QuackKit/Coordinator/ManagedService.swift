@@ -14,6 +14,7 @@ public protocol ManagedService: AnyObject {
 public enum Feature: CaseIterable, Sendable {
     case brightness
     case temperature
+    case notch
     case mouse
     case timeAwareness
 
@@ -21,6 +22,7 @@ public enum Feature: CaseIterable, Sendable {
         switch self {
         case .brightness: return settings.brightnessEnabled
         case .temperature: return settings.cpuTemperatureEnabled
+        case .notch: return settings.notchEnabled
         case .mouse:
             return settings.mouseSensitivityEnabled
                 || settings.smoothScrollEnabled

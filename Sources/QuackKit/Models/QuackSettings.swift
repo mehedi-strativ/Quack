@@ -7,6 +7,10 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var brightnessEnabled: Bool
     /// Show CPU temperature (with a flame icon) in the menu bar.
     public var cpuTemperatureEnabled: Bool
+    /// Notch panel that expands on hover below the built-in display's notch.
+    public var notchEnabled: Bool
+    /// Show Claude Code agent progress in the notch panel.
+    public var notchAgentsEnabled: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
     /// Show the temperature in Fahrenheit instead of Celsius.
@@ -55,6 +59,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public init(
         brightnessEnabled: Bool = false,
         cpuTemperatureEnabled: Bool = false,
+        notchEnabled: Bool = false,
+        notchAgentsEnabled: Bool = false,
         hideDuckIcon: Bool = false,
         temperatureFahrenheit: Bool = false,
         brightnessStepPercent: Int = 10,
@@ -77,6 +83,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     ) {
         self.brightnessEnabled = brightnessEnabled
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
+        self.notchEnabled = notchEnabled
+        self.notchAgentsEnabled = notchAgentsEnabled
         self.hideDuckIcon = hideDuckIcon
         self.temperatureFahrenheit = temperatureFahrenheit
         self.brightnessStepPercent = brightnessStepPercent
@@ -112,6 +120,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         }
         brightnessEnabled = v(.brightnessEnabled, d.brightnessEnabled)
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
+        notchEnabled = v(.notchEnabled, d.notchEnabled)
+        notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)
         brightnessStepPercent = v(.brightnessStepPercent, d.brightnessStepPercent)

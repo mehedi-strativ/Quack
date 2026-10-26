@@ -1,0 +1,27 @@
+import SwiftUI
+
+/// Header row: asterisk + "N agents" left; needs-you pill right.
+struct NotchHeaderView: View {
+    @ObservedObject var model: NotchContentViewModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "asterisk")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(NotchTheme.orange)
+            Text("\(model.agents.count) agent\(model.agents.count == 1 ? "" : "s")")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(NotchTheme.textPrimary)
+            Spacer(minLength: 8)
+            if model.needsYouCount > 0 {
+                HStack(spacing: 4) {
+                    Circle().fill(NotchTheme.orange).frame(width: 5, height: 5)
+                    Text("\(model.needsYouCount) needs you").font(.system(size: 10, weight: .medium))
+                }
+                .foregroundStyle(NotchTheme.orange)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().stroke(NotchTheme.orange, lineWidth: 1))
+            }
+        }
+    }
+}

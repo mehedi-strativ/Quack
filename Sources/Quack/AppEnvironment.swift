@@ -33,6 +33,8 @@ final class AppEnvironment: ObservableObject {
     private let temperatureService: TemperatureStatusItem
     private let mouseService: MouseService
     private let timeAwarenessService: TimeAwarenessService
+    private let notchService: NotchService
+    let claudeInstaller = ClaudeConfigInstaller()
 
     private let coordinator: AppCoordinator
     private var cancellables: Set<AnyCancellable> = []
@@ -50,16 +52,19 @@ final class AppEnvironment: ObservableObject {
         self.temperatureService = TemperatureStatusItem(settings: settings)
         self.mouseService = MouseService(settings: settings, permissions: permissions)
         self.timeAwarenessService = TimeAwarenessService(settings: settings, toasts: toasts)
+        self.notchService = NotchService(settings: settings, claudeInstaller: claudeInstaller)
 
         let services: [Feature: ManagedService] = [
             .brightness: cursorService,
             .temperature: temperatureService,
             .mouse: mouseService,
             .timeAwareness: timeAwarenessService,
+            .notch: notchService,
         ]
         self.coordinator = AppCoordinator(store: settings, services: services)
         temperatureService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
         timeAwarenessService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .stats) }
+        notchService.onOpenSettings = { [weak self] in self?.showSettings(selecting: .notch) }
 
         // Re-forward nested ObservableObject changes so SwiftUI views observing
         // `AppEnvironment` refresh when settings / permissions change.
@@ -154,4 +159,22 @@ final class AppEnvironment: ObservableObject {
 
     /// The pointer-sensitivity unit (settings UI reads `liveApplyAvailable`).
     var mouseSensitivity: MouseSensitivityService { mouseService.sensitivity }
+
+    /// Claude Code integration state/actions for the settings pane. Returns
+    /// success; failures are logged, never fatal (the panel degrades quietly).
+    func claudeIntegrationInstalled() -> Bool {
+        claudeInstaller.isInstalled()
+    }
+
+    @discardableResult
+    func installClaudeIntegration() -> Bool {
+        do { try claudeInstaller.install(); return true }
+        catch { Log.claude.error("Claude integration install failed: \(error.localizedDescription)"); return false }
+    }
+
+    @discardableResult
+    func removeClaudeIntegration() -> Bool {
+        do { try claudeInstaller.uninstall(); return true }
+        catch { Log.claude.error("Claude integration uninstall failed: \(error.localizedDescription)"); return false }
+    }
 }

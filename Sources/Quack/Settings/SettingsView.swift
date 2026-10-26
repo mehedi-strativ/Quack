@@ -6,7 +6,7 @@ import QuackKit
 enum SettingsTab: String, CaseIterable {
     case dashboard, stats
     case mouse
-    case brightness
+    case brightness, notch
     case general, permissions
 
     var title: String {
@@ -15,6 +15,7 @@ enum SettingsTab: String, CaseIterable {
         case .stats: return "Stats & Timer"
         case .mouse: return "Mouse"
         case .brightness: return "Brightness"
+        case .notch: return "Notch"
         case .general: return "Settings"
         case .permissions: return "Permissions"
         }
@@ -26,6 +27,7 @@ enum SettingsTab: String, CaseIterable {
         case .stats: return "gauge.with.needle"
         case .mouse: return "computermouse"
         case .brightness: return "sun.max"
+        case .notch: return "menubar.rectangle"
         case .general: return "gearshape"
         case .permissions: return "lock.shield"
         }
@@ -40,6 +42,7 @@ enum SettingsTab: String, CaseIterable {
         case .stats: return Color(hex: "#FF6A3D")!
         case .mouse: return Color(hex: "#FF4F66")!
         case .brightness: return Color(hex: "#B455CC")!
+        case .notch: return Color(hex: "#A25AD6")!
         case .general: return Color(hex: "#8F5FE0")!
         case .permissions: return Color(hex: "#6C67F0")!
         }
@@ -60,7 +63,7 @@ private enum SidebarGroup: String, CaseIterable {
         case .top: return [.dashboard]
         case .menuBar: return [.stats]
         case .input: return [.mouse]
-        case .screen: return [.brightness]
+        case .screen: return [.brightness, .notch]
         case .app: return [.general, .permissions]
         }
     }
@@ -303,6 +306,8 @@ struct SettingsPane: View {
                 switch tab {
                 case .brightness:
                     BrightnessSection()
+                case .notch:
+                    NotchSection()
                 case .stats:
                     TemperatureSection()
                     TimeAwarenessStatsSection()
@@ -657,6 +662,49 @@ private struct TemperatureSection: View {
                 Toggle("Show in Fahrenheit", isOn: s.binding(\.temperatureFahrenheit))
             }
         }
+    }
+}
+
+// MARK: - Notch panel
+
+private struct NotchSection: View {
+    @EnvironmentObject var env: AppEnvironment
+    @State private var claudeInstalled = false
+
+    var body: some View {
+        let s = env.settingsStore
+        Section("Notch panel") {
+            Toggle("Show the notch panel", isOn: s.binding(\.notchEnabled))
+            Text("Hover just below the notch to see CPU temperature and load. Built-in notched display only.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+
+            if s.settings.notchEnabled {
+                Toggle("Show Claude Code agents", isOn: s.binding(\.notchAgentsEnabled))
+                Text("Live status of your Claude Code sessions: which are working, which need you, and their usage limits.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+
+            if s.settings.notchEnabled && s.settings.notchAgentsEnabled {
+                HStack {
+                    if claudeInstalled {
+                        Text("Claude integration installed.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        Button("Remove") {
+                            env.removeClaudeIntegration()
+                            claudeInstalled = env.claudeIntegrationInstalled()
+                        }
+                    } else {
+                        Text("Needs hooks in ~/.claude/settings.json to see your agents.")
+                            .font(.system(size: 12)).foregroundStyle(.orange)
+                        Button("Enable Claude integration") {
+                            env.installClaudeIntegration()
+                            claudeInstalled = env.claudeIntegrationInstalled()
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear { claudeInstalled = env.claudeIntegrationInstalled() }
     }
 }
 
