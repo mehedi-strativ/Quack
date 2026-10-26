@@ -20,16 +20,35 @@ final class NotchService: NSObject, ManagedService {
     private var wired = false
     private var agentsRunning = false
     private var loadTimer: Timer?
+    private var hovering = false
+    /// Request ids already seen, so only a NEW request pops the panel open.
+    private var seenPermissionIDs: Set<String> = []
+    /// "session|message" of agents needing you, so only a NEW need pops it open.
+    private var needsYouKeys: Set<String>?
+    private var autoClose: DispatchWorkItem?
+    /// Shrink animation running; repositions wait for it.
+    private var closing = false
+    /// Shrinks the window to the settled shape after a shrink animation.
+    private var trimWindow: DispatchWorkItem?
+    private var closeGeneration = 0
+    /// Esc-to-minimize monitors, installed only while the panel is open.
+    private var escMonitors: [Any] = []
     private var lastLoad: SystemLoad?
 
     /// Collapsed hover strip height, hanging below the notch. It only carries
     /// the compact status lights; all detail is revealed on hover.
     private let hoverMargin: CGFloat = 8
+    /// Strip height while status dots show (6pt dots + 3pt above and below).
+    private let peekStripHeight: CGFloat = 12
     private let expandedWidth: CGFloat = 420
+    /// Wider while a question / permission card shows, for its option rows.
+    private let requestWidth: CGFloat = 480
     /// Height of the Quack footer row (duck button + padding).
     private let footerRowHeight: CGFloat = 26
     /// System-load row (24) + its top padding (10).
     private let systemRowHeight: CGFloat = 34
+    /// How long a "needs you" pop-open (no request to answer) stays up.
+    private let peekSeconds: TimeInterval = 6
 
     init(settings: SettingsStore, claudeInstaller: ClaudeConfigInstaller) {
         self.settings = settings
@@ -52,11 +71,19 @@ final class NotchService: NSObject, ManagedService {
         cancellables.removeAll()
         wired = false
         stopSampling()
+        stopEscMonitor()
         if agentsRunning { agentsService.stop(); agentsRunning = false }
         panel?.orderOut(nil)
         panel = nil
         model.isOpen = false
+        model.showsExpanded = false
+        closing = false
         model.agents = []
+        model.permissions = []
+        seenPermissionIDs = []
+        needsYouKeys = nil
+        autoClose?.cancel(); autoClose = nil
+        hovering = false
     }
 
     private func wireIfNeeded() {
@@ -64,17 +91,31 @@ final class NotchService: NSObject, ManagedService {
         wired = true
         model.onHoverChange = { [weak self] h in self?.handleHover(h) }
         model.onAgentTap = { [weak self] agent in self?.focusAgent(agent) }
+        model.onSeen = { [weak self] agent in self?.agentsService.markSeen(agent) }
+        model.onAnswer = { [weak self] prompt, decision in
+            guard let self else { return }
+            self.agentsService.answer(prompt, decision)
+            // Typed an answer: give the keyboard back without closing.
+            if let panel = self.panel, panel.isKeyWindow { panel.orderOut(nil); self.reposition() }
+        }
         model.onOpenQuack = { [weak self] in self?.onOpenSettings?() }
 
         agentsService.$agents
-            .sink { [weak self] a in self?.model.agents = a; self?.reposition() }
+            .sink { [weak self] a in self?.agentsChanged(a) }
+            .store(in: &cancellables)
+        model.$promptHeight
+            .removeDuplicates()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.reposition() } }
+            .store(in: &cancellables)
+        agentsService.$permissions
+            .sink { [weak self] p in self?.permissionsChanged(p) }
             .store(in: &cancellables)
         agentsService.$integrationInstalled
             .sink { [weak self] i in self?.model.integrationInstalled = i }
             .store(in: &cancellables)
         settings.$settings
-            .map(\.notchAgentsEnabled)
-            .removeDuplicates()
+            .map { ($0.notchAgentsEnabled, $0.notchAnswerPermissions) }
+            .removeDuplicates(by: ==)
             .sink { [weak self] _ in self?.applyAgentsFlag(); self?.reposition() }
             .store(in: &cancellables)
     }
@@ -84,6 +125,7 @@ final class NotchService: NSObject, ManagedService {
     private func applyAgentsFlag() {
         let enabled = settings.settings.notchAgentsEnabled
         model.agentsEnabled = enabled
+        agentsService.answersPermissions = settings.settings.notchAnswerPermissions
         guard enabled != agentsRunning else { return }
         agentsRunning = enabled
         enabled ? agentsService.start() : agentsService.stop()
@@ -154,31 +196,85 @@ final class NotchService: NSObject, ManagedService {
     }
 
     /// Collapsed/peek: a strip hanging below the notch cutout (menu bar stays
-    /// usable). Expanded: a curtain from the very top of the screen — the panel
-    /// covers the menu-bar band and the cutout, and `contentTopInset` pushes
-    /// the content below the physical camera housing so nothing renders
-    /// behind it (CLAUDE.md geometry rule).
+    /// usable). Expanded: a curtain from the very top of the screen, with
+    /// `contentTopInset` pushing content below the physical camera housing.
+    ///
+    /// Motion happens in SwiftUI, not by animating the window: the window is
+    /// set (instantly, while transparent) to at least the target size, the
+    /// content is laid out once at that size, and only the black shape's
+    /// size springs — out of the notch on open, back into it on close. A
+    /// window-frame animation re-lays out every frame and stutters.
     private func reposition() {
-        guard let layout = reader.currentLayout(), let panel else { return }
-        let notchBottom = layout.cocoaNotchRect.minY
-        let notchHeight = layout.cocoaNotchRect.height
-        let screenTop = layout.screen.frame.maxY
-        let width = model.isOpen ? expandedWidth : max(layout.cocoaNotchRect.width, 120)
-        let centerX = layout.cocoaNotchRect.midX
-        let originX = centerX - width / 2
-        let height: CGFloat
-        let originY: CGFloat
-        if model.isOpen {
-            height = expandedHeight() + notchHeight   // content + the covered cutout band
-            originY = screenTop - height              // curtain: top edge at screen top
-            model.contentTopInset = notchHeight       // content starts below the cutout
-        } else {
-            height = hoverMargin
-            originY = notchBottom - height            // strip hangs below the notch
+        guard let layout = reader.currentLayout(), let panel, !closing else { return }
+        defer { panel.orderFrontRegardless() }
+        guard model.isOpen else {
+            trimWindow?.cancel()
+            model.showsExpanded = false
             model.contentTopInset = 0
+            model.shapeSize = stripFrame(layout).size
+            panel.setFrame(stripFrame(layout), display: true)
+            return
         }
-        panel.setFrame(NSRect(x: originX, y: originY, width: width, height: height), display: true)
-        panel.orderFrontRegardless()
+        model.contentTopInset = layout.cocoaNotchRect.height
+        let target = openSize(layout)
+        let opening = !model.showsExpanded
+        if opening {
+            model.showsExpanded = true
+            model.shapeSize = notchFrame(layout).size   // start at the notch
+        }
+        model.contentSize = target
+        // Grow the (transparent) window first; trim it after a shrink settles.
+        let window = panel.frame.size
+        if opening || target.width > window.width || target.height > window.height {
+            let size = opening ? target : CGSize(width: max(window.width, target.width),
+                                                 height: max(window.height, target.height))
+            panel.setFrame(canvasFrame(layout, size), display: true)
+        }
+        if model.shapeSize != target {
+            let spring: Animation = opening ? .spring(response: 0.42, dampingFraction: 0.8)
+                                            : .spring(response: 0.3, dampingFraction: 0.9)
+            // Next runloop on open, so the notch-sized first frame renders.
+            DispatchQueue.main.async { [model] in withAnimation(spring) { model.shapeSize = target } }
+        }
+        trimWindow?.cancel()
+        if target.width < window.width || target.height < window.height {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.model.isOpen, !self.closing, self.model.contentSize == target else { return }
+                panel.setFrame(self.canvasFrame(layout, target), display: true)
+            }
+            trimWindow = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        }
+    }
+
+    /// The hover strip hanging just below the notch; taller while it shows
+    /// status dots so they fit whole.
+    private func stripFrame(_ layout: NotchLayout) -> NSRect {
+        let width = max(layout.cocoaNotchRect.width, 120)
+        let height = model.showsPeek ? peekStripHeight : hoverMargin
+        return NSRect(x: layout.cocoaNotchRect.midX - width / 2, y: layout.cocoaNotchRect.minY - height,
+                      width: width, height: height)
+    }
+
+    /// The notch plus the hover strip: where opening starts and closing ends.
+    /// Including the strip keeps the pointer inside the shape as it grows, so
+    /// the hover that opened it doesn't read as an exit.
+    private func notchFrame(_ layout: NotchLayout) -> NSRect {
+        layout.cocoaNotchRect.union(stripFrame(layout))
+    }
+
+    /// Width follows the content (wider while a request card shows); height
+    /// is content + the covered cutout band, capped so it scrolls instead of
+    /// running off the screen.
+    private func openSize(_ layout: NotchLayout) -> CGSize {
+        CGSize(width: model.permissions.isEmpty ? expandedWidth : requestWidth,
+               height: min(expandedHeight(), layout.screen.visibleFrame.height * 0.85) + layout.cocoaNotchRect.height)
+    }
+
+    /// A window of `size`, top edge at the screen top, centered on the notch.
+    private func canvasFrame(_ layout: NotchLayout, _ size: CGSize) -> NSRect {
+        NSRect(x: layout.cocoaNotchRect.midX - size.width / 2, y: layout.screen.frame.maxY - size.height,
+               width: size.width, height: size.height)
     }
 
     /// Expanded height from visible zones.
@@ -186,9 +282,12 @@ final class NotchService: NSObject, ManagedService {
         var h: CGFloat = 10                                     // bottom padding
         h += footerRowHeight                                    // Quack footer (duck button)
         h += systemRowHeight
+        if !model.permissions.isEmpty { h += model.promptHeight + 10 }
         if model.agentsEnabled {
             h += 30                                             // header row
-            if !model.integrationInstalled || model.agents.isEmpty {
+            if !model.permissions.isEmpty {
+                // cards hidden while a request waits (header only)
+            } else if !model.integrationInstalled || model.agents.isEmpty {
                 h += 28                                         // CTA / empty row
             } else {
                 let visible = min(model.agents.count, 3)
@@ -196,13 +295,118 @@ final class NotchService: NSObject, ManagedService {
             }
             h += 10                                             // zone bottom pad
         }
-        return min(h, 480)
+        return h
     }
 
     private func handleHover(_ hovering: Bool) {
-        model.isOpen = hovering
-        hovering ? startSampling() : stopSampling()
-        reposition()
+        self.hovering = hovering
+        // Typing an answer keeps it open even if the pointer drifts off.
+        if !hovering, panel?.isKeyWindow == true { return }
+        setOpen(hovering)
+    }
+
+    /// A session that newly needs you (finished, asking, waiting on a plan)
+    /// pops the panel open for a few seconds. The first read after start
+    /// only records state, so launching Quack doesn't pop it.
+    private func agentsChanged(_ agents: [AgentSnapshot]) {
+        model.agents = agents
+        let keys = Set(agents.filter { $0.status == .needsYou }
+            .map { "\($0.sessionID)|\($0.statusMessage ?? "")" })
+        let hasNew = needsYouKeys.map { !keys.subtracting($0).isEmpty } ?? false
+        needsYouKeys = keys
+        guard hasNew, model.agentsEnabled else { reposition(); return }
+        setOpen(true)
+        scheduleAutoClose()
+    }
+
+    private func scheduleAutoClose() {
+        autoClose?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.hovering, self.model.permissions.isEmpty,
+                  self.panel?.isKeyWindow != true else { return }
+            self.setOpen(false)
+        }
+        autoClose = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + peekSeconds, execute: work)
+    }
+
+    /// A new request pops the panel open without a hover; it closes again
+    /// once nothing is pending (unless the pointer is in it). Moving the
+    /// pointer in and out dismisses it like any hover.
+    private func permissionsChanged(_ prompts: [PermissionPrompt]) {
+        model.permissions = prompts
+        let ids = Set(prompts.map(\.id))
+        let hasNew = !ids.subtracting(seenPermissionIDs).isEmpty
+        seenPermissionIDs = ids
+        if hasNew {
+            autoClose?.cancel()
+            setOpen(true)
+        } else if prompts.isEmpty && !hovering && model.isOpen {
+            setOpen(false)
+        } else {
+            reposition()
+        }
+    }
+
+    private func setOpen(_ open: Bool) {
+        closeGeneration += 1
+        if open {
+            closing = false
+            model.isOpen = true
+            startSampling()
+            startEscMonitor()
+            reposition()
+            return
+        }
+        stopSampling()
+        stopEscMonitor()
+        guard model.isOpen, model.showsExpanded, let panel, let layout = reader.currentLayout() else {
+            model.isOpen = false; reposition(); return
+        }
+        // Hand keyboard focus back to the app you were typing in.
+        if panel.isKeyWindow { panel.orderOut(nil); panel.orderFrontRegardless() }
+        // Spring the shape back into the notch with the content still drawn,
+        // then swap to the hover strip. A re-open mid-shrink bumps the
+        // generation and cancels the swap.
+        closing = true
+        trimWindow?.cancel()
+        let generation = closeGeneration
+        withAnimation(.spring(response: 0.32, dampingFraction: 1)) { model.shapeSize = notchFrame(layout).size }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) { [weak self] in
+            guard let self, generation == self.closeGeneration else { return }
+            self.closing = false
+            self.model.isOpen = false
+            self.reposition()
+        }
+    }
+
+    /// Esc minimizes the open panel; a waiting request stays waiting (hover
+    /// to bring it back). Global monitor for Esc pressed in other apps (listen
+    /// -only, needs Accessibility, so the keypress still reaches that app),
+    /// local one for Esc while typing in the panel. No event tap.
+    private func startEscMonitor() {
+        guard escMonitors.isEmpty else { return }
+        let isEsc: (NSEvent) -> Bool = { $0.keyCode == 53 }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] e in
+            guard isEsc(e) else { return }
+            MainActor.assumeIsolated { self?.minimize() }
+        }) { escMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] e in
+            guard isEsc(e) else { return e }
+            MainActor.assumeIsolated { self?.minimize() }
+            return nil
+        }) { escMonitors.append(local) }
+    }
+
+    private func stopEscMonitor() {
+        escMonitors.forEach(NSEvent.removeMonitor)
+        escMonitors = []
+    }
+
+    private func minimize() {
+        autoClose?.cancel()
+        hovering = false
+        setOpen(false)
     }
 
     /// Click-to-focus: bring the app hosting the agent's session to front.

@@ -11,6 +11,8 @@ public struct QuackSettings: Codable, Equatable, Sendable {
     public var notchEnabled: Bool
     /// Show Claude Code agent progress in the notch panel.
     public var notchAgentsEnabled: Bool
+    /// Answer Claude Code permission prompts from the notch panel.
+    public var notchAnswerPermissions: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
     /// Show the temperature in Fahrenheit instead of Celsius.
@@ -61,6 +63,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         cpuTemperatureEnabled: Bool = false,
         notchEnabled: Bool = false,
         notchAgentsEnabled: Bool = false,
+        notchAnswerPermissions: Bool = true,
         hideDuckIcon: Bool = false,
         temperatureFahrenheit: Bool = false,
         brightnessStepPercent: Int = 10,
@@ -85,6 +88,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         self.cpuTemperatureEnabled = cpuTemperatureEnabled
         self.notchEnabled = notchEnabled
         self.notchAgentsEnabled = notchAgentsEnabled
+        self.notchAnswerPermissions = notchAnswerPermissions
         self.hideDuckIcon = hideDuckIcon
         self.temperatureFahrenheit = temperatureFahrenheit
         self.brightnessStepPercent = brightnessStepPercent
@@ -122,6 +126,7 @@ public struct QuackSettings: Codable, Equatable, Sendable {
         cpuTemperatureEnabled = v(.cpuTemperatureEnabled, d.cpuTemperatureEnabled)
         notchEnabled = v(.notchEnabled, d.notchEnabled)
         notchAgentsEnabled = v(.notchAgentsEnabled, d.notchAgentsEnabled)
+        notchAnswerPermissions = v(.notchAnswerPermissions, d.notchAnswerPermissions)
         hideDuckIcon = v(.hideDuckIcon, d.hideDuckIcon)
         temperatureFahrenheit = v(.temperatureFahrenheit, d.temperatureFahrenheit)
         brightnessStepPercent = v(.brightnessStepPercent, d.brightnessStepPercent)

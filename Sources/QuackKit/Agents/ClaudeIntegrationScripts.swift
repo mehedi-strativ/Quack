@@ -8,12 +8,18 @@ public enum ClaudeIntegrationScripts {
     /// Hook events Quack registers. One shared script, event name as $1.
     public static let hookEvents = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "PermissionRequest", "Stop", "SessionEnd"]
 
+    /// How long a PermissionRequest waits for a notch answer before handing
+    /// back to Claude Code's own prompt. Under the 600s command-hook timeout.
+    public static let permissionWaitSeconds: Double = 300
+
     public static let hookScript = #"""
     #!/bin/bash
     # Quack Claude Code integration hook. Writes per-session agent state to
     # ~/.claude/quack/sessions/<session_id>.state.json for the notch panel.
-    # Installed/removed by Quack.app (Settings -> Windows -> Notch). Fail-soft:
-    # every exit path is 0 so this can never block Claude Code.
+    # Installed/removed by Quack.app (Settings -> Screen -> Notch). Fail-soft:
+    # every exit path is 0 so this can never block Claude Code. The one wait:
+    # a PermissionRequest is held for a notch-panel answer, but only while
+    # Quack is running and listening, and never past the wait limit.
     EVENT="$1"
     DIR="$HOME/.claude/quack/sessions"
     mkdir -p "$DIR" 2>/dev/null || exit 0
@@ -112,6 +118,69 @@ public enum ClaudeIntegrationScripts {
     fi
     printf '%s' "$OLD" | jq --argjson base "$BASE" --argjson extra "$EXTRA" '. * $base * $extra' > "$FILE.tmp" 2>/dev/null \
       && mv "$FILE.tmp" "$FILE" 2>/dev/null
+
+    # The session moved on: any request still listed was answered elsewhere.
+    case "$EVENT" in
+      UserPromptSubmit|Stop|SessionEnd) rm -f "$DIR/$SID".*.permission.json 2>/dev/null ;;
+    esac
+
+    # Hold the request for the notch panel. Output only on a panel answer;
+    # anything else (timeout, "Terminal", Quack gone) exits silently so
+    # Claude Code shows its own prompt.
+    LISTEN="$HOME/.claude/quack/listening"
+    if [ "$EVENT" = "PermissionRequest" ] && [ -n "$TOOL" ]; then
+      LPID=$(cat "$LISTEN" 2>/dev/null)
+      if [ -n "$LPID" ] && kill -0 "$LPID" 2>/dev/null; then
+        RID="$SID.$$"
+        REQ="$DIR/$RID.permission.json"
+        DEC="$DIR/$RID.decision.json"
+        trap 'rm -f "$REQ" "$REQ.tmp" "$DEC"' EXIT
+        trap 'exit 0' TERM INT HUP
+        SUMMARY=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // .tool_input.file_path // .tool_input.url // .tool_input.pattern // .tool_input.plan // (.tool_input | tostring)' 2>/dev/null | head -3 | cut -c1-300)
+        QUESTIONS=$(printf '%s' "$INPUT" | jq -c '.tool_input.questions // [] | if type == "array" then . else [] end' 2>/dev/null)
+        [ -n "$QUESTIONS" ] || QUESTIONS='[]'
+        SUGGESTIONS=$(printf '%s' "$INPUT" | jq -c '.permission_suggestions // []' 2>/dev/null)
+        [ -n "$SUGGESTIONS" ] || SUGGESTIONS='[]'
+        jq -n --arg id "$RID" --arg sid "$SID" --arg t "$TOOL" --arg s "$SUMMARY" --arg p "$PROJECT" --arg cwd "$CWD" \
+          --argjson sug "$SUGGESTIONS" --argjson q "$QUESTIONS" --argjson ts "$(date +%s)" \
+          '{id:$id, session_id:$sid, tool_name:$t, summary:$s, project:$p, cwd:$cwd, ts:$ts} | with_entries(select(.value != "")) | . + {suggestions:$sug, questions:$q}' > "$REQ.tmp" 2>/dev/null \
+          && mv "$REQ.tmp" "$REQ" 2>/dev/null || exit 0
+        END=$(( $(date +%s) + \#(Int(permissionWaitSeconds)) ))
+        while [ "$(date +%s)" -lt "$END" ]; do
+          if [ -f "$DEC" ]; then
+            # "suggestion" is an index into Claude's own permission_suggestions
+            # (re-read from this hook's stdin, never from the decision file).
+            # "message" is the user's "tell Claude what to do instead" text.
+            # "answers" ({question: label}) answers an AskUserQuestion: the
+            # tool runs with Claude's own input plus the answers.
+            IDX=$(jq -r '.suggestion // empty' "$DEC" 2>/dev/null)
+            ANSWERS=$(jq -c 'if (.answers | type) == "object" then .answers else empty end' "$DEC" 2>/dev/null)
+            case "$(jq -r '.behavior // empty' "$DEC" 2>/dev/null)" in
+              allow) if [ -n "$ANSWERS" ]; then
+                printf '%s' "$INPUT" | jq -c --argjson a "$ANSWERS" '{hookSpecificOutput:{hookEventName:"PermissionRequest",
+                  decision:{behavior:"allow", updatedInput:((.tool_input // {}) + {answers:$a})}}}'
+              else
+                UPDATE='[]'
+                case "$IDX" in ''|*[!0-9]*) ;; *)
+                  UPDATE=$(printf '%s' "$SUGGESTIONS" | jq -c --argjson i "$IDX" '[.[$i] // empty]' 2>/dev/null) ;;
+                esac
+                [ -n "$UPDATE" ] || UPDATE='[]'
+                jq -nc --argjson u "$UPDATE" '{hookSpecificOutput:{hookEventName:"PermissionRequest",
+                  decision:({behavior:"allow"} + (if ($u|length) > 0 then {updatedPermissions:$u} else {} end))}}'
+              fi ;;
+              deny)
+                MSG=$(jq -r '.message // empty' "$DEC" 2>/dev/null)
+                [ -n "$MSG" ] || MSG="The user denied this from the Quack notch panel."
+                jq -nc --arg m "$MSG" '{hookSpecificOutput:{hookEventName:"PermissionRequest",decision:{behavior:"deny",message:$m}}}' ;;
+            esac
+            exit 0
+          fi
+          kill -0 "$LPID" 2>/dev/null && [ -f "$LISTEN" ] || exit 0   # Quack quit or stopped listening
+          [ -f "$REQ" ] || exit 0                                     # cleared: answered in the terminal
+          sleep 0.3
+        done
+      fi
+    fi
     exit 0
     """#
 

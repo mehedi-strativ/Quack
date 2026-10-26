@@ -50,6 +50,15 @@ public struct AgentSnapshot: Equatable, Sendable, Identifiable {
         self.lastUpdate = lastUpdate
         self.hostPID = hostPID
     }
+
+    /// Same snapshot with another status (e.g. "seen" turns needs-you idle).
+    public func with(status: AgentStatus) -> AgentSnapshot {
+        AgentSnapshot(sessionID: sessionID, project: project, branch: branch, model: model,
+                      status: status, statusMessage: statusMessage, progress: progress,
+                      contextUsedPercent: contextUsedPercent, costUSD: costUSD,
+                      fiveHourUsedPercent: fiveHourUsedPercent, sevenDayUsedPercent: sevenDayUsedPercent,
+                      lastUpdate: lastUpdate, hostPID: hostPID)
+    }
 }
 
 /// On-disk shape of ~/.claude/quack/sessions/<id>.state.json (written by
@@ -127,5 +136,165 @@ public enum ISO8601Parse {
         let f2 = ISO8601DateFormatter()
         f2.formatOptions = [.withInternetDateTime]
         return f2.date(from: string)
+    }
+}
+
+/// A tool-permission request the PermissionRequest hook is holding open,
+/// waiting for an answer from the notch panel. On-disk shape of
+/// ~/.claude/quack/sessions/<id>.permission.json (written by hook.sh).
+public struct PermissionPrompt: Decodable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let session_id: String
+    public let tool_name: String
+    /// What the tool will do: the Bash command, the file path, the URL...
+    public let summary: String?
+    public let project: String?
+    public let cwd: String?
+    /// Claude Code's own `permission_suggestions` (the "don't ask again" options).
+    public let suggestions: [PermissionSuggestion]?
+    /// AskUserQuestion's questions; non-empty means "answer", not "allow".
+    public let questions: [AskQuestion]?
+    /// Unix seconds when the hook started waiting.
+    public let ts: Double
+
+    public init(id: String, session_id: String, tool_name: String, summary: String? = nil,
+                project: String? = nil, cwd: String? = nil,
+                suggestions: [PermissionSuggestion]? = nil, questions: [AskQuestion]? = nil, ts: Double) {
+        self.id = id
+        self.session_id = session_id
+        self.tool_name = tool_name
+        self.summary = summary
+        self.project = project
+        self.cwd = cwd
+        self.suggestions = suggestions
+        self.questions = questions
+        self.ts = ts
+    }
+
+    /// The choices Claude Code offers, in its order and wording: Yes, one
+    /// "Yes, and ..." per allow-type suggestion, then No. Suggestion kinds
+    /// that don't grant anything (remove/deny rules) are skipped.
+    public var options: [PermissionOption] {
+        var out = [PermissionOption(label: "Yes", decision: .allow(suggestion: nil))]
+        for (i, s) in (suggestions ?? []).enumerated() {
+            if let label = s.label(project: project) {
+                out.append(PermissionOption(label: label, decision: .allow(suggestion: i)))
+            }
+        }
+        out.append(PermissionOption(label: "No, and tell Claude what to do differently",
+                                    decision: .deny(message: nil)))
+        return out
+    }
+}
+
+/// One AskUserQuestion question with Claude's 2-4 choices.
+public struct AskQuestion: Decodable, Equatable, Sendable, Identifiable {
+    public struct Option: Decodable, Equatable, Sendable, Identifiable {
+        public var id: String { label }
+        public let label: String
+        public let description: String?
+
+        public init(label: String, description: String? = nil) {
+            self.label = label
+            self.description = description
+        }
+    }
+    public var id: String { question }
+    public let question: String
+    public let header: String?
+    public let options: [Option]
+    public let multiSelect: Bool?
+
+    public init(question: String, header: String? = nil, options: [Option], multiSelect: Bool? = nil) {
+        self.question = question
+        self.header = header
+        self.options = options
+        self.multiSelect = multiSelect
+    }
+}
+
+/// One entry of Claude Code's `permission_suggestions` / `updatedPermissions`.
+/// Every field optional: only the shape Quack labels is read; the hook sends
+/// Claude's original entry back untouched.
+public struct PermissionSuggestion: Decodable, Equatable, Sendable {
+    public struct Rule: Decodable, Equatable, Sendable {
+        public let toolName: String?
+        public let ruleContent: String?
+    }
+    public let type: String?
+    public let rules: [Rule]?
+    public let behavior: String?
+    public let mode: String?
+    public let directories: [String]?
+    public let destination: String?
+
+    public init(type: String?, rules: [Rule]? = nil, behavior: String? = nil, mode: String? = nil,
+                directories: [String]? = nil, destination: String? = nil) {
+        self.type = type
+        self.rules = rules
+        self.behavior = behavior
+        self.mode = mode
+        self.directories = directories
+        self.destination = destination
+    }
+
+    func label(project: String?) -> String? {
+        let scope: String
+        switch destination {
+        case "session": scope = " during this session"
+        case "localSettings", "projectSettings": scope = project.map { " in \($0)" } ?? " in this project"
+        default: scope = ""
+        }
+        switch type {
+        case "addRules" where behavior == "allow":
+            let names = (rules ?? []).map { r -> String in
+                let tool = r.toolName ?? "this tool"
+                guard let content = r.ruleContent, !content.isEmpty else { return tool }
+                return tool == "Bash" ? "`\(content)` commands" : "\(tool)(\(content))"
+            }
+            guard !names.isEmpty else { return nil }
+            return "Yes, and don't ask again for \(names.joined(separator: ", "))\(scope)"
+        case "setMode":
+            guard let mode else { return nil }
+            if mode == "acceptEdits" {
+                return destination == "session" ? "Yes, allow all edits during this session" : "Yes, and allow all edits\(scope)"
+            }
+            return "Yes, and switch to \(mode) mode\(scope)"
+        case "addDirectories":
+            guard let dirs = directories, !dirs.isEmpty else { return nil }
+            return "Yes, and always allow access to \(dirs.joined(separator: ", "))\(scope)"
+        default:
+            return nil
+        }
+    }
+}
+
+/// One row of a permission card.
+public struct PermissionOption: Equatable, Sendable, Identifiable {
+    public var id: String { label }
+    public let label: String
+    public let decision: PermissionDecision
+}
+
+/// The panel's answer, written to <id>.decision.json for the waiting hook.
+public enum PermissionDecision: Equatable, Sendable {
+    /// `suggestion` indexes the prompt's `suggestions` ("Yes, and don't ask again").
+    case allow(suggestion: Int?)
+    /// `message` is the user's "what to do differently" text, if any.
+    case deny(message: String?)
+    /// AskUserQuestion answers: question text -> chosen label(s) or own text
+    /// (multi-select labels joined with ", ", per the Agent SDK contract).
+    case answer([String: String])
+    /// Give up waiting and show Claude Code's own prompt in the terminal.
+    case ask
+
+    /// Body of the decision file the hook reads.
+    public var fileBody: [String: Any] {
+        switch self {
+        case .allow(let i): return i.map { ["behavior": "allow", "suggestion": $0] } ?? ["behavior": "allow"]
+        case .deny(let m): return m.flatMap { $0.isEmpty ? nil : ["behavior": "deny", "message": $0] } ?? ["behavior": "deny"]
+        case .answer(let a): return ["behavior": "allow", "answers": a]
+        case .ask: return ["behavior": "ask"]
+        }
     }
 }

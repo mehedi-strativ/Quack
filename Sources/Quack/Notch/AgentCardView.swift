@@ -6,6 +6,8 @@ import QuackKit
 /// pill row (status / progress).
 struct AgentCardView: View {
     let agent: AgentSnapshot
+    /// Shown as a "Seen" button: clears needs-you when nothing is left to do.
+    var onSeen: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -35,6 +37,20 @@ struct AgentCardView: View {
                 statusPill
                 Spacer(minLength: 0)
                 if let progress = agent.progress { progressPill(progress) }
+                if let onSeen {
+                    Button(action: onSeen) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
+                            Text("Seen").font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(NotchTheme.textPrimary)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(Capsule().fill(Color.white.opacity(0.12)))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Mark as seen: clears Needs you until this session works or asks again")
+                }
             }
         }
         .padding(10)
