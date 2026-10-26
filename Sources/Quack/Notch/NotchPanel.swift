@@ -1,8 +1,9 @@
 import AppKit
 
 /// A borderless, non-activating floating panel anchored at the notch. It sits
-/// above the menu bar (`.mainMenu + 3`) but never becomes key/main, so it never
-/// steals focus from the app underneath. Mirrors the `ToastPresenter` panel
+/// above the menu bar (`.mainMenu + 3`) and never becomes main. It becomes key
+/// only when you click a text field in it (`becomesKeyOnlyIfNeeded`), so
+/// buttons never steal focus from the app underneath. Mirrors the `ToastPresenter` panel
 /// recipe, raised a few levels so notch content overlaps the menu-bar band.
 final class NotchPanel: NSPanel {
     init(contentRect: NSRect) {
@@ -19,8 +20,9 @@ final class NotchPanel: NSPanel {
         level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
+        becomesKeyOnlyIfNeeded = true
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }

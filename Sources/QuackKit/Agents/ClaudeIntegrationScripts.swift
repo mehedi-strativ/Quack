@@ -136,16 +136,42 @@ public enum ClaudeIntegrationScripts {
         DEC="$DIR/$RID.decision.json"
         trap 'rm -f "$REQ" "$REQ.tmp" "$DEC"' EXIT
         trap 'exit 0' TERM INT HUP
-        SUMMARY=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // .tool_input.file_path // .tool_input.url // .tool_input.pattern // (.tool_input | tostring)' 2>/dev/null | head -3 | cut -c1-300)
-        jq -n --arg id "$RID" --arg sid "$SID" --arg t "$TOOL" --arg s "$SUMMARY" --arg p "$PROJECT" --argjson ts "$(date +%s)" \
-          '{id:$id, session_id:$sid, tool_name:$t, summary:$s, project:$p, ts:$ts} | with_entries(select(.value != ""))' > "$REQ.tmp" 2>/dev/null \
+        SUMMARY=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // .tool_input.file_path // .tool_input.url // .tool_input.pattern // .tool_input.plan // (.tool_input | tostring)' 2>/dev/null | head -3 | cut -c1-300)
+        QUESTIONS=$(printf '%s' "$INPUT" | jq -c '.tool_input.questions // [] | if type == "array" then . else [] end' 2>/dev/null)
+        [ -n "$QUESTIONS" ] || QUESTIONS='[]'
+        SUGGESTIONS=$(printf '%s' "$INPUT" | jq -c '.permission_suggestions // []' 2>/dev/null)
+        [ -n "$SUGGESTIONS" ] || SUGGESTIONS='[]'
+        jq -n --arg id "$RID" --arg sid "$SID" --arg t "$TOOL" --arg s "$SUMMARY" --arg p "$PROJECT" --arg cwd "$CWD" \
+          --argjson sug "$SUGGESTIONS" --argjson q "$QUESTIONS" --argjson ts "$(date +%s)" \
+          '{id:$id, session_id:$sid, tool_name:$t, summary:$s, project:$p, cwd:$cwd, ts:$ts} | with_entries(select(.value != "")) | . + {suggestions:$sug, questions:$q}' > "$REQ.tmp" 2>/dev/null \
           && mv "$REQ.tmp" "$REQ" 2>/dev/null || exit 0
         END=$(( $(date +%s) + \#(Int(permissionWaitSeconds)) ))
         while [ "$(date +%s)" -lt "$END" ]; do
           if [ -f "$DEC" ]; then
+            # "suggestion" is an index into Claude's own permission_suggestions
+            # (re-read from this hook's stdin, never from the decision file).
+            # "message" is the user's "tell Claude what to do instead" text.
+            # "answers" ({question: label}) answers an AskUserQuestion: the
+            # tool runs with Claude's own input plus the answers.
+            IDX=$(jq -r '.suggestion // empty' "$DEC" 2>/dev/null)
+            ANSWERS=$(jq -c 'if (.answers | type) == "object" then .answers else empty end' "$DEC" 2>/dev/null)
             case "$(jq -r '.behavior // empty' "$DEC" 2>/dev/null)" in
-              allow) printf '%s' '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}' ;;
-              deny) printf '%s' '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Denied from the Quack notch panel."}}}' ;;
+              allow) if [ -n "$ANSWERS" ]; then
+                printf '%s' "$INPUT" | jq -c --argjson a "$ANSWERS" '{hookSpecificOutput:{hookEventName:"PermissionRequest",
+                  decision:{behavior:"allow", updatedInput:((.tool_input // {}) + {answers:$a})}}}'
+              else
+                UPDATE='[]'
+                case "$IDX" in ''|*[!0-9]*) ;; *)
+                  UPDATE=$(printf '%s' "$SUGGESTIONS" | jq -c --argjson i "$IDX" '[.[$i] // empty]' 2>/dev/null) ;;
+                esac
+                [ -n "$UPDATE" ] || UPDATE='[]'
+                jq -nc --argjson u "$UPDATE" '{hookSpecificOutput:{hookEventName:"PermissionRequest",
+                  decision:({behavior:"allow"} + (if ($u|length) > 0 then {updatedPermissions:$u} else {} end))}}'
+              fi ;;
+              deny)
+                MSG=$(jq -r '.message // empty' "$DEC" 2>/dev/null)
+                [ -n "$MSG" ] || MSG="The user denied this from the Quack notch panel."
+                jq -nc --arg m "$MSG" '{hookSpecificOutput:{hookEventName:"PermissionRequest",decision:{behavior:"deny",message:$m}}}' ;;
             esac
             exit 0
           fi

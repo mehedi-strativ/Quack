@@ -59,7 +59,8 @@ final class AgentsService: ObservableObject {
     /// the hook never reads half a file.
     func answer(_ prompt: PermissionPrompt, _ decision: PermissionDecision) {
         let url = installer.sessionsDirectory.appendingPathComponent("\(prompt.id).decision.json")
-        let body = ["id": prompt.id, "behavior": decision.rawValue]
+        var body = decision.fileBody
+        body["id"] = prompt.id
         if let data = try? JSONSerialization.data(withJSONObject: body) {
             try? data.write(to: url, options: .atomic)
         }

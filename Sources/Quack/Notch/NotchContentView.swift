@@ -3,20 +3,27 @@ import QuackKit
 
 /// The notch panel content and its three states:
 /// expanded (hover) / peek (ambient dot) / collapsed (invisible hover target).
+/// The black shape is `shapeSize`, top-centered in the window; it springs
+/// while the content inside stays laid out at its final `contentSize`.
 struct NotchContentView: View {
     @ObservedObject var model: NotchContentViewModel
 
     var body: some View {
         content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: model.shapeSize.width, height: model.shapeSize.height, alignment: .top)
+            .background(model.showsExpanded ? NotchTheme.panel : .clear)
+            // Only the panel is notch-shaped; the collapsed strip never clips its dots.
+            .clipShape(model.showsExpanded ? AnyShape(NotchShape()) : AnyShape(Rectangle()))
             .contentShape(Rectangle())
             .onHover { model.onHoverChange?($0) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     @ViewBuilder
     private var content: some View {
-        if model.isOpen {
+        if model.showsExpanded {
             expanded
+                .frame(width: model.contentSize.width, height: model.contentSize.height)
         } else if model.showsPeek {
             peek
         } else {
@@ -27,33 +34,36 @@ struct NotchContentView: View {
     private var expanded: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: model.contentTopInset)
-            systemRow
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
-            if !model.permissions.isEmpty {
-                permissionsZone
-                    .padding(.horizontal, 14)
-                    .padding(.top, 10)
-            }
-            if model.agentsEnabled {
-                VStack(alignment: .leading, spacing: 10) {
-                    NotchHeaderView(model: model)
-                    agentsZone
+            // Scrolls only when the panel hits its screen-height cap, so tall
+            // content is never cut off at the top.
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    systemRow
+                        .padding(.horizontal, 14)
+                        .padding(.top, 10)
+                    if !model.permissions.isEmpty {
+                        permissionsZone
+                            .padding(.horizontal, 14)
+                            .padding(.top, 10)
+                    }
+                    if model.agentsEnabled {
+                        VStack(alignment: .leading, spacing: 10) {
+                            NotchHeaderView(model: model)
+                            // The waiting request is the focus; cards return after.
+                            if model.permissions.isEmpty { agentsZone }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.top, 10)
+                        .padding(.bottom, 10)
+                    } else {
+                        Spacer().frame(height: 6)
+                    }
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
-                .padding(.bottom, 10)
-            } else {
-                Spacer().frame(height: 6)
             }
-            Spacer(minLength: 0)
             quackFooterRow
                 .padding(.horizontal, 14)
                 .padding(.vertical, 4)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(NotchTheme.panel)
-        .clipShape(NotchShape())
         .foregroundStyle(.white)
     }
 
@@ -89,19 +99,21 @@ struct NotchContentView: View {
         v.map { "\(Int($0.rounded()))%" }
     }
 
+    /// The oldest waiting request, one at a time like Claude Code. Its real
+    /// height is reported so the panel can size to fit it.
     @ViewBuilder
     private var permissionsZone: some View {
-        let list = VStack(spacing: 8) {
-            ForEach(model.permissions) { prompt in
-                PermissionCardView(prompt: prompt, project: model.project(for: prompt)) {
-                    model.onAnswer?(prompt, $0)
-                }
+        if let prompt = model.permissions.first {
+            PermissionCardView(prompt: prompt, project: model.project(for: prompt),
+                               moreCount: model.permissions.count - 1) {
+                model.onAnswer?(prompt, $0)
             }
-        }
-        if model.permissions.count > 2 {
-            ScrollView(showsIndicators: false) { list }.frame(maxHeight: 2 * 104 + 8)
-        } else {
-            list
+            .id(prompt.id)   // fresh picks / text for each request
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { g in
+                Color.clear.preference(key: PromptHeightKey.self, value: g.size.height)
+            })
+            .onPreferenceChange(PromptHeightKey.self) { model.promptHeight = $0 }
         }
     }
 
@@ -154,19 +166,14 @@ struct NotchContentView: View {
     }
 
     private var peek: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 4) {
-                ForEach(model.agents.filter { $0.status != .idle }.prefix(6)) { agent in
-                    Circle()
-                        .fill(NotchTheme.statusColor(agent.status))
-                        .frame(width: 6, height: 6)
-                }
+        HStack(spacing: 4) {
+            ForEach(model.agents.filter { $0.status != .idle }.prefix(6)) { agent in
+                Circle()
+                    .fill(NotchTheme.statusColor(agent.status))
+                    .frame(width: 6, height: 6)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)   // centered in the strip
         .accessibilityElement(children: .combine)
         .accessibilityLabel(peekAccessibilityLabel)
     }
@@ -174,4 +181,9 @@ struct NotchContentView: View {
     private var peekAccessibilityLabel: String {
         "\(model.activeCount) active agents"
     }
+}
+
+private struct PromptHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
