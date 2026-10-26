@@ -10,6 +10,8 @@ final class NotchContentViewModel: ObservableObject {
     @Published var agents: [AgentSnapshot] = []
     @Published var agentsEnabled = false
     @Published var integrationInstalled = false
+    /// Held permission requests, answerable from the panel.
+    @Published var permissions: [PermissionPrompt] = []
     /// System-load row; nil until the first sample after hover-in.
     @Published var temperatureText: String?
     @Published var cpuPercent: Double?
@@ -20,10 +22,16 @@ final class NotchContentViewModel: ObservableObject {
 
     var onHoverChange: ((Bool) -> Void)?
     var onAgentTap: ((AgentSnapshot) -> Void)?
+    var onAnswer: ((PermissionPrompt, PermissionDecision) -> Void)?
     /// Opens Quack's Settings window (the duck button in the footer).
     var onOpenQuack: (() -> Void)?
 
     var needsYouCount: Int { agents.filter { $0.status == .needsYou }.count }
+    /// The project name for a request, from its agent card when the hook
+    /// didn't record one.
+    func project(for prompt: PermissionPrompt) -> String {
+        prompt.project ?? agents.first { $0.sessionID == prompt.session_id }?.project ?? "Claude Code"
+    }
     var activeCount: Int { agents.filter { $0.status != .idle }.count }
     /// Ambient peek shows only when the agents zone is on and something is live.
     var showsPeek: Bool { agentsEnabled && activeCount > 0 }

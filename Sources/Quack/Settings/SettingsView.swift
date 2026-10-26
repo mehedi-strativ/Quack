@@ -685,6 +685,12 @@ private struct NotchSection: View {
             }
 
             if s.settings.notchEnabled && s.settings.notchAgentsEnabled {
+                Toggle("Answer permission prompts from the notch", isOn: s.binding(\.notchAnswerPermissions))
+                Text("When Claude Code asks to run a tool, the panel opens with Allow, Deny and Terminal. Claude's own prompt waits until you answer here or pick Terminal (up to 5 minutes).")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+
+            if s.settings.notchEnabled && s.settings.notchAgentsEnabled {
                 HStack {
                     if claudeInstalled {
                         Text("Claude integration installed.")

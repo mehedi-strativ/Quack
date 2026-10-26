@@ -129,3 +129,25 @@ public enum ISO8601Parse {
         return f2.date(from: string)
     }
 }
+
+/// A tool-permission request the PermissionRequest hook is holding open,
+/// waiting for an answer from the notch panel. On-disk shape of
+/// ~/.claude/quack/sessions/<id>.permission.json (written by hook.sh).
+public struct PermissionPrompt: Decodable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let session_id: String
+    public let tool_name: String
+    /// What the tool will do: the Bash command, the file path, the URL...
+    public let summary: String?
+    public let project: String?
+    /// Unix seconds when the hook started waiting.
+    public let ts: Double
+}
+
+/// The panel's answer, written to <id>.decision.json for the waiting hook.
+public enum PermissionDecision: String, Sendable {
+    case allow
+    case deny
+    /// Give up waiting and show Claude Code's own prompt in the terminal.
+    case ask
+}

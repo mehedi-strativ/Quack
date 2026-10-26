@@ -13,6 +13,8 @@ final class ClaudeConfigInstaller {
     private let claudeDir: URL
     private var quackDir: URL { claudeDir.appendingPathComponent("quack") }
     var sessionsDirectory: URL { quackDir.appendingPathComponent("sessions") }
+    /// Holds Quack's pid while the notch answers permission prompts.
+    var listeningFile: URL { quackDir.appendingPathComponent("listening") }
     private var settingsFile: URL { claudeDir.appendingPathComponent("settings.json") }
     private var hookFile: URL { quackDir.appendingPathComponent("hook.sh") }
     private var wrapperFile: URL { quackDir.appendingPathComponent("statusline-wrapper.sh") }

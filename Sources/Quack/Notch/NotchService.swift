@@ -20,6 +20,9 @@ final class NotchService: NSObject, ManagedService {
     private var wired = false
     private var agentsRunning = false
     private var loadTimer: Timer?
+    private var hovering = false
+    /// Request ids already seen, so only a NEW request pops the panel open.
+    private var seenPermissionIDs: Set<String> = []
     private var lastLoad: SystemLoad?
 
     /// Collapsed hover strip height, hanging below the notch. It only carries
@@ -30,6 +33,8 @@ final class NotchService: NSObject, ManagedService {
     private let footerRowHeight: CGFloat = 26
     /// System-load row (24) + its top padding (10).
     private let systemRowHeight: CGFloat = 34
+    /// One permission card + spacing; at most two are shown without scrolling.
+    private let permissionCardHeight: CGFloat = 112
 
     init(settings: SettingsStore, claudeInstaller: ClaudeConfigInstaller) {
         self.settings = settings
@@ -57,6 +62,9 @@ final class NotchService: NSObject, ManagedService {
         panel = nil
         model.isOpen = false
         model.agents = []
+        model.permissions = []
+        seenPermissionIDs = []
+        hovering = false
     }
 
     private func wireIfNeeded() {
@@ -64,17 +72,21 @@ final class NotchService: NSObject, ManagedService {
         wired = true
         model.onHoverChange = { [weak self] h in self?.handleHover(h) }
         model.onAgentTap = { [weak self] agent in self?.focusAgent(agent) }
+        model.onAnswer = { [weak self] prompt, decision in self?.agentsService.answer(prompt, decision) }
         model.onOpenQuack = { [weak self] in self?.onOpenSettings?() }
 
         agentsService.$agents
             .sink { [weak self] a in self?.model.agents = a; self?.reposition() }
             .store(in: &cancellables)
+        agentsService.$permissions
+            .sink { [weak self] p in self?.permissionsChanged(p) }
+            .store(in: &cancellables)
         agentsService.$integrationInstalled
             .sink { [weak self] i in self?.model.integrationInstalled = i }
             .store(in: &cancellables)
         settings.$settings
-            .map(\.notchAgentsEnabled)
-            .removeDuplicates()
+            .map { ($0.notchAgentsEnabled, $0.notchAnswerPermissions) }
+            .removeDuplicates(by: ==)
             .sink { [weak self] _ in self?.applyAgentsFlag(); self?.reposition() }
             .store(in: &cancellables)
     }
@@ -84,6 +96,7 @@ final class NotchService: NSObject, ManagedService {
     private func applyAgentsFlag() {
         let enabled = settings.settings.notchAgentsEnabled
         model.agentsEnabled = enabled
+        agentsService.answersPermissions = settings.settings.notchAnswerPermissions
         guard enabled != agentsRunning else { return }
         agentsRunning = enabled
         enabled ? agentsService.start() : agentsService.stop()
@@ -186,6 +199,7 @@ final class NotchService: NSObject, ManagedService {
         var h: CGFloat = 10                                     // bottom padding
         h += footerRowHeight                                    // Quack footer (duck button)
         h += systemRowHeight
+        h += CGFloat(min(model.permissions.count, 2)) * permissionCardHeight
         if model.agentsEnabled {
             h += 30                                             // header row
             if !model.integrationInstalled || model.agents.isEmpty {
@@ -200,8 +214,30 @@ final class NotchService: NSObject, ManagedService {
     }
 
     private func handleHover(_ hovering: Bool) {
-        model.isOpen = hovering
-        hovering ? startSampling() : stopSampling()
+        self.hovering = hovering
+        setOpen(hovering)
+    }
+
+    /// A new request pops the panel open without a hover; it closes again
+    /// once nothing is pending (unless the pointer is in it). Moving the
+    /// pointer in and out dismisses it like any hover.
+    private func permissionsChanged(_ prompts: [PermissionPrompt]) {
+        model.permissions = prompts
+        let ids = Set(prompts.map(\.id))
+        let hasNew = !ids.subtracting(seenPermissionIDs).isEmpty
+        seenPermissionIDs = ids
+        if hasNew {
+            setOpen(true)
+        } else if prompts.isEmpty && !hovering && model.isOpen {
+            setOpen(false)
+        } else {
+            reposition()
+        }
+    }
+
+    private func setOpen(_ open: Bool) {
+        model.isOpen = open
+        open ? startSampling() : stopSampling()
         reposition()
     }
 

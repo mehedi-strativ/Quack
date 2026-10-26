@@ -30,6 +30,11 @@ struct NotchContentView: View {
             systemRow
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
+            if !model.permissions.isEmpty {
+                permissionsZone
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+            }
             if model.agentsEnabled {
                 VStack(alignment: .leading, spacing: 10) {
                     NotchHeaderView(model: model)
@@ -82,6 +87,22 @@ struct NotchContentView: View {
 
     private func percent(_ v: Double?) -> String? {
         v.map { "\(Int($0.rounded()))%" }
+    }
+
+    @ViewBuilder
+    private var permissionsZone: some View {
+        let list = VStack(spacing: 8) {
+            ForEach(model.permissions) { prompt in
+                PermissionCardView(prompt: prompt, project: model.project(for: prompt)) {
+                    model.onAnswer?(prompt, $0)
+                }
+            }
+        }
+        if model.permissions.count > 2 {
+            ScrollView(showsIndicators: false) { list }.frame(maxHeight: 2 * 104 + 8)
+        } else {
+            list
+        }
     }
 
     /// Footer with the duck button that opens Quack's Settings.

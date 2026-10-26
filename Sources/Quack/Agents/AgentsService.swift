@@ -13,6 +13,13 @@ final class AgentsService: ObservableObject {
     /// True when the Claude integration is installed — gates the notch
     /// panel's "enable the integration" CTA vs. the empty-state message.
     @Published private(set) var integrationInstalled = false
+    /// Permission requests the hook is holding open for a panel answer.
+    @Published private(set) var permissions: [PermissionPrompt] = []
+    /// While true (and started), the `listening` file tells the hook to hold
+    /// PermissionRequests for the panel instead of showing the terminal prompt.
+    var answersPermissions = false {
+        didSet { updateListening() }
+    }
 
     private let installer: ClaudeConfigInstaller
     private let watcher = ClaudeStateWatcher()
@@ -34,6 +41,7 @@ final class AgentsService: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         pruneTimer = timer
+        updateListening()
         refreshNow()
     }
 
@@ -42,13 +50,55 @@ final class AgentsService: ObservableObject {
         started = false
         watcher.stop()
         pruneTimer?.invalidate(); pruneTimer = nil
+        updateListening()
         agents = []
+        permissions = []
+    }
+
+    /// Answers a held request; the hook polls for this file. Atomic write so
+    /// the hook never reads half a file.
+    func answer(_ prompt: PermissionPrompt, _ decision: PermissionDecision) {
+        let url = installer.sessionsDirectory.appendingPathComponent("\(prompt.id).decision.json")
+        let body = ["id": prompt.id, "behavior": decision.rawValue]
+        if let data = try? JSONSerialization.data(withJSONObject: body) {
+            try? data.write(to: url, options: .atomic)
+        }
+        permissions.removeAll { $0.id == prompt.id }
+    }
+
+    /// The hook only waits when this file names a live pid, so a quit or
+    /// crashed Quack never holds Claude Code's prompt hostage.
+    private func updateListening() {
+        let url = installer.listeningFile
+        if started && answersPermissions {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data("\(getpid())".utf8).write(to: url, options: .atomic)
+        } else {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     func refreshNow() {
         integrationInstalled = installer.isInstalled()
         let files = readSessionFiles(in: installer.sessionsDirectory)
         agents = sort(AgentReducer.snapshots(from: files, now: Date()))
+        permissions = readPermissions(in: installer.sessionsDirectory)
+    }
+
+    /// Pending requests, oldest first. Drops ones past the hook's wait limit
+    /// (the hook has given up and handed back to the terminal).
+    private func readPermissions(in dir: URL) -> [PermissionPrompt] {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return [] }
+        let decoder = JSONDecoder()
+        let cutoff = Date().timeIntervalSince1970 - ClaudeIntegrationScripts.permissionWaitSeconds
+        return names
+            .filter { $0.hasSuffix(".permission.json") }
+            .compactMap { n in
+                (try? Data(contentsOf: dir.appendingPathComponent(n)))
+                    .flatMap { try? decoder.decode(PermissionPrompt.self, from: $0) }
+            }
+            .filter { $0.ts > cutoff }
+            .sorted { $0.ts < $1.ts }
     }
 
     private func sort(_ agents: [AgentSnapshot]) -> [AgentSnapshot] {

@@ -46,6 +46,8 @@ enum SettingsSearchRegistry {
               ["dynamic island", "hover", "system load", "cpu", "gpu", "memory"]),
         entry("notch.agents", "Show Claude Code agents", .notch, "Notch panel",
               ["ai", "claude", "agents", "progress", "tasks", "usage"]),
+        entry("notch.permissions", "Answer permission prompts from the notch", .notch, "Notch panel",
+              ["allow", "deny", "approve", "claude", "permission"]),
 
         // General
         entry("general.launchAtLogin", "Launch Quack at login", .general, "General",
