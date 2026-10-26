@@ -156,8 +156,11 @@ struct NotchContentView: View {
     private var cards: some View {
         VStack(spacing: 8) {
             ForEach(model.agents) { agent in
+                // "Seen" only when nothing is left to answer for that session.
+                let canSee = agent.status == .needsYou
+                    && !model.permissions.contains { $0.session_id == agent.sessionID }
                 Button { model.onAgentTap?(agent) } label: {
-                    AgentCardView(agent: agent)
+                    AgentCardView(agent: agent, onSeen: canSee ? { model.onSeen?(agent) } : nil)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

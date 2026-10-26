@@ -91,6 +91,7 @@ final class NotchService: NSObject, ManagedService {
         wired = true
         model.onHoverChange = { [weak self] h in self?.handleHover(h) }
         model.onAgentTap = { [weak self] agent in self?.focusAgent(agent) }
+        model.onSeen = { [weak self] agent in self?.agentsService.markSeen(agent) }
         model.onAnswer = { [weak self] prompt, decision in
             guard let self else { return }
             self.agentsService.answer(prompt, decision)

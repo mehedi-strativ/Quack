@@ -30,6 +30,7 @@ final class NotchContentViewModel: ObservableObject {
 
     var onHoverChange: ((Bool) -> Void)?
     var onAgentTap: ((AgentSnapshot) -> Void)?
+    var onSeen: ((AgentSnapshot) -> Void)?
     var onAnswer: ((PermissionPrompt, PermissionDecision) -> Void)?
     /// Opens Quack's Settings window (the duck button in the footer).
     var onOpenQuack: (() -> Void)?

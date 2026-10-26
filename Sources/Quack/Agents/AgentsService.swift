@@ -21,6 +21,11 @@ final class AgentsService: ObservableObject {
         didSet { updateListening() }
     }
 
+    /// Sessions marked "Seen". Stays seen through idle follow-ups (Claude's
+    /// "waiting for your input" notification) and clears once the session
+    /// works again or asks something. In memory only.
+    private var seen: Set<String> = []
+
     private let installer: ClaudeConfigInstaller
     private let watcher = ClaudeStateWatcher()
     private var pruneTimer: Timer?
@@ -55,6 +60,12 @@ final class AgentsService: ObservableObject {
         permissions = []
     }
 
+    /// Clears a session's needs-you until it works again or asks something.
+    func markSeen(_ agent: AgentSnapshot) {
+        seen.insert(agent.sessionID)
+        refreshNow()
+    }
+
     /// Answers a held request; the hook polls for this file. Atomic write so
     /// the hook never reads half a file.
     func answer(_ prompt: PermissionPrompt, _ decision: PermissionDecision) {
@@ -82,8 +93,13 @@ final class AgentsService: ObservableObject {
     func refreshNow() {
         integrationInstalled = installer.isInstalled()
         let files = readSessionFiles(in: installer.sessionsDirectory)
-        agents = sort(AgentReducer.snapshots(from: files, now: Date()))
+        let snapshots = AgentReducer.snapshots(from: files, now: Date())
         permissions = readPermissions(in: installer.sessionsDirectory)
+        let asking = Set(permissions.map(\.session_id))
+        seen = seen.filter { id in
+            snapshots.contains { $0.sessionID == id && $0.status == .needsYou } && !asking.contains(id)
+        }
+        agents = sort(snapshots.map { seen.contains($0.sessionID) ? $0.with(status: .idle) : $0 })
     }
 
     /// Pending requests, oldest first. Drops ones past the hook's wait limit

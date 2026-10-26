@@ -50,6 +50,15 @@ public struct AgentSnapshot: Equatable, Sendable, Identifiable {
         self.lastUpdate = lastUpdate
         self.hostPID = hostPID
     }
+
+    /// Same snapshot with another status (e.g. "seen" turns needs-you idle).
+    public func with(status: AgentStatus) -> AgentSnapshot {
+        AgentSnapshot(sessionID: sessionID, project: project, branch: branch, model: model,
+                      status: status, statusMessage: statusMessage, progress: progress,
+                      contextUsedPercent: contextUsedPercent, costUSD: costUSD,
+                      fiveHourUsedPercent: fiveHourUsedPercent, sevenDayUsedPercent: sevenDayUsedPercent,
+                      lastUpdate: lastUpdate, hostPID: hostPID)
+    }
 }
 
 /// On-disk shape of ~/.claude/quack/sessions/<id>.state.json (written by
