@@ -475,7 +475,7 @@ private struct DashboardView: View {
         }
     }
 
-    /// Green / orange / red by CPU temperature (°C), matching the menu-bar item.
+    /// Green / orange / red by CPU temperature (°C).
     private func tempTint(_ c: Double) -> Color {
         if c >= 85 { return .red }
         if c >= 70 { return .orange }
@@ -651,7 +651,7 @@ private struct TemperatureSection: View {
         let s = env.settingsStore
         Section("CPU temperature") {
             Toggle("Show CPU temperature in the menu bar", isOn: s.binding(\.cpuTemperatureEnabled))
-            Text("Adds a flame icon with the current CPU temperature, read from the Mac's sensors. It turns orange, then red, as the chip heats up.")
+            Text("Adds the current CPU temperature, read from the Mac's sensors.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             if s.settings.cpuTemperatureEnabled {
                 Toggle("Show in Fahrenheit", isOn: s.binding(\.temperatureFahrenheit))

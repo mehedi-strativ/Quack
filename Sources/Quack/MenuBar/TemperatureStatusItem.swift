@@ -4,9 +4,9 @@ import Combine
 import QuackKit
 import CSMC
 
-/// A separate menu-bar status item showing CPU temperature with a flame icon
-/// (à la the `hot` app). Reads the SMC via `CSMC`, polls on a background queue,
-/// and tints orange/red as the chip heats up. Clicking it opens a popover with
+/// A separate menu-bar status item showing CPU temperature as text
+/// (à la the `hot` app). Reads the SMC via `CSMC`, polls on a background
+/// queue. Clicking it opens a popover with
 /// thermal pressure, temperature, the apps using the most CPU/GPU/memory (with
 /// Quit), and a Settings action. Opt-in.
 @MainActor
@@ -40,13 +40,7 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             item.autosaveName = "quack.temperature"
             if let button = item.button {
-                let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
-                let flame = NSImage(systemSymbolName: "flame.fill", accessibilityDescription: "CPU temperature")?
-                    .withSymbolConfiguration(cfg)
-                flame?.isTemplate = true
-                button.image = flame
-                button.imagePosition = .imageLeading
-                button.imageHugsTitle = true   // minimal gap between flame and value
+                button.setAccessibilityLabel("CPU temperature")
                 button.target = self
                 button.action = #selector(togglePopover)
             }
@@ -185,25 +179,21 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
         // Always use the default adaptive menu-bar color (a fixed attributed
         // color flickered between tinted and black/white against the menu bar).
         button.contentTintColor = nil
-        // Leading space sets the gap between the flame and the value.
         if lastTempC > 0 {
             let fahrenheit = settings.settings.temperatureFahrenheit
             let value = fahrenheit ? lastTempC * 9 / 5 + 32 : lastTempC
-            button.title = " \(Int(value.rounded()))°"
+            button.title = "\(Int(value.rounded()))°"
         } else {
-            button.title = " --"
+            button.title = "--"
         }
         tightenWidth(button)
     }
 
     /// `variableLength` adds generous system side-insets. Pin the item to the
-    /// content width (image + a small gap + text) with only a little padding.
+    /// text width with only a little side padding.
     private func tightenWidth(_ button: NSStatusBarButton) {
         let font = button.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let textWidth = (button.title as NSString).size(withAttributes: [.font: font]).width
-        let imageWidth = button.image?.size.width ?? 0
-        // imageWidth + textWidth already covers the flame, gap, and value; the
-        // small extra is just the side padding — keep it minimal.
-        statusItem?.length = ceil(imageWidth + textWidth + 4)
+        statusItem?.length = ceil(textWidth + 4)
     }
 }

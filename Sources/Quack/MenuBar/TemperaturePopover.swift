@@ -42,7 +42,7 @@ enum ProcessSortKey: String, CaseIterable, Identifiable {
     }
 }
 
-/// The popover shown when the flame menu-bar item is clicked: thermal pressure,
+/// The popover shown when the temperature menu-bar item is clicked: thermal pressure,
 /// temperature, the apps working the chip hardest (with Quit), and Settings.
 struct TemperaturePopover: View {
     @ObservedObject var model: TemperatureModel

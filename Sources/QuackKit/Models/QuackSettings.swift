@@ -5,7 +5,7 @@ import Foundation
 public struct QuackSettings: Codable, Equatable, Sendable {
     // MARK: Feature flags
     public var brightnessEnabled: Bool
-    /// Show CPU temperature (with a flame icon) in the menu bar.
+    /// Show CPU temperature in the menu bar.
     public var cpuTemperatureEnabled: Bool
     /// Hide the duck icon from the menu bar.
     public var hideDuckIcon: Bool
