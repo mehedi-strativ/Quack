@@ -208,6 +208,10 @@ final class NotchService: NSObject, ManagedService {
     /// Click-to-focus: bring the app hosting the agent's session to front.
     private func focusAgent(_ agent: AgentSnapshot) {
         Log.claude.info("focusAgent: tap \(agent.project, privacy: .public) pid=\(agent.hostPID ?? -1)")
+        if let url = desktopSessionURL(cliSessionID: agent.sessionID) {
+            NSWorkspace.shared.open(url)   // Claude desktop deep link → that session
+            return
+        }
         guard let app = resolveApp(pid: agent.hostPID) else {
             Log.claude.info("focusAgent: no live host for \(agent.sessionID, privacy: .public)")
             return
@@ -220,6 +224,26 @@ final class NotchService: NSObject, ManagedService {
         } else {
             app.activate(options: [.activateIgnoringOtherApps])
         }
+    }
+
+    /// Claude desktop stores one `local_<uuid>.json` per Code session, carrying
+    /// the CLI session id the hooks report. Map it to `claude://code/continue`.
+    /// nil when the session isn't a desktop one (terminal / IDE).
+    private func desktopSessionURL(cliSessionID: String) -> URL? {
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Claude/claude-code-sessions")
+        guard let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        else { return nil }
+        for case let file as URL in files
+        where file.lastPathComponent.hasPrefix("local_") && file.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: file),
+                  data.range(of: Data(cliSessionID.utf8)) != nil,
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  obj["cliSessionId"] as? String == cliSessionID,
+                  let id = obj["sessionId"] as? String else { continue }
+            return URL(string: "claude://code/continue?session=\(id)")
+        }
+        return nil
     }
 
     /// The hook captures a CLI subprocess PID, not the registered GUI app.
