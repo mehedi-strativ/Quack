@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Quack}",
+            "name": "Debug Quack",
+            "target": "Quack",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug Quack"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Quack}",
+            "name": "Release Quack",
+            "target": "Quack",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release Quack"
+        }
+    ]
+}
