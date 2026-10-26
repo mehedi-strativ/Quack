@@ -17,6 +17,19 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
     private let toasts: ToastPresenter
     private var tracker = ActivityTracker()
     private let statusItem: TimeAwarenessStatusItem
+    private var crushHidden = false
+
+    var menuBarItem: NSStatusItem? { statusItem.menuBarItem }
+
+    /// Called by `MenuBarCrushMonitor`. ANDs the crush override with whether
+    /// this feature is actually enabled right now (`started`) — mirrors
+    /// `TemperatureStatusItem.setCrushHidden`; see that doc for why a raw
+    /// external `.isVisible` toggle isn't used instead.
+    func setCrushHidden(_ hidden: Bool) {
+        crushHidden = hidden
+        guard started else { return }
+        statusItem.setVisible(!crushHidden)
+    }
 
     private let historyStore = ActivityHistoryStore()
     /// In-memory day aggregates; today's entry includes the live session.
@@ -55,6 +68,7 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
             return (self.tracker.activeSeconds, self.tracker.topApps(5))
         }
         statusItem.show()
+        if crushHidden { statusItem.setVisible(false) }
         render(force: true)
 
         // Sleep / screen-lock => forced idle since first observed (see tickNow()
@@ -119,6 +133,7 @@ final class TimeAwarenessService: ObservableObject, ManagedService {
         if let terminateObserver { NotificationCenter.default.removeObserver(terminateObserver) }
         terminateObserver = nil
         statusItem.hide()
+        crushHidden = false   // clean slate: next start() defaults to visible unless a fresh crush re-hides it
         tracker.reset()
         forcedIdleSince = nil
         lastRenderedMinute = -1

@@ -12,6 +12,18 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
     var snapshot: (() -> (total: TimeInterval, apps: [ActivityTracker.AppSlice]))?
 
     private var statusItem: NSStatusItem?
+
+    /// Read-only access for `MenuBarCrushMonitor` — see the equivalent note
+    /// on `TemperatureStatusItem.menuBarItem`.
+    var menuBarItem: NSStatusItem? { statusItem }
+
+    /// Sets visibility directly, without the full show()/hide() setup or
+    /// teardown (menu delegate, observers). Used by `TimeAwarenessService` to
+    /// apply its crush-hidden override — see `TimeAwarenessService.setCrushHidden`.
+    func setVisible(_ visible: Bool) {
+        statusItem?.isVisible = visible
+    }
+
     private let menu = NSMenu()
 
     func show() {

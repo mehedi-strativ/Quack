@@ -22,6 +22,25 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
     /// Samples processes only while the popover is open.
     private var processTimer: Timer?
     private var lastSample: (samples: [ProcessSample], load: SystemLoad, at: Date)?
+    private var started = false
+    private var crushHidden = false
+
+    /// Read-only access to the real status item for `MenuBarCrushMonitor` —
+    /// it needs the live frame. Visibility itself is set via
+    /// `setCrushHidden(_:)` below, not by toggling `.isVisible` externally —
+    /// see that method's doc for why.
+    var menuBarItem: NSStatusItem? { statusItem }
+
+    /// Called by `MenuBarCrushMonitor`. Unlike a raw external `.isVisible`
+    /// toggle, this ANDs the crush override with whether the feature is
+    /// actually enabled right now (`started`) — so a crush-hide followed by
+    /// the user disabling this feature in Settings can never be resurrected
+    /// by a later crush-guard reveal; `stop()` is always the final word.
+    func setCrushHidden(_ hidden: Bool) {
+        crushHidden = hidden
+        guard started else { return }
+        statusItem?.isVisible = !crushHidden
+    }
 
     private let model = TemperatureModel()
     private let popover = NSPopover()
@@ -56,7 +75,8 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
             )
             statusItem = item
         }
-        statusItem?.isVisible = true
+        started = true
+        statusItem?.isVisible = !crushHidden
 
         // Re-render immediately when the unit toggle changes.
         cancellable = settings.objectWillChange
@@ -75,7 +95,9 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
         stopProcessSampling()
         cancellable = nil
         if popover.isShown { popover.performClose(nil) }
-        statusItem?.isVisible = false
+        started = false
+        statusItem?.isVisible = false   // hide, don't remove (keeps the layout stable)
+        crushHidden = false   // clean slate: next start() defaults to visible unless a fresh crush re-hides it
     }
 
     @objc private func togglePopover() {

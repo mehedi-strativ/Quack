@@ -10,6 +10,7 @@ final class StatusItemController {
     private let env: AppEnvironment
     private let duckItem: NSStatusItem
     private var cancellable: AnyCancellable?
+    private var duckCrushHidden = false
 
     init(env: AppEnvironment) {
         self.env = env
@@ -31,8 +32,20 @@ final class StatusItemController {
         updateVisibility()
     }
 
+    /// Exposed for `MenuBarCrushMonitor` only.
+    var duckFrame: CGRect? { duckItem.button?.window?.frame }
+    var duckIsVisible: Bool { duckItem.isVisible }
+
+    /// Called by `MenuBarCrushMonitor`. Folded into `updateVisibility()` rather
+    /// than setting `.isVisible` directly — that re-runs on every settings
+    /// change and would otherwise silently undo an external toggle.
+    func setDuckCrushHidden(_ hidden: Bool) {
+        duckCrushHidden = hidden
+        updateVisibility()
+    }
+
     private func updateVisibility() {
-        duckItem.isVisible = !env.settingsStore.settings.hideDuckIcon
+        duckItem.isVisible = !env.settingsStore.settings.hideDuckIcon && !duckCrushHidden
     }
 
     @objc private func openSettings() {

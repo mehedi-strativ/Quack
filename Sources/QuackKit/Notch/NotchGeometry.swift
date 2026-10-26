@@ -45,4 +45,22 @@ public enum NotchGeometry {
     public static func isHiddenByNotch(itemMinX: CGFloat, notch: NotchSpan) -> Bool {
         itemMinX < notch.maxX
     }
+
+    /// Whether a status item's frame is plausible menu-bar data on this
+    /// screen — guards two failure modes at once: an item that actually
+    /// lives on a DIFFERENT screen entirely (its X falls outside this
+    /// screen's bounds — a multi-display mismatch), and a freshly-created
+    /// item whose window hasn't settled into its real position yet (macOS
+    /// parks a new `NSStatusItem` at an off-screen placeholder frame below
+    /// the menu bar for roughly a second). `band` is how far below the
+    /// screen's top edge still counts as "the menu bar" — generous versus
+    /// the ~24-38pt system menu-bar thickness to tolerate rendering variance.
+    public static func isPlausibleMenuBarFrame(
+        _ frame: CGRect,
+        onScreen screenFrame: CGRect,
+        band: CGFloat = 40
+    ) -> Bool {
+        guard frame.minX >= screenFrame.minX, frame.minX < screenFrame.maxX else { return false }
+        return frame.maxY >= screenFrame.maxY - band
+    }
 }
