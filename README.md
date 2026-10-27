@@ -39,7 +39,8 @@ required — and highlights it with **Go to Session** and **Mark Seen** buttons.
 It tucks itself away again after a few seconds.
 
 <p align="center">
-  <img src="docs/images/notch-popup.gif" alt="The notch panel popping open when a Claude session finishes" width="640">
+  <a href="docs/videos/notch-popup.mp4"><img src="docs/images/notch-popup.gif" alt="The notch panel popping open when a Claude session finishes" width="640"></a>
+  <br><sub><a href="docs/videos/notch-popup.mp4">▶ Watch the full-quality MP4</a></sub>
 </p>
 
 <p align="center">
@@ -59,7 +60,8 @@ It tucks itself away again after a few seconds.
   it back.
 
 <p align="center">
-  <img src="docs/images/notch-hover.gif" alt="Hovering under the notch to expand the panel" width="640">
+  <a href="docs/videos/notch-hover.mp4"><img src="docs/images/notch-hover.gif" alt="Hovering under the notch to expand the panel" width="640"></a>
+  <br><sub><a href="docs/videos/notch-hover.mp4">▶ Watch the full-quality MP4</a></sub>
 </p>
 
 Enable it under **Notch** in Settings. Turning on *Show Claude Code agents*
