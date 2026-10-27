@@ -15,10 +15,60 @@
 
 A native macOS menu-bar utility that bundles the little power-tools you'd
 otherwise install a few apps for: external-monitor brightness on the F1/F2 keys,
-mouse tweaks, a CPU temperature readout, and activity/break tracking.
+mouse tweaks, a CPU temperature readout, activity/break tracking, and a
+**notch panel that keeps an eye on your Claude Code sessions**.
 
 Lives in the menu bar (no Dock icon). Every feature is individually toggleable,
 and services start **only** when their toggle is on.
+
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Quack dashboard" width="640">
+</p>
+
+---
+
+## 🦆 The notch panel
+
+On a notched MacBook, Quack turns the space under the notch into a live view of
+your Claude Code sessions. Tiny status dots hang below the notch while agents
+are running (green = working, orange = needs you). Hover them and the panel
+springs open with system load and one card per session.
+
+**When a session needs you, the panel pops open on its own** — no hovering
+required — and highlights it with **Go to Session** and **Mark Seen** buttons.
+It tucks itself away again after a few seconds.
+
+<p align="center">
+  <img src="docs/images/notch-popup.gif" alt="The notch panel popping open when a Claude session finishes" width="640">
+</p>
+
+<p align="center">
+  <img src="docs/images/notch-panel.png" alt="The expanded notch panel" width="480">
+</p>
+
+- **Live agent cards** — project, branch, what Claude is doing right now, model,
+  context/cost/rate-limit stats and a to-do progress pill.
+- **Answer from the notch** — permission prompts and questions appear as cards
+  with the real choices (Allow / Deny / Terminal, or the options Claude offers).
+  Claude's own prompt keeps waiting until you answer, or for up to 5 minutes.
+- **Go to Session** jumps to the Claude desktop session; **Mark Seen** clears
+  *Needs you* until that session works or asks again.
+- **System row** — CPU temperature, CPU / GPU / memory load, and a gear that
+  opens Quack's settings.
+- **Esc** minimizes the panel. A waiting request stays waiting — hover to bring
+  it back.
+
+<p align="center">
+  <img src="docs/images/notch-hover.gif" alt="Hovering under the notch to expand the panel" width="640">
+</p>
+
+Enable it under **Notch** in Settings. Turning on *Show Claude Code agents*
+installs small hooks into `~/.claude/settings.json` (removable with one click).
+Built-in notched displays only.
+
+<p align="center">
+  <img src="docs/images/settings-notch.png" alt="Notch settings" width="560">
+</p>
 
 ---
 
@@ -26,9 +76,9 @@ and services start **only** when their toggle is on.
 
 | | Feature | What it does | Permission |
 |---|---|---|---|
-| 🦆 | **Menu bar** | Separate duck (opens Settings) and a CPU-temperature item | — |
+| 🦆 | **Notch panel** | Live Claude Code sessions under the notch, pop-up when one needs you, answer permission prompts without leaving your editor | — |
+| 🌡️ | **CPU temperature** | Live temperature (°C/°F) in the menu bar, read from the Mac's sensors, à la `hot` | — |
 | ☀️ | **External brightness** | F1/F2 control whichever external display the cursor is on, over DDC — with software dimming **below** the hardware floor | Accessibility¹ |
-| 🌡️ | **CPU temperature** | Flame + live temperature (°C/°F) read from the Mac's sensors, à la `hot` | — |
 | 🖱️ | **Mouse** | Pointer-speed override, buttery smooth scrolling for wheel mice, and custom actions on buttons 4/5 (Mission Control, media keys, any shortcut…) | Accessibility² |
 | ⏳ | **Time awareness** | Menu-bar timer of continuous activity with a per-app breakdown; break reminders; daily statistics with a 30-day day-by-day view | — |
 
@@ -36,6 +86,12 @@ and services start **only** when their toggle is on.
 needs it (to consume the key so the built-in display doesn't also change).
 ² Only smooth scrolling and button remapping need it; the pointer-speed
 slider works without.
+
+<p align="center">
+  <img src="docs/images/settings-brightness.png" alt="Brightness settings" width="400">
+  &nbsp;
+  <img src="docs/images/settings-mouse.png" alt="Mouse settings" width="400">
+</p>
 
 ---
 
@@ -84,9 +140,11 @@ Scripts/make-icon.sh       # regenerate the .icns from Resources/AppIcon-source.
   shows the level.
 - **Mouse** — under **Mouse**: tracking-speed slider, smooth scrolling toggle,
   and per-button pickers for buttons 4/5 (incl. recording any keyboard shortcut).
-- **Temperature** — toggle under **CPU**; click the flame for thermal pressure +
-  exact reading.
-- **Time awareness** — toggle under **Time Awareness**; the hourglass shows time
+- **Temperature** — toggle under **Stats & Timer**; the menu-bar item shows the
+  live reading, click it for thermal pressure.
+- **Notch** — hover just below the notch, or let it pop open when a Claude
+  session needs you. See [The notch panel](#-the-notch-panel).
+- **Time awareness** — toggle under **Stats & Timer**; the menu-bar timer shows time
   since your last real break, its menu lists your top apps, and toasts nudge you
   to rest at the interval you choose. The Dashboard's Time card and the tab's
   Statistics section keep 30 days of daily totals, breaks, and top apps.
@@ -109,6 +167,7 @@ Each Settings section has an **Open Settings** deep-link if you ever deny one.
 QuackKit (library, fully unit-tested — no system/UI deps)
   Models/      QuackSettings
   Display/     BrightnessMath
+  Agents/      AgentReducer (session files → cards), ClaudeSettingsEditor
   Coordinator/ AppCoordinator, ManagedService, Feature
   Permissions/ PermissionStatusMapper · Settings/ SettingsStore
 
@@ -116,6 +175,9 @@ Quack (executable — SwiftUI + AppKit)
   MenuBar/   StatusItemController (duck), TemperatureStatusItem · Toast/ ToastPresenter
   Display/   CursorBrightnessService, BrightnessKeyTap, BrightnessController,
              DisplayDimmer, BrightnessHUD, DDCControl
+  Notch/     NotchService (panel window + pop-open), NotchContentView, AgentCardView,
+             PermissionCardView
+  Agents/    ClaudeStateWatcher, ClaudeConfigInstaller (hooks), AgentsService
   Settings/  SettingsView
 
 C targets (private-API shims, no sandbox)
