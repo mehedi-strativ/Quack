@@ -60,9 +60,6 @@ struct NotchContentView: View {
                     }
                 }
             }
-            quackFooterRow
-                .padding(.horizontal, 14)
-                .padding(.vertical, 4)
         }
         .foregroundStyle(.white)
     }
@@ -74,6 +71,14 @@ struct NotchContentView: View {
             stat("cpu", percent(model.cpuPercent), label: "CPU")
             stat("square.stack.3d.up", percent(model.gpuPercent), label: "GPU")
             stat("memorychip", percent(model.memoryPercent), label: "MEM")
+            Button { model.onOpenQuack?() } label: {
+                Image(systemName: "gearshape.fill").font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(NotchTheme.textMuted)
+                    .frame(width: 24, height: 24)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(NotchTheme.card))
+            }
+            .buttonStyle(.plain)
+            .help("Open Quack")
         }
         .frame(height: 24)
     }
@@ -115,21 +120,6 @@ struct NotchContentView: View {
             })
             .onPreferenceChange(PromptHeightKey.self) { model.promptHeight = $0 }
         }
-    }
-
-    /// Footer with the duck button that opens Quack's Settings.
-    @ViewBuilder
-    private var quackFooterRow: some View {
-        HStack(spacing: 10) {
-            Spacer(minLength: 0)
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable().aspectRatio(contentMode: .fit)
-                .frame(width: 18, height: 18)
-                .onTapGesture { model.onOpenQuack?() }
-                .help("Open Quack")
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 18)
     }
 
     @ViewBuilder

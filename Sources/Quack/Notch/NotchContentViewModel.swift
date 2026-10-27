@@ -32,7 +32,7 @@ final class NotchContentViewModel: ObservableObject {
     var onAgentTap: ((AgentSnapshot) -> Void)?
     var onSeen: ((AgentSnapshot) -> Void)?
     var onAnswer: ((PermissionPrompt, PermissionDecision) -> Void)?
-    /// Opens Quack's Settings window (the duck button in the footer).
+    /// Opens Quack's Settings window (the gear button in the system row).
     var onOpenQuack: (() -> Void)?
 
     var needsYouCount: Int { agents.filter { $0.status == .needsYou }.count }

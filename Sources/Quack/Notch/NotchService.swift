@@ -43,8 +43,6 @@ final class NotchService: NSObject, ManagedService {
     private let expandedWidth: CGFloat = 420
     /// Wider while a question / permission card shows, for its option rows.
     private let requestWidth: CGFloat = 480
-    /// Height of the Quack footer row (duck button + padding).
-    private let footerRowHeight: CGFloat = 26
     /// System-load row (24) + its top padding (10).
     private let systemRowHeight: CGFloat = 34
     /// How long a "needs you" pop-open (no request to answer) stays up.
@@ -280,7 +278,6 @@ final class NotchService: NSObject, ManagedService {
     /// Expanded height from visible zones.
     private func expandedHeight() -> CGFloat {
         var h: CGFloat = 10                                     // bottom padding
-        h += footerRowHeight                                    // Quack footer (duck button)
         h += systemRowHeight
         if !model.permissions.isEmpty { h += model.promptHeight + 10 }
         if model.agentsEnabled {
