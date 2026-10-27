@@ -30,6 +30,7 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
         if statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             item.autosaveName = "quack.timeawareness"
+            item.button?.font = NSFont.menuBarFont(ofSize: 0)
             menu.delegate = self
             menu.autoenablesItems = false
             item.menu = menu

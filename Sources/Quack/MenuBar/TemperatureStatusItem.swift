@@ -60,6 +60,7 @@ final class TemperatureStatusItem: NSObject, ManagedService, NSPopoverDelegate {
             item.autosaveName = "quack.temperature"
             if let button = item.button {
                 button.setAccessibilityLabel("CPU temperature")
+                button.font = NSFont.menuBarFont(ofSize: 0)
                 button.target = self
                 button.action = #selector(togglePopover)
             }
