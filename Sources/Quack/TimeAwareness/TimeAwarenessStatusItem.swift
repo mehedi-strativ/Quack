@@ -1,7 +1,7 @@
 import AppKit
 import QuackKit
 
-/// The menu-bar face of Time Awareness: an hourglass + elapsed active time,
+/// The menu-bar face of Time Awareness: elapsed active time (text only),
 /// with a click menu showing the per-app breakdown and actions. Mirrors
 /// `TemperatureStatusItem`'s create-once / toggle-visibility pattern.
 @MainActor
@@ -30,15 +30,6 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
         if statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             item.autosaveName = "quack.timeawareness"
-            if let button = item.button {
-                let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
-                let glass = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Activity timer")?
-                    .withSymbolConfiguration(cfg)
-                glass?.isTemplate = true
-                button.image = glass
-                button.imagePosition = .imageLeading
-                button.imageHugsTitle = true
-            }
             menu.delegate = self
             menu.autoenablesItems = false
             item.menu = menu
@@ -54,7 +45,7 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
 
     func render(total: TimeInterval) {
         guard let button = statusItem?.button else { return }
-        button.title = " " + ActivityFormat.compact(total)
+        button.title = ActivityFormat.compact(total)
         tightenWidth(button)
     }
 
@@ -94,7 +85,6 @@ final class TimeAwarenessStatusItem: NSObject, NSMenuDelegate {
     private func tightenWidth(_ button: NSStatusBarButton) {
         let font = button.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let textWidth = (button.title as NSString).size(withAttributes: [.font: font]).width
-        let imageWidth = button.image?.size.width ?? 0
-        statusItem?.length = ceil(imageWidth + textWidth + 4)
+        statusItem?.length = ceil(textWidth + 4)
     }
 }
