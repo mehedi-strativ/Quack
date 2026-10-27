@@ -40,9 +40,9 @@ final class NotchService: NSObject, ManagedService {
     private let hoverMargin: CGFloat = 8
     /// Strip height while status dots show (6pt dots + 3pt above and below).
     private let peekStripHeight: CGFloat = 12
-    private let expandedWidth: CGFloat = 420
+    private let expandedWidth: CGFloat = 680
     /// Wider while a question / permission card shows, for its option rows.
-    private let requestWidth: CGFloat = 480
+    private let requestWidth: CGFloat = 680
     /// System-load row (24) + its top padding (10).
     private let systemRowHeight: CGFloat = 34
     /// How long a "needs you" pop-open (no request to answer) stays up.

@@ -150,7 +150,8 @@ struct NotchContentView: View {
                 let canSee = agent.status == .needsYou
                     && !model.permissions.contains { $0.session_id == agent.sessionID }
                 Button { model.onAgentTap?(agent) } label: {
-                    AgentCardView(agent: agent, onSeen: canSee ? { model.onSeen?(agent) } : nil)
+                    AgentCardView(agent: agent, onSeen: canSee ? { model.onSeen?(agent) } : nil,
+                                  onGo: agent.status == .needsYou ? { model.onAgentTap?(agent) } : nil)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

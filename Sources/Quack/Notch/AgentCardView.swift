@@ -8,6 +8,8 @@ struct AgentCardView: View {
     let agent: AgentSnapshot
     /// Shown as a "Seen" button: clears needs-you when nothing is left to do.
     var onSeen: (() -> Void)?
+    /// Shown as "Go to Session" on needs-you cards.
+    var onGo: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -37,25 +39,27 @@ struct AgentCardView: View {
                 statusPill
                 Spacer(minLength: 0)
                 if let progress = agent.progress { progressPill(progress) }
+                if let onGo { capsuleButton("Go to Session", onGo) }
                 if let onSeen {
-                    Button(action: onSeen) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
-                            Text("Seen").font(.system(size: 10, weight: .semibold))
-                        }
-                        .foregroundStyle(NotchTheme.textPrimary)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background(Capsule().fill(Color.white.opacity(0.12)))
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Mark as seen: clears Needs you until this session works or asks again")
+                    capsuleButton("Mark Seen", onSeen)
+                        .help("Clears Needs you until this session works or asks again")
                 }
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 10).fill(NotchTheme.card))
+    }
+
+    private func capsuleButton(_ title: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(NotchTheme.textPrimary)
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(Capsule().fill(Color.white.opacity(0.12)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var dotColor: Color { NotchTheme.statusColor(agent.status) }
